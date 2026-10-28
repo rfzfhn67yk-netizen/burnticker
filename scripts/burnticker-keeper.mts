@@ -453,6 +453,8 @@ while (!stopping) {
   if (!heliusHeld && heldNotedDay && !holdLiftNoted) { holdLiftNoted = true; log(`  [api-budget] helius hold lifted: sends resume this cycle`); }
   if (heliusHeld) holdLiftNoted = false;
   if (heliusHeld && heldNotedDay !== new Date().toISOString().slice(0, 10)) { heldNotedDay = new Date().toISOString().slice(0, 10); log(`  [api-budget] helius on hold: every cycle until 00:00 UTC runs with its sends held${fallbackUrl ? `; reads go to ${new URL(fallbackUrl).hostname}` : "; no fallback, so chain reads fail until then"}`); }
+  // THE KEEPER'S CYCLE (espn.ts, 2026-10-27): a confirming read and a live day listing are fetched at most once per cycle, shared by every coin
+  espnClient().beginCycle();
   budget.setPhase("prefetch");
   if (cycleCache) { try { await cycleCache.beginCycle(log); } catch (e) { log(`  [cycle-cache] ${(e as Error).message.slice(0, 160)}`); } }
   budget.setPhase("cycle");
@@ -494,7 +496,11 @@ while (!stopping) {
   // one bounded GET per cycle, never throws (A-7): ok for a completed cycle whose errors are per coin or fence holds, fail when the cycle
   // failed or every live coin errored, nothing otherwise (ops/heartbeat.ts heartbeatVerdict; review and re-review, 2026-10-18)
   // THE LIVE SCHEDULE READ: the free official schedule reads taken under the one-minute cache this cycle, per league
-  { const live = espnClient().takeLiveReads(); const n = Object.values(live).reduce((a, b) => a + b, 0); if (n) log(`  [live-schedule] ${Object.entries(live).map(([l, k]) => `${l} ${k}`).join(", ")} read${n === 1 ? "" : "s"} this cycle (games in play; MLB and NHL day listings, NBA and soccer game lookups)`); }
+  // and (2026-10-27) every sports request of the cycle by phase, source and endpoint, on the same one line
+  { const live = espnClient().takeLiveReads(), reads = espnClient().takeCycleReads(); const n = Object.values(live).reduce((a, b) => a + b, 0);
+    const by = reads.length ? ` · sports requests this cycle: ${reads.map(([k, c]) => `${k} ${c}`).join(", ")}` : "";
+    if (n) log(`  [live-schedule] ${Object.entries(live).map(([l, k]) => `${l} ${k}`).join(", ")} read${n === 1 ? "" : "s"} this cycle (games in play; MLB and NHL day listings, NBA and soccer game lookups)${by}`);
+    else if (by) log(`  [live-schedule] no live reads this cycle${by}`); }
   await heartbeat.beat(Date.now(), heartbeatVerdict(cycleReport, registry.tokens("live")));
   budget.setPhase("ops");
   if (ALERTS && Date.now() - lastAlertAt >= ALERT_EVERY_MS) { lastAlertAt = Date.now(); try { await opsCheck(lastAlertAt, paused); } catch (e) { log(`  [alert] check failed: ${(e as Error).message.slice(0, 160)}`); } }

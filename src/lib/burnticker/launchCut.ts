@@ -1,3 +1,4 @@
+import { periodStartMs } from "@/lib/burnticker/periodStart";
 /**
  * A DAY READING'S GAMES (2026-10-20, the launch-day cut): each game counted in a day reading, with its start and, when a store kept it,
  * when its final was first read. Stored in the reading's proof (JSON) so the keeper can tell, for a coin launched that day, whether a
@@ -65,9 +66,16 @@ export function gameCountsAfterLaunch(g: GameTime, launch: number): boolean {
   return Number.isFinite(seen) && seen >= launch;
 }
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * A WEEK OR QUARTER READING (2026-10-28, $GASCAT's weekly feed): "2026-W10" sorts AFTER "2026-10-27T…" as text, so every week since
+ * the feed's first row counted as after the launch (35 pre-launch weeks were planned as burns). A week or quarter counts when it
+ * STARTS after the launch (its Monday, its first day), as a day or month feed's first counted period is the first that starts after it.
+ */
+const LONG_PERIOD_RE = /^\d{4}-(W\d{2}|Q[1-4])$/;
 export const isSportsSelector = (key: string): boolean => key.startsWith("catalogue:espn.");
 export function countsAfterLaunch(r: { at: string; proof?: string | null; fetchedAt?: number | null }, baselineAt: string | null, sports: boolean): boolean {
   if (!baselineAt) return true;
+  if (LONG_PERIOD_RE.test(r.at)) { const start = periodStartMs(r.at), launch = Date.parse(baselineAt); return Number.isFinite(start) && Number.isFinite(launch) ? start > launch : r.at > baselineAt; }
   if (!sports || !DAY_RE.test(r.at)) return r.at > baselineAt;
   const launch = Date.parse(baselineAt);
   if (!Number.isFinite(launch)) return r.at > baselineAt;
@@ -83,7 +91,8 @@ export function countsAfterLaunch(r: { at: string; proof?: string | null; fetche
 }
 /** A coin's readings after its launch (THE LAUNCH-DAY CUT above): Registry.readings widened by two days, then judged per reading. */
 export function readingsAfterLaunch<R extends { at?: string; proof?: string | null; fetchedAt?: number | null }>(reg: { readings(key: string, sinceIso?: string | null): readonly R[] }, key: string, baselineAt: string | null | undefined): R[] {
-  if (!baselineAt || !isSportsSelector(key)) return [...reg.readings(key, baselineAt ?? null)];
+  if (!baselineAt) return [...reg.readings(key, null)];
+  if (!isSportsSelector(key)) return reg.readings(key, baselineAt).filter((r) => r.at === undefined || countsAfterLaunch({ ...r, at: r.at }, baselineAt, false));
   const launch = Date.parse(baselineAt);
   const since = Number.isFinite(launch) ? new Date(launch - 2 * 86_400_000).toISOString().slice(0, 10) : baselineAt;
   return reg.readings(key, since).filter((r) => r.at === undefined || countsAfterLaunch({ ...r, at: r.at }, baselineAt, true));

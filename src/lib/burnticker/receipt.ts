@@ -26,7 +26,7 @@ export interface ReceiptMemo {
 const TICKER = /^[A-Z0-9]{2,12}$/;
 const ID = /^[A-Za-z0-9._:\/-]{1,96}$/;
 const ORACLE = /^[a-z][a-z-]{1,15}$/;
-const TIME = /^(\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}Z)?|\d{4}-\d{2})$/;
+const TIME = /^(\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}Z)?|\d{4}-\d{2}|\d{4}-W(0[1-9]|[1-4]\d|5[0-3])|\d{4}-Q[1-4])$/;   // an ISO time or a feed period: day, month, ISO week, quarter
 const DECIMAL = /^(-|-?(0|[1-9]\d*)(\.\d*[1-9])?)$/;
 const LAMPORTS = /^(0|[1-9]\d*)$/;
 const TOKENS = /^(0|[1-9]\d*)(\.\d*[1-9])?$/;
@@ -42,7 +42,7 @@ export function sourceForMemo(url: string): string {
 
 /** ISO time to the second ("2026-10-04T23:41:27.463206Z" → "2026-10-04T23:41:27Z"); a period ("2026-10-08", "2026-08") passes through. */
 export function settledForMemo(at: string): string {
-  if (/^\d{4}-\d{2}(-\d{2})?$/.test(at)) return at;
+  if (/^\d{4}-(\d{2}(-\d{2})?|W(0[1-9]|[1-4]\d|5[0-3])|Q[1-4])$/.test(at)) return at;   // a feed period (day, month, ISO week, quarter) is its own settlement time
   const ms = Date.parse(at);
   if (Number.isNaN(ms)) throw new Error(`not a time: ${at}`);
   return `${new Date(ms).toISOString().slice(0, 19)}Z`;
