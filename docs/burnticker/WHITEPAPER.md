@@ -131,7 +131,10 @@ creation preflight refuses every Kalshi rule.
 **Polymarket binary markets are the adjudicated source.** This has been the case since 2026-10-10. Gamma
 (`https://gamma-api.polymarket.com`) finds the markets. The result is the payout vector that the Conditional Tokens contract on Polygon
 stores for the market's condition id, read with `eth_call`. A reading counts only once that payout is on chain, and a 50-50 payout is a
-void (`src/lib/burnticker/oracle/polymarket.ts`). A single game pairs on Polymarket's moneyline market. Team coins have no settlement
+void (`src/lib/burnticker/oracle/polymarket.ts`). Gamma only decides when the keeper looks. Each read checks whether Gamma lists the
+market as closed or resolved. The keeper reads the payout on Polygon when Gamma says so, when the market's end date has passed, or when
+the last Polygon read is a day old. That daily read means a Gamma outage can delay a reading but never hide one. Gamma's word never
+settles a coin. A single game pairs on Polymarket's moneyline market. Team coins have no settlement
 route on Polymarket, because it lists the two teams in an order that changes from game to game.
 
 **First-party feeds are the primary path.** The source list (`config/burnticker/sources.json`) holds 34 sources, four of them

@@ -30,6 +30,7 @@ import path from "node:path";
 import { openRegistry, REGISTRY_FILE, readingMatches } from "../src/lib/burnticker/registry.ts";
 import { KalshiClient } from "../src/lib/burnticker/oracle/kalshi.ts";
 import { PolymarketClient } from "../src/lib/burnticker/oracle/polymarket.ts";
+import { polygonRpcUrlsFromEnv } from "../src/lib/burnKeeper/attesters/polymarketOnchain.ts";
 import { statusPayoutStore } from "../src/lib/burnticker/oracle/payoutStore.ts";
 import { loadRefuseList, refusalsFor } from "../src/lib/burnticker/oracle/refuse.ts";
 import { CatalogueAdapter, feedById } from "../src/lib/burnticker/catalogue/index.ts";
@@ -154,7 +155,8 @@ process.on("exit", () => { try { budget.flush(); } catch { /* closing */ } });
 budget.setPhase("startup");
 const kalshi = new KalshiClient();
 // Polymarket (2026-10-10): Gamma for discovery, the Polygon CTF payout vector for results; the refuse list over every market question.
-const polygonRpcs = (process.env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(",").map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
+// 2026-10-27: an entry that is not an https URL (the host's list started with a placeholder) is skipped with a warning at startup
+const polygonRpcs = polygonRpcUrlsFromEnv(process.env.BURNTICKER_POLYGON_RPC_URLS, (l) => log(`[warn] ${l}`));
 const polymarket = new PolymarketClient({ refuse: (titles) => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))], ...(polygonRpcs.length ? { rpcUrls: polygonRpcs } : {}) });
 // 2026-10-19: a reported payout vector is stored in the registry the first time any role reads it (oracle/payoutStore.ts), so neither the
 // keeper nor the site reads a final vector from Polygon twice, across restarts

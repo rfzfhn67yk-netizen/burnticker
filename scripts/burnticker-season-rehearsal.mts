@@ -163,7 +163,8 @@ async function main(a: RehearsalArgs): Promise<number> {
   // (fetchClock), and the confirming read after the clock jump is fetched fresh (gameSettle.ts confirmingRead), never the 24 h cache
   const clock = { t: a.nowMs };
   const client = new EspnClient({ minIntervalMs: Number(env.REHEARSAL_SPORTS_MS ?? 900), ttlMs: 24 * 3600_000, fetchClock: () => clock.t });
-  const rpcUrls = [...(env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(","), env.BURNTICKER_POLYGON_RPC_URL ?? ""].map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
+  const { polygonRpcUrlsFromEnv } = await import("@/lib/burnKeeper/attesters/polymarketOnchain");
+  const rpcUrls = polygonRpcUrlsFromEnv([env.BURNTICKER_POLYGON_RPC_URLS ?? "", env.BURNTICKER_POLYGON_RPC_URL ?? ""].filter(Boolean).join(","));
   const poly = new PolymarketClient({ refuse: refuseTitles, minIntervalMs: Number(env.REHEARSAL_GAMMA_MS ?? 500), ttlMs: 24 * 3600_000, ...(rpcUrls.length ? { rpcUrls } : {}) });
   // the keeper's readers over the real client, each lookup traced: the readers try the league's events by START time, then by END date,
   // then the text search, and return on the first hit, so the last one called before a hit is the one that found it
