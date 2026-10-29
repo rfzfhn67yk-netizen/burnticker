@@ -86,7 +86,7 @@ export function badgeSide(i: SideInput): BadgeSide {
   return {
     ticker: s.ticker, name: s.name, oneLiner: dedupeArticle(s.profile?.oneLiner || s.seriesTitle || s.selectorKey), window: s.profile?.badge || null, status: s.status,
     lastBurn: last ? { at: last.settledAt, units: last.units, burned: last.burned ?? "0" } : null,
-    receipts: { count: inScope.length, label: scope.label, recorded: i.receipts.filter((r) => !["winddown", "drain", "sweep"].includes(r.kind ?? "") && (!scope.from || r.settledAt.slice(0, 10) >= scope.from)).length }, rulesSha12: s.rules.sha12, pageUrl: page, verifyUrl: `${page}#verify`,
+    receipts: { count: inScope.length, label: scope.label, recorded: i.receipts.filter((r) => !r.preLaunch && !["winddown", "drain", "sweep"].includes(r.kind ?? "") && (!scope.from || r.settledAt.slice(0, 10) >= scope.from)).length }, rulesSha12: s.rules.sha12, pageUrl: page, verifyUrl: `${page}#verify`,
     lost: lostDayOf(s, i.receipts),
     // HB-25 residue (hourly run 8): what the coin is doing now beside the row state `status`; the decided line reads it
     lifecycleState: coinLifecycleState(s, i.receipts),

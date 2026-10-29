@@ -9,7 +9,7 @@ import { feedById } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { isFirstSnowSeries, snowSeasonEnd, snowSeasonVoidFromMs } from "@/lib/burnticker/sources/nws";
 import { readingMatches, RevisedReadingError, selectorKeyOf, wideRule, type PairRole, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
-import { readingsAfterLaunch } from "@/lib/burnticker/launchCut";
+import { readingsAfterLaunch, receiptBeforeLaunch } from "@/lib/burnticker/launchCut";
 import { DECIMALS, endSinkOf, isSettledPairRule, isOneShot, settledPairShape, pairClause, pairMirrorRule, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitStep, unitSteps, voidByEndMs, windDownUnits, type CarryPolicy, type EndReceiptKind, type PairGate, type SettledEvent } from "@/lib/burnticker/units";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
@@ -831,6 +831,12 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
   }
   const isFeed = t.selectorKey.startsWith("catalogue:");
   let heldUnknown = false;
+  // THE LAUNCH CUT AT THE CHAIN (2026-10-28, the $GASCAT incident: 22 pre-launch weeks attested in one reading): a planned receipt from
+  // before the launch is never attested — voided here with the reason, before any reading is built. Defense in depth behind the planner's own cut.
+  for (const b of reg.pending(mint)) if (b.readingDate === null && receiptBeforeLaunch(b, t.selectorKey, t.baselineAt)) {
+    const why = `settled before the coin launched (${t.baselineAt}): not a rule result, never attested`;
+    if (reg.voidReceipt(mint, b.eventId, why, now)) { d.log(`  [attest] $${t.ticker} ${b.eventId}: VOIDED — ${why}`); out.push({ mint, eventId: b.eventId, outcome: "skipped", why }); }
+  }
   const submit = async (D: number, value: bigint, counted: readonly ReceiptRow[], report: readonly ReceiptRow[] = counted): Promise<boolean> => {
     const Ds = formatDate(D), key = `reading:${Ds}`, ids = counted.map((b) => b.eventId);
     const rows = report;

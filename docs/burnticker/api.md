@@ -218,6 +218,7 @@ reaches a template. The other fields:
 - The coin's image is one of two things: the creator's own picture, sent as bytes in `image` (`{ contentType, base64 }`, with
   `imageRights: true`; only where `BURNTICKER_CUSTOM_IMAGES_ENABLED` is set, otherwise 400 `custom-image-off`), which is decoded,
   size-checked, marked and pinned on Arweave with its sha256; or, with no `image`, the generated receipt art, pinned the same way.
+- A receipt settled before its coin launched carries `preLaunch: true` and a note that begins "Settled before this coin launched." (API 1.21.0, since 2026-10-29, the $GASCAT incident in docs/burnticker/incidents/LOG.md). It is not a rule result: the coin list's `receipts` and `receiptsRecorded` leave it out and `receiptsBeforeLaunch` counts it; the badge's recorded count leaves it out too.
 - `imageUrl` must be `null` or left out (API 1.20.0, since 2026-10-19, on `/v1/launch/bundle`, the launch page's route and its dry run, and on a
   pair's side B). Any address is refused with 400 `code: "image-url-refused"` and the sentence "A coin's image cannot be given as a
   web address. Send the picture itself in the image field, and it is checked and pinned with the coin's details. Leave the image out

@@ -1,4 +1,5 @@
 import { utcDateTime, utcDay } from "@/lib/burnticker/utcWords";
+import { preLaunchDisclosed, receiptBeforeLaunch } from "@/lib/burnticker/launchCut";
 import { NO_BURN_CAP_SENTENCE } from "@/lib/burnticker/spreadCopy";
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
@@ -312,7 +313,10 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
     const checks: string[] = [];
     const ev: SettledEvent = { id: b.eventId, at: b.settledAt, result: (b.result ?? null) as SettledEvent["result"], value: b.value, title: rd?.title ?? null, sourceUrl: rd?.sourceUrl ?? "" };
     const clock = b.kind === "winddown" || b.kind === "drain" || b.kind === "sweep";
-    if (clock) {
+    // A PRE-LAUNCH RECEIPT (launchCut.ts, the 2026-10-28 $GASCAT incident): not a rule result; it passes only when its note says so.
+    const before = receiptBeforeLaunch(b, i.token.selectorKey, i.token.baselineAt);
+    if (before) { if (!preLaunchDisclosed(b.note)) checks.push("settled before the coin launched: not a rule result, and the receipt does not say so"); }
+    else if (clock) {
       // No burn pool is ever left behind: an end-of-rule receipt has no reading (a date-based clock); its units follow from the rule.
       const f = ruleMappings(rule)[0]?.mapping.fractionOfPool ?? 0;
       const want = b.kind === "drain" ? (f >= 1 ? 1 : null) : !rule.onEnd || !(f > 0) ? null : b.kind === "winddown" ? windDownUnits(f, rule.onEnd.windDownDays) : fullSpendUnits(f);
@@ -321,7 +325,7 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
       if (JSON.stringify(b.mapping) !== JSON.stringify(ruleMappings(rule)[0]?.mapping ?? null)) checks.push(`${b.kind} mapping ≠ the rule's mapping`);
     } else if (!rd) checks.push("no recorded reading for this event");
     else if ((rd.result ?? null) !== (b.result ?? null) || (rd.value ?? null) !== (b.value ?? null)) checks.push("receipt result/value ≠ the recorded reading");
-    if (!clock) try {
+    if (!clock && !before) try {
       // Winner takes the burn: a LOST receipt carries the units this coin would have had had it won — recomputed with the mirrored mapping.
       // a settled-event pair (two candidates in one race, two teams in one game; multiKeeper.planRace): the event decides, not the coin's
       // own reading alone — a won receipt is its own result, a lost one is one unit at its own mapping, a receipt with no role is nothing
@@ -416,6 +420,7 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
         prog && b.lead && b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports ? `the rule applied to ${sol(b.poolLamports)} of ${sol(b.poolActualLamports)} SOL (a receipt from before both burn caps were removed)` : null].filter(Boolean).join("; ") || null,
       verify: { curl, formula: formula + programFormula, expected, checks, verified },
       ...(b.pairRole ? { pairRole: b.pairRole } : {}),
+      ...(before ? { preLaunch: true as const } : {}),
     };
   });
 }
