@@ -97,3 +97,20 @@ export function readingsAfterLaunch<R extends { at?: string; proof?: string | nu
   const since = Number.isFinite(launch) ? new Date(launch - 2 * 86_400_000).toISOString().slice(0, 10) : baselineAt;
   return reg.readings(key, since).filter((r) => r.at === undefined || countsAfterLaunch({ ...r, at: r.at }, baselineAt, true));
 }
+
+/**
+ * A PRE-LAUNCH RECEIPT (2026-10-28, the $GASCAT incident): before the week fix above, the keeper planned 22 weekly results from before
+ * the coin's launch and attested their units on chain in one reading (53dYPJNv…); the program counts them at graduation and nothing can
+ * take them back. Such a receipt is not a rule result. The keeper never attests one again (multiKeeper submitCounterReadings voids a
+ * planned receipt from before the launch before any reading is built), and the audit and the receipts API say what one is: a receipt
+ * settled before the launch passes the audit only when its note begins with PRE_LAUNCH_NOTE (the disclosure, set by hand on the rows
+ * the incident left), and is reported with `preLaunch: true` and left out of the "recorded results" count.
+ * End-of-rule receipts (a date clock) and sports day readings (judged per game at planning time) are never judged here.
+ */
+export const PRE_LAUNCH_NOTE = "Settled before this coin launched.";
+const CLOCK_KINDS = new Set(["winddown", "drain", "sweep"]);
+export function receiptBeforeLaunch(b: { settledAt: string; kind: string }, selectorKey: string, baselineAt: string | null): boolean {
+  if (CLOCK_KINDS.has(b.kind) || isSportsSelector(selectorKey)) return false;
+  return !countsAfterLaunch({ at: b.settledAt }, baselineAt, false);
+}
+export const preLaunchDisclosed = (note: string): boolean => note.startsWith(PRE_LAUNCH_NOTE);

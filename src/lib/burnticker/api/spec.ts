@@ -32,7 +32,7 @@ export interface Endpoint {
   media?: string[];
 }
 
-export const API_VERSION = "1.20.0";
+export const API_VERSION = "1.21.0";
 export const API_PREFIX = "/api/burnticker/v1";
 /** The human-readable docs page (src/app/burnticker/docs). */
 export const API_DOCS_PATH = "/burnticker/docs";

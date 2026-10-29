@@ -318,8 +318,8 @@ describe("10: the post-launch checklist", () => {
   });
 });
 
-test("the API version moved to 1.18.0 (1.19.0 since the signed launch request, 1.20.0 since images stopped being web addresses) and api.md lists every new path", () => {
-  assert.equal(API_VERSION, "1.20.0");
+test("the API version moved to 1.18.0 (1.19.0 since the signed launch request, 1.20.0 since images stopped being web addresses, 1.21.0 since receipts say preLaunch) and api.md lists every new path", () => {
+  assert.equal(API_VERSION, "1.21.0");
   const md = fs.readFileSync("docs/burnticker/api.md", "utf8");
   for (const p of ["/coins/{mint}/calendar", "/coins/{mint}/calendar.ics", "/coins/{mint}/checklist", "/leaderboard", "/digest", "/ops/post-queue", "/ops/post-queue/used", "/burnticker/img/receipt/"]) assert.ok(md.includes(p), p);
 });

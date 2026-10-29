@@ -56,3 +56,14 @@ its content unchanged (it held no entries).
 
 - That entry gave two release times about 12 minutes late. Publish 104 went live at 06:46 Denver, not 06:58, so the unknown-coin 500 answers ended 12 minutes earlier than it says. Publish 105 went live at 07:40 Denver, not 07:52. The times come from the web unit's start in the host journal.
 - The rest of that entry stands. It is left as written, because this log is append-only.
+
+## 2026-10-28 — $GASCAT: 22 weekly results from before the launch were counted on chain
+
+- 18:16 Denver on 10-27: $GASCAT (mint 2L3bZbzk…CLburn) launched on the weekly US gasoline feed. Its rule counts results from after the launch only.
+- 00:18 Denver: the keeper read the gasoline feed for the coin for the first time and recorded 44 weekly results from January to October 2026, all from before the launch, 22 of them with units (53 units in all). The keeper did not know weekly periods: it compared "2026-W10" with the launch time as text, and the week sorted after it. From that cycle on, every cycle failed on the first of those receipts ("not a settlement time: 2026-W10") and the keeper recorded nothing for any coin for about seven hours. Healthchecks marked the keeper down and up by email all morning.
+- 07:37 Denver: publish 131 went live with the fix (weekly and quarterly periods understood, the launch cut judged by the week's first day). The keeper restarted and every cycle since has completed.
+- 07:39 Denver: the first cycle on the fixed code found the 22 receipts already planned and attested them in one reading on chain (reading 2026-10-28, unit counter 54 against a baseline of 1, transaction 53dYPJNvXjYk…UDk7iV6; the receipts API links it). The program refuses a second reading for the same date and processes readings in order, so those 53 units stay. When the coin graduates and its first crank runs, they spend about 93 percent of the fee pool that is spendable at that moment (1 minus 0.95 to the 53rd power). The fee pool holds 0.02 SOL today, all of it reserve.
+- Not affected: no burn has run, no holder's tokens were touched, no trade was made, no rule text changed. The 5 SOL the operator put into the curve at launch was disclosed then and is unchanged.
+- From 07:03 Denver on 10-28 the hourly audit reported all 44 receipts as not recomputing, every hour, until the note below and publish 132 were in place.
+- Changes (publish 132): the keeper voids a planned receipt from before a coin's launch instead of attesting it; the audit flags such a receipt unless its note says what it is; the receipts API reports it as preLaunch and leaves it out of the recorded-results count. The 44 Gas Cat receipts now carry that note.
+- Postmortem: [2026-10-28-gascat-prelaunch-weeks.md](2026-10-28-gascat-prelaunch-weeks.md), published 2026-10-29 under the 48-hour rule in [../INCIDENTS.md](../INCIDENTS.md).

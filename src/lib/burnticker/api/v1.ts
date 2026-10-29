@@ -1,4 +1,5 @@
 import { safeParam } from "@/lib/burnticker/safeParam";
+import { receiptBeforeLaunch } from "@/lib/burnticker/launchCut";
 import { receiptsCountLine } from "@/lib/burnticker/coinStatus";
 import { platform, tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { reviewProjection } from "@/lib/burnticker/projection";
@@ -192,12 +193,14 @@ export function v1ListTokens(p: Platform, q: URLSearchParams): ApiResult {
   const limit = Math.min(200, Math.max(1, Number(q.get("limit") ?? 100) || 100)), offset = Math.max(0, Number(q.get("offset") ?? 0) || 0);
   const all = status !== null ? p.registry.tokens(status as TokenStatus) : p.registry.tokens().filter((t) => LISTED_BY_DEFAULT.includes(t.status));   // status is live, paused or retired here
   const page = all.slice(offset, offset + limit).map((t) => {
-    const rows = p.registry.receipts(t.mint);
+    const all = p.registry.receipts(t.mint);
+    // a pre-launch receipt (launchCut.ts receiptBeforeLaunch, the 2026-10-28 $GASCAT incident) is not a recorded result
+    const rows = all.filter((b) => !receiptBeforeLaunch(b, t.selectorKey, t.baselineAt));
     const confirmed = rows.filter((b) => b.status === "confirmed");
     const burned = confirmed.reduce((a, b) => a + (b.burnRaw ?? ZERO), ZERO);
     const burns = confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO);
     const lastBurnAt = burns.map((b) => b.settledAt).sort().pop() ?? null;
-    return { ticker: t.ticker, name: t.name, mint: t.mint, status: t.status, oracle: t.oracle, selectorKey: t.selectorKey, mode: t.mode, rulesSha256: t.rulesSha, creator: t.creator, cluster: t.cluster, baselineAt: t.baselineAt, receipts: rows.length, /* HB-25 (run 4): which count is which */ receiptsRecorded: rows.length, receiptsOnChain: confirmed.filter((b) => !!b.signature).length, /* HS-29 */ receiptsLine: receiptsCountLine(rows.length, confirmed.filter((b) => !!b.signature).length), burns: burns.length, burnedTokens: rawToTokens(burned, 6), imageUrl: t.imageUrl, lastBurnAt, links: links(t, registryCoinKey(p.registry, t)) };
+    return { ticker: t.ticker, name: t.name, mint: t.mint, status: t.status, oracle: t.oracle, selectorKey: t.selectorKey, mode: t.mode, rulesSha256: t.rulesSha, creator: t.creator, cluster: t.cluster, baselineAt: t.baselineAt, receipts: rows.length, /* HB-25 (run 4): which count is which */ receiptsRecorded: rows.length, receiptsOnChain: confirmed.filter((b) => !!b.signature).length, /* HS-29 */ receiptsLine: receiptsCountLine(rows.length, confirmed.filter((b) => !!b.signature).length), receiptsBeforeLaunch: all.length - rows.length, burns: burns.length, burnedTokens: rawToTokens(burned, 6), imageUrl: t.imageUrl, lastBurnAt, links: links(t, registryCoinKey(p.registry, t)) };
   });
   const flagship = status === null || status === "live" ? flagshipToken(p) : null;
   // the flagship is the list's last row (index all.length): on the page that reaches it, never past it (review L3)

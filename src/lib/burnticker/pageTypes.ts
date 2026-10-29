@@ -102,6 +102,8 @@ export interface ReceiptJson {
   verify: { curl: string; formula: string; expected: string; checks: string[]; verified: boolean };
   /** Since 1.10.0, rivalry pairs: won / lost / draw for this result (a lost receipt carries the units it would have had had it won). */
   pairRole?: "won" | "lost" | "draw" | null;
+  /** Since 1.21.0 (the 2026-10-28 $GASCAT incident): the result settled before the coin launched; not a rule result (its note says so). */
+  preLaunch?: true;
 }
 
 /** The burn_receipts program for one token: attestation (keys, quorum, last reading tx), the queue, pool health (2026-10-10). */

@@ -778,6 +778,8 @@ export class Registry {
   /** A clause pair went live: its waiting receipts become planned (they execute in settlement order). Returns how many. */
   promotePendingPair(mint: string, now = Date.now()): number { return Number(this.db.prepare("UPDATE burns SET status='planned', updated_at=? WHERE mint=? AND status='pending-pair'").run(now, mint).changes); }
   /** A clause pair voided: its waiting receipts are voided (final; never executed). Returns how many. */
+  /** PRE-LAUNCH RECEIPT (launchCut.ts receiptBeforeLaunch): a planned receipt the keeper refuses to attest is voided with the reason, once. */
+  voidReceipt(mint: string, eventId: string, reason: string, now = Date.now()): boolean { return this.db.prepare("UPDATE burns SET status='voided', skipped_reason=?, updated_at=? WHERE mint=? AND event_id=? AND status='planned'").run(reason.slice(0, 300), now, mint, eventId).changes === 1; }
   voidPendingPair(mint: string, reason: string, now = Date.now()): number { return Number(this.db.prepare("UPDATE burns SET status='voided', skipped_reason=?, updated_at=? WHERE mint=? AND status='pending-pair'").run(reason.slice(0, 300), now, mint).changes); }
 
   receipt(mint: string, eventId: string): ReceiptRow | null { const r = this.db.prepare("SELECT * FROM burns WHERE mint=? AND event_id=?").get(mint, eventId) as Row | undefined; return r ? toReceipt(r) : null; }
