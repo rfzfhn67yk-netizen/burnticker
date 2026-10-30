@@ -6,7 +6,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { BURNS_AFTER_GRADUATION, burnsAfterGraduation, marketFacts, LIQUIDITY_NOT_READ, RULES_SCHEMA, WIND_DOWN_DAYS, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts } from "@/lib/burnticker/coinPage";
+import { BURNS_AFTER_GRADUATION, burnsAfterGraduation, marketFacts, LIQUIDITY_NOT_READ, RULES_SCHEMA, WIND_DOWN_DAYS, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts, stageLine } from "@/lib/burnticker/coinPage";
 import { tradeLinks } from "@/lib/burnticker/market";
 import { BURNTICKER_RULES_SCHEMA, DEFAULT_WIND_DOWN_DAYS, lockRule } from "@/lib/burnticker/rules";
 import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
@@ -105,6 +105,16 @@ describe("the coin page (t/[ticker])", () => {
     assert.equal(burnsAfterGraduation(null), BURNS_AFTER_GRADUATION);
     assert.match(src, /<ReadinessPanel r=\{ready\} /); assert.match(src, /const preBurn = ready\.state === "on-curve" \|\| ready\.state === "awaiting-registration"/);
     assert.doesNotMatch(src, /\buntil\(|setInterval|Kalshi/);
+  });
+  test("the stage sits above the swap panel for a coin that cannot burn yet, passes the copy lint, and drops out once a burn exists", () => {
+    assert.ok(src.indexOf("data-stage-line") > 0 && src.indexOf("data-stage-line") < src.indexOf("<TradePanel "), "the stage line renders before the swap panel");
+    assert.match(src, /const stage = stageLine\(ready\.state, m\?\.curve, s\.burned\?\.count \?\? 0\);/);
+    const curve = { raised: "4.95", threshold: "85", quote: "SOL", progressPct: 5.8235 };
+    assert.equal(stageLine("on-curve", curve, 0), "On its launch curve, with no completed burns yet. 4.95 of 85 SOL raised so far (5.82%). When the curve fills, the coin moves to a Raydium pool. Once that pool is registered, qualifying readings can fund buybacks and burns.");
+    assert.equal(stageLine("on-curve", null, 0), "On its launch curve, with no completed burns yet. When the curve fills, the coin moves to a Raydium pool. Once that pool is registered, qualifying readings can fund buybacks and burns.");
+    assert.match(stageLine("awaiting-registration", null, 0) ?? "", /^Graduated, with no completed burns yet\./);
+    assert.equal(stageLine("on-curve", curve, 1), null); assert.equal(stageLine("awaiting-event", curve, 0), null); assert.equal(stageLine("burned", null, 0), null);
+    for (const t of [stageLine("on-curve", curve, 0)!, stageLine("on-curve", null, 0)!, stageLine("awaiting-registration", null, 0)!, "See the rule and current stage"]) clean(t, "stage line");
   });
   test("a disclosed rehearsal coin that is not registered here says what it is, from the trust API, with no trade link", () => {
     const nr = src.slice(src.indexOf("function NotRegisteredNotice"));

@@ -28,7 +28,7 @@ import { realHeldLine, receiptRealLine, ruleRealBurn } from "../../launch/burnRe
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
 import { counted, finiteNumber, fixed, grouped, headOf, joinList, listOf } from "@/lib/burnticker/safeFormat";
-import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersCountSentence, holdersShareLine, initialTab, marketFacts, READ_FULL_RULE, ruleBrief, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
+import { COIN_TAB_LABEL, FIRST_BURN_AFTER_GRADUATION, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersCountSentence, holdersShareLine, initialTab, marketFacts, READ_FULL_RULE, ruleBrief, ruleFacts, stageLine, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
 import { useHome } from "../../_components/useHome";
 import { QueuePanel } from "../../_components/QueuePanel";
 import { ProgressStrip } from "../../_components/ProgressStrip";
@@ -184,6 +184,7 @@ export default function TokenPage() {
   // readiness.ts decides: a coin on its curve, or graduated with its pool not yet registered, cannot burn yet
   const preBurn = ready.state === "on-curve" || ready.state === "awaiting-registration";
   const afterGraduation = burnsAfterGraduation(m?.curve?.threshold ?? null, m?.curve?.quote ?? "SOL");
+  const stage = stageLine(ready.state, m?.curve, s.burned?.count ?? 0);
   // ChatGPT audit 6 A10: the market facts this site read, and Burnticker's own facts, equally legible; a dash with a reason for the rest
   const market = marketFacts({ cluster: s.cluster, status: s.status, mint: s.mint, mintUrl: s.addresses.mintUrl, creator: s.addresses.creator, creatorUrl: s.addresses.creatorUrl, launchedAt: s.launchedAt, phase: m?.phase ?? null, curve: m?.curve ?? null, curveNote: m?.curveNote ?? null, graduatedPool: m?.graduatedPool ?? null, holdersCount: walletHolders(m?.holders), holdersNote: m?.holders.countNote ?? "This site has not read the holders.", pool: m?.pool ?? null, poolNote: m?.poolNote ?? null, dates: m?.dates ?? null, feesCurveBps: s.fees.curve.totalBps, feesPoolBps: s.fees.postGraduation.totalBps, readAt: m?.readAt ?? null });
   // HB-15 (run 4): a one-game coin's receipts carry the game's own day, and their ESPN links open that day
@@ -264,6 +265,8 @@ export default function TokenPage() {
               of trade links, with the fee sentence above it; the header keeps the one primary "Trade on Raydium" button; no third card. */}
           {/* third prelaunch audit 2026-10-19 B-7: a coin whose one result is in says so above the swap panel (decidedWarning.ts) */}
           {decided && <p className="rounded-md border border-amber-700/60 p-2 text-xs text-amber-200" role="note" data-decided-warning>{decided}</p>}
+          {/* marketing strategy 2026-10-29 §5: the stage before the swap (coinPage.ts stageLine); the full curve and readiness stay below */}
+          {stage && <section className={card} aria-label="Stage" data-stage-line><p className="text-xs text-neutral-200">{stage}</p><button type="button" className="mt-2 text-xs underline" onClick={() => { setTab("rule"); document.getElementById("tab-rule")?.scrollIntoView({ block: "start" }); }}>See the rule and current stage</button></section>}
           <TradePanel ticker={s.ticker} mint={s.mint} status={s.status} cluster={s.cluster} graduatedPool={m?.phase === "graduated" ? m.graduatedPool : null} poolBurnBps={s.fees.postGraduation.legs.filter((l) => l.label.startsWith("burn pool")).reduce((a, l) => a + l.bps, 0)} links={m?.trade.links ?? []} feesNote={`Each trade pays ${s.fees.curve.totalBps / 100}% on the curve and ${s.fees.postGraduation.totalBps / 100}% in the Raydium pool. Burnticker never takes an order or holds funds.`} linksNote={m?.trade.note ?? "The trade links appear once the coin is launched."} />
 
           {/* a static read of the pool, from the API: the curve as SOL raised of the graduation threshold, or the pool it trades in now */}

@@ -33,6 +33,8 @@ export interface ProgramContext {
   allowMainnet?: boolean;
   computeUnits?: number;
   /** Review-2 F4: used (v0 transaction) only when a legacy transaction would exceed 1,232 bytes. */
+  /** 2026-10-29: remember the next-in-line scan per crank cursor (see nextReadingInLine). For the keeper's long-running process only; a one-shot caller such as the SDK's permissionless crank leaves it off and scans every time. */
+  rememberNextInLine?: boolean;
   lookupTable?: AddressLookupTableAccount;
 }
 
@@ -275,12 +277,40 @@ export const UNTRADEABLE_ERRORS = new Set(["PoolNotTradable", "EmptyReserves"]);
  *  `target` (round 5): a coin with a burn target — crank_target_burn on its PINNED pool (`targetMint` names what burns). */
 export interface PlannedCrank { kind: "no_units" | "vault" | "buyback" | "forward" | "target"; recordDate: number; instructions: TransactionInstruction[]; config: TokenConfigAccount; targetMint?: PublicKey }
 
+/**
+ * 2026-10-29 (Helius budget hold): the next-in-line lookup is a getProgramAccounts scan (10 Helius credits), and the keeper planned a
+ * crank for every coin twice a cycle, every minute — 80,000 credits a day for three coins waiting on graduation, whose answer could
+ * not change. Two cuts, both from the program's own rules (crank_common.rs OutOfOrder, submit_reading.rs, crank_carried.rs):
+ *   1. readings chain on prev_date = last_record_date and a crank moves crank_cursor to the reading it processed, so a cursor EQUAL to
+ *      last_record_date means nothing is in line — idle without a scan (the program tests the same thing in crank_carried and end).
+ *   2. otherwise the answer is a function of (program, config, cursor) until this process submits a reading or the cursor moves (which
+ *      a crank by anyone does, and the config read sees every cycle) — so it is remembered per cursor for NEXT_IN_LINE_CACHE_MS, and
+ *      forgotten on a submit from here. A standby's submit is seen at the latest when the memory expires.
+ */
+export const NEXT_IN_LINE_CACHE_MS = 10 * 60_000;
+type NextInLine = { address: PublicKey; reading: ReadingAccount } | null;
+const nextInLineMemo = new Map<string, { at: number; next: NextInLine }>();
+const nextInLineKey = (programId: PublicKey, mint: PublicKey): string => `${programId.toBase58()}:${mint.toBase58()}`;
+/** Forget what was remembered for a coin (after this process submits a reading, or in tests). */
+export function forgetNextReadingInLine(programId: PublicKey, mint: PublicKey): void { const p = `${nextInLineKey(programId, mint)}:`; for (const k of nextInLineMemo.keys()) if (k.startsWith(p)) nextInLineMemo.delete(k); }
+export function clearNextInLineMemo(): void { nextInLineMemo.clear(); }
+async function nextReadingInLine(ctx: ProgramContext, c: TokenConfigAccount, nowMs: number): Promise<NextInLine> {
+  if (c.has_baseline && c.crank_cursor === c.last_record_date) return null;
+  if (!ctx.rememberNextInLine) return fetchNextReadingInLine(ctx.connection, ctx.programId, configPda(ctx.programId, ctx.mint), c.crank_cursor);
+  const key = `${nextInLineKey(ctx.programId, ctx.mint)}:${c.crank_cursor}`;
+  const hit = nextInLineMemo.get(key);
+  if (hit && nowMs - hit.at < NEXT_IN_LINE_CACHE_MS && nowMs >= hit.at) return hit.next;
+  const next = await fetchNextReadingInLine(ctx.connection, ctx.programId, configPda(ctx.programId, ctx.mint), c.crank_cursor);
+  nextInLineMemo.set(key, { at: nowMs, next });
+  return next;
+}
+
 /** Builds (does not send) the instructions for the next reading in line, or explains why there is nothing to do. */
-export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promise<PlannedCrank | Exclude<CrankResult, { status: "processed" | "deferred" }>> {
+export async function planCrank(ctx: ProgramContext, cranker: PublicKey, nowMs: number = Date.now()): Promise<PlannedCrank | Exclude<CrankResult, { status: "processed" | "deferred" }>> {
   const cfg = await fetchTokenConfig(ctx.connection, ctx.programId, ctx.mint);
   if (!cfg) throw new Error(`no burn_receipts config for mint ${ctx.mint.toBase58()}`);
   const c = cfg.config;
-  const next = await fetchNextReadingInLine(ctx.connection, ctx.programId, configPda(ctx.programId, ctx.mint), c.crank_cursor);
+  const next = await nextReadingInLine(ctx, c, nowMs);
   if (!next) return { status: "idle", cursor: c.crank_cursor };
   const recordDate = next.reading.record_date;
   const base = { programId: ctx.programId, cranker, mint: ctx.mint, recordDate };

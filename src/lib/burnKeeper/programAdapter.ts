@@ -2,7 +2,7 @@ import { type AddressLookupTableAccount, type Connection, type Keypair, PublicKe
 import { attestationMessage, ed25519SharedMessageInstruction, signAttestation, sourceUrlHash, verifyAttestation, ZERO_HASH } from "@/lib/burnReceipts/attestation";
 import { fetchReading, fetchTokenConfig, type ReadingAccount, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
 import { assertSignableGenesis, type Cluster as ProgramCluster, LAUNCHLAB_PROGRAM_ID, MAX_QUORUM, MODE_BUYBACK, OUTCOME_NAMES, POOL_REPLACEMENT_DELAY_SECS, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
-import { anchorErrorName, assertClusterAllowed, carriedPaceView, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCarriedCrank, planCrank as programPlanCrank, poolObservationRing, poolSolReserve, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
+import { anchorErrorName, assertClusterAllowed, carriedPaceView, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, forgetNextReadingInLine, memoFromTransaction, planCarriedCrank, planCrank as programPlanCrank, poolObservationRing, poolSolReserve, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
 import { type PrivateSender, privateSenderFromEnv } from "@/lib/burnKeeper/privateSend";
 import { submitReadingIx } from "@/lib/burnReceipts/instructions";
 import { findProcessingTx } from "@/lib/burnReceipts/processing";
@@ -12,6 +12,9 @@ import type { Cosignature, ProgramConfigView, ProgramPort, ProgramReadingView, R
 import { planGraduatedCreatorFeeClaim } from "@/lib/burnKeeper/creatorFees";
 import { CPMM_PROGRAM_ID as KEEPER_CPMM, launchLabProgramFor } from "@/lib/burnKeeper/launchlab";
 import type { Cluster } from "@/lib/burnKeeper/solana";
+
+/** 2026-10-29: per LaunchLab creator-fee vault, the lamports balance at which the program last refused the curve claim (RequireGtViolated). */
+const curveClaimRefusedAt = new Map<string, number>();
 
 /**
  * THE ADAPTER (2026-10-10): `ProgramPort` (programChain.ts) over today's TypeScript client, src/lib/burnReceipts. The ONLY file on the
@@ -120,7 +123,7 @@ export function cosignatureEntries(message: Uint8Array, cosignatures: readonly C
 
 export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
   const c = o.connection;
-  const ctx: ProgramContext = { connection: c, programId: o.programId, mint: o.mint, cluster: programClusterOf(o.cluster), allowMainnet: o.allowMainnet, lookupTable: o.lookupTable };
+  const ctx: ProgramContext = { connection: c, programId: o.programId, mint: o.mint, cluster: programClusterOf(o.cluster), allowMainnet: o.allowMainnet, lookupTable: o.lookupTable, rememberNextInLine: true };
   const fee = feePda(o.programId, o.mint), config = configPda(o.programId, o.mint);
   const maxLocal = Math.min(o.maxLocalAttesters ?? 1, MAX_QUORUM);
   const priv = o.privateSend === undefined ? privateSenderFromEnv(typeof process !== "undefined" ? process.env : {}) : o.privateSend;
@@ -175,6 +178,7 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
       if (local.length + extra.length > MAX_QUORUM) throw new Error(`a reading carries at most ${MAX_QUORUM} signatures (${local.length} held here + ${extra.length} from other hosts)`);
       const instruction = ed25519SharedMessageInstruction(message, [...local, ...extra]);
       const tx = await sign([instruction, submitReadingIx({ programId: o.programId, payer: o.payer.publicKey, mint: o.mint, recordDate: i.recordDate, value: i.value, sourceUrlHash: srcHash, ...(i.proofHash ? { proofHash: i.proofHash } : {}) })]);
+      forgetNextReadingInLine(o.programId, o.mint);   // 2026-10-29: the next crank plan must see this reading once it lands
       return { ...tx, message: message.toString("utf8") };
     },
     async planCrank() {
@@ -228,9 +232,15 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
       const vault = launchlabCreatorFeeVault(ll, fee);
       const v = await c.getAccountInfo(vault, "confirmed");
       if (!v) notes.push(`curve: no LaunchLab creator-fee vault for the fee PDA (${vault.toBase58().slice(0, 8)}…) — nothing accrued, or not launched on this cluster`);
-      else {
+      else if (curveClaimRefusedAt.get(vault.toBase58()) === v.lamports) {
+        // 2026-10-29 (Helius budget hold): the program refused the claim at exactly this vault balance (RequireGtViolated: nothing above
+        // the threshold); simulating it again every cycle costs a blockhash and a simulation per coin for the same answer. Retry when the
+        // vault's balance moves.
+        notes.push(`curve: claim_launchlab_creator_fee not retried: the vault still holds ${v.lamports} lamports, the balance the program refused last time`);
+      } else {
         const r = await claimLaunchLabCreatorFee(ctx, o.payer);
-        if (r.ok && r.signature) sent.push(r.signature); else notes.push(`curve: claim_launchlab_creator_fee not sent (${(r.error ?? "refused").slice(0, 100)})`);
+        if (r.ok && r.signature) { sent.push(r.signature); curveClaimRefusedAt.delete(vault.toBase58()); }
+        else { notes.push(`curve: claim_launchlab_creator_fee not sent (${(r.error ?? "refused").slice(0, 100)})`); curveClaimRefusedAt.set(vault.toBase58(), v.lamports); }
       }
       // (b) after graduation: Raydium's permissionless collect into the fee PDA's ATAs.
       const cpmm = o.cpmmProgram ?? (o.cluster === "mainnet" ? KEEPER_CPMM.mainnet : o.cluster === "devnet" ? KEEPER_CPMM.devnet : null);

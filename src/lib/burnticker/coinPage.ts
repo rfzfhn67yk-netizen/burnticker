@@ -241,6 +241,22 @@ export function burnsAfterGraduation(raise: string | null, quote = "SOL"): strin
 }
 
 /**
+ * THE STAGE ABOVE THE SWAP PANEL (marketing strategy 2026-10-29 §5 item 1). A coin that cannot burn yet says so before anyone reaches the
+ * swap: on its curve (with the raise read from its own curve, never a typed figure) or graduated with its pool not registered. Null once
+ * any burn has gone through, or for any other readiness state, so the line never contradicts the receipts.
+ */
+export function stageLine(state: string, curve: { raised: string; threshold: string; quote: string; progressPct: number } | null | undefined, burns: number): string | null {
+  if (burns > 0) return null;
+  const n = (x: string | number) => String(Number(Number(x).toFixed(2)));
+  if (state === "on-curve") {
+    const read = curve && Number.isFinite(Number(curve.raised)) && Number(curve.threshold) > 0 ? ` ${n(curve.raised)} of ${n(curve.threshold)} ${curve.quote || "SOL"} raised so far (${n(curve.progressPct)}%).` : "";
+    return `On its launch curve, with no completed burns yet.${read} When the curve fills, the coin moves to a Raydium pool. Once that pool is registered, qualifying readings can fund buybacks and burns.`;
+  }
+  if (state === "awaiting-registration") return "Graduated, with no completed burns yet. Its Raydium pool is not registered with the burn program yet. Once it is, qualifying readings can fund buybacks and burns.";
+  return null;
+}
+
+/**
  * THE COIN PAGE'S MARKET FACTS (website-13, 2026-10-12; ChatGPT audit 6 A10). What a trader expects to find, filled only from what this
  * site read: the network, the mint with its explorer link, the quote asset, the market cap from the curve, the curve's raised and raise
  * or the pool, holders, the creator and the launch date, and the fees. A field this site does not read says so ("Not read here" and the
