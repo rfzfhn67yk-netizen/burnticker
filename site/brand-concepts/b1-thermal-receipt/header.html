@@ -1,0 +1,106 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B1 header</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=block" rel="stylesheet">
+<style>
+  :root{ --surface:#1f1c19; --paper:#f2eee4; --ink:#1b1916; --stamp:#5b3fa3; }
+  html,body{margin:0;width:1500px;height:500px;overflow:hidden;background:var(--surface);}
+  body{position:relative;font-family:'Courier Prime',monospace;color:var(--ink);}
+  .surface{position:absolute;inset:0;background:
+    repeating-linear-gradient(97deg, rgba(255,255,255,.018) 0 2px, transparent 2px 9px),
+    radial-gradient(90% 120% at 55% 10%, #272421 0%, #1a1816 75%);}
+  .receipt{position:absolute;background:var(--paper);box-shadow:0 14px 34px rgba(0,0,0,.55),0 2px 0 rgba(0,0,0,.4);}
+  .receipt:before{content:"";position:absolute;inset:0;pointer-events:none;background:
+      linear-gradient(90deg, transparent 0 61%, rgba(255,255,255,.5) 61% 61.6%, transparent 61.6%),
+      repeating-linear-gradient(0deg, rgba(0,0,0,.028) 0 1px, transparent 1px 3px);}
+  .grain{position:absolute;inset:0;opacity:.09;mix-blend-mode:multiply;pointer-events:none}
+  .body{position:absolute;left:22px;right:22px;top:26px;font-size:17px;line-height:24px;}
+  .h{font-weight:700;font-size:26px;letter-spacing:2px;line-height:1.1}
+  .sub{font-size:14px;letter-spacing:4px;margin:2px 0 6px;color:#3a352e}
+  .rule{border-top:2px dashed #2a2622;height:0;margin:8px 0 6px}
+  .row{display:flex;justify-content:space-between}
+  .fade{opacity:.6}
+  .keep{margin-top:10px;font-size:13px;letter-spacing:4px;color:#4a443c;text-align:right}
+  .stamp{position:absolute;transform:rotate(-9deg);color:var(--stamp);border:4px solid var(--stamp);border-radius:3px;
+    padding:0 10px;font-weight:700;font-size:36px;letter-spacing:4px;line-height:1.1;mix-blend-mode:multiply;filter:url(#inkbleed);opacity:.9}
+  .stamp small{display:block;font-size:11px;letter-spacing:3px;font-weight:400}
+  .hole{position:absolute;width:150px;height:130px}
+  .wordmark{position:absolute;left:432px;top:342px;color:var(--paper);font-weight:700;font-size:70px;letter-spacing:8px;line-height:1;
+    -webkit-mask-image:linear-gradient(90deg,#000 0 48%,rgba(0,0,0,.7) 58%,#000 70%);}
+  .tag{position:absolute;left:438px;top:306px;color:#d8d1c2;font-size:20px;letter-spacing:1.5px;white-space:nowrap}
+  .tape{position:absolute;left:0;right:0;top:446px;height:40px;background:#141418;border-top:2px solid #ffb000;border-bottom:2px solid #ffb000;
+    overflow:hidden;white-space:nowrap;font-weight:700;font-size:14px;line-height:36px;letter-spacing:.5px;color:#ffb000;padding-left:18px}
+  .tape i{font-style:normal;color:#77746c;margin-right:8px}
+  .tape b{font-weight:700;color:#fff3c4}
+  .tape u{text-decoration:none;color:#5ad38f;margin-right:22px}
+  .disc{position:absolute;left:1000px;top:388px;color:#7d776c;font-size:14px;letter-spacing:1px;width:480px;text-align:right}
+</style></head>
+<body>
+<div class="surface"></div>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="inkbleed" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="3" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency=".06" numOctaves="2" seed="9" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.4 1.25" result="mask"/>
+    <feComposite in="d" in2="mask" operator="in"/>
+  </filter>
+  <defs>
+    <radialGradient id="sc" cx="48%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#1f1c19"/><stop offset=".40" stop-color="#1f1c19"/>
+      <stop offset=".46" stop-color="#0e0b08"/><stop offset=".55" stop-color="#3a2411"/>
+      <stop offset=".66" stop-color="#8a5a24"/><stop offset=".78" stop-color="#cfa65c" stop-opacity=".85"/>
+      <stop offset=".9" stop-color="#e7d6a6" stop-opacity=".45"/><stop offset="1" stop-color="#f2eee4" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="rough" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="4" seed="11" result="t"/>
+      <feDisplacementMap in="SourceGraphic" in2="t" scale="22" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" stitchTiles="stitch"/></filter>
+  </defs>
+</svg>
+
+<!-- three receipts hanging from the top edge, the way they come off the printer, torn at different lengths -->
+<div class="receipt" data-w="320" data-h="300" style="left:436px;top:4px;width:320px;height:300px;transform:rotate(-2.2deg)">
+  <svg class="grain" width="100%" height="100%"><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="body"><div class="h">BURNTICKER</div><div class="sub">BURN RECEIPT</div><div class="rule"></div>
+    <div class="row"><span>FEED</span><b>TREASURY.DEBT</b></div>
+    <div class="row"><span>DATE</span><b>2026-10-08</b></div>
+    <div class="row"><span>DELTA</span><b>+21,284,113,007</b></div>
+    <div class="row"><span>UNITS</span><b>21 × $1B</b></div><div class="rule"></div>
+    <div class="row"><span>BURNED</span><b>146,702 DEFICIT</b></div>
+    <div class="row"><span>TX</span><b>5xQm7…kR7a</b></div><div class="keep">KEEP THIS RECEIPT</div></div>
+  <svg class="hole" style="left:150px;top:150px" viewBox="0 0 150 130"><ellipse cx="74" cy="64" rx="66" ry="52" fill="url(#sc)" filter="url(#rough)"/></svg>
+</div>
+
+<div class="receipt" data-w="320" data-h="290" style="left:800px;top:-4px;width:320px;height:290px;transform:rotate(1.6deg)">
+  <svg class="grain" width="100%" height="100%"><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="body"><div class="h">BURNTICKER</div><div class="sub">BURN RECEIPT</div><div class="rule"></div>
+    <div class="row"><span>FEED</span><b>ESPN.NHL</b></div>
+    <div class="row"><span>DATE</span><b>2026-10-09</b></div>
+    <div class="row fade"><span>FINAL</span><b>EDM 2 @ CGY 4</b></div>
+    <div class="row"><span>UNITS</span><b>1 × EDM LOSS</b></div><div class="rule"></div>
+    <div class="row"><span>BURNED</span><b>40,973 OILERS</b></div>
+    <div class="row"><span>TX</span><b>9hTz2…Qe3m</b></div><div class="keep">KEEP THIS RECEIPT</div></div>
+  <div class="stamp" style="left:28px;top:150px">BURNED<small>ON-CHAIN · 2026-10-09</small></div>
+</div>
+
+<div class="receipt" data-w="320" data-h="250" style="left:1156px;top:10px;width:320px;height:250px;transform:rotate(-1.1deg)">
+  <svg class="grain" width="100%" height="100%"><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="body"><div class="h">BURNTICKER</div><div class="sub">BURN RECEIPT</div><div class="rule"></div>
+    <div class="row"><span>FEED</span><b>NWS.DEN</b></div>
+    <div class="row"><span>DATE</span><b>2026-10-08</b></div>
+    <div class="row fade"><span>READING</span><b>HIGH 91°F · ≥ 90</b></div>
+    <div class="row"><span>UNITS</span><b>1</b></div><div class="rule"></div>
+    <div class="row"><span>BURNED</span><b>50,000 DENHOT</b></div><div class="keep">KEEP THIS RECEIPT</div></div>
+</div>
+
+<div class="tag">COINS THAT BURN ON REAL-WORLD RESULTS — WITH RECEIPTS.</div>
+<div class="wordmark">BURNTICKER</div>
+<div class="disc">launch one · follow the season · memecoins — the rule says what supply does, not what price does</div>
+<div class="tape"><i>ESPN.MLB</i>NYY 5 @ TB 2 → <b>$RAYS</b> <u>✓</u><i>TREASURY.DEBT</i>+$21.28B → <b>21 UNITS</b> <u>✓</u><i>ESPN.NHL</i>EDM 2 @ CGY 4 → <b>$OILERS</b> <u>✓</u><i>NWS.DEN</i>91°F → <b>1 UNIT</b> <u>✓</u><i>ESPN.NBA</i>LAL 108 @ DEN 117 → <b>$LAKERS</b> <u>✓</u><i>POLYGON</i>ON-CHAIN PAYOUT → <b>10%</b> <u>✓</u><i>ESPN.NFL</i>PHI 20 @ DAL 24 → <b>$EAGLES</b> <u>✓</u></div>
+<script>
+  for(const r of document.querySelectorAll('.receipt')){const W=+r.dataset.w,H=+r.dataset.h,t=11,d=7;let p=[];
+    for(let x=0;x<=W;x+=t)p.push(`${x}px ${(x/t)%2?0:d}px`);for(let x=W;x>=0;x-=t)p.push(`${x}px ${H-((x/t)%2?0:d)}px`);r.style.clipPath=`polygon(${p.join(',')})`;}
+</script>
+</body></html>

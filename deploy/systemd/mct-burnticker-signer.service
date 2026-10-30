@@ -1,0 +1,25 @@
+[Unit]
+Description=Burnticker second reading signer (recomputes each reading from the primary source and co-signs it only on agreement; sends nothing, holds no funds) - its OWN host, never the keeper box or the trading VPS
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A plain clone of the public repository on the signer host (no keeper code paths run here; no env file from any other host).
+WorkingDirectory=%h/burnticker-signer
+ExecStart=/bin/sh %h/burnticker-signer/scripts/service/run-burnticker-signer.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+Environment=TZ=America/Denver
+# BURNTICKER_COSIGNER_* live in the signer host's local env file, read by run-burnticker-signer.sh - never in this file.
+Restart=always
+RestartSec=30
+KillSignal=SIGTERM
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+StandardOutput=append:%h/burnticker-signer/logs/burnticker-signer.log
+StandardError=append:%h/burnticker-signer/logs/burnticker-signer.log
+
+[Install]
+WantedBy=default.target

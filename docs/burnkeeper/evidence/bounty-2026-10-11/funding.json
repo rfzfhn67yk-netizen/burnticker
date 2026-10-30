@@ -1,0 +1,18 @@
+{
+  "schema": "burnticker.bounty-funding-evidence/v1",
+  "wallet": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u",
+  "cluster": "mainnet",
+  "note": "Read back from mainnet (api.mainnet-beta.solana.com, read-only getSignaturesForAddress + getTransaction + getBalance) on 2026-10-11 at 23:03 UTC during website audit 4. The wallet's whole history at that time was this one transaction: a System Program transfer of exactly 5 SOL into an account that held 0 before it. The owner's statement (funded 5 SOL on 2026-10-11) matches the chain. The public site read 0 SOL because the host's devnet RPC answered the mainnet balance read (fixed in website-5: networks.ts rpcUrlFor).",
+  "transactions": [
+    {
+      "kind": "funding",
+      "signature": "5xuhSqtdzUj5H6ueBtGERvgmXTyeTKgGCXdjCygb3mAkVXopjNVHpR7nKi8wbyn7vv6aJvrforJrFypZZRDEL4BJ",
+      "slot": 455775278,
+      "blockTime": "2026-10-11T20:00:30Z",
+      "lamports": "5000000000",
+      "instruction": "system transfer",
+      "err": null
+    }
+  ],
+  "readBack": { "at": "2026-10-11T23:03:33Z", "balanceLamports": "5000000000", "signaturesSeen": 1 }
+}

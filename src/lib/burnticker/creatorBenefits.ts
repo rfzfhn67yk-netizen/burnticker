@@ -1,0 +1,151 @@
+import { denverTime } from "@/lib/burnticker/denverTime";
+import { utcDay } from "@/lib/burnticker/utcWords";
+import { latestResult, oneShotState, type ResultReceipt, type ResultState } from "@/lib/burnticker/nextResult";
+/**
+ * WHAT A CREATOR GETS, AND THE WORDS OF THE CREATOR PAGES (website-17, 2026-10-12; owner: "featured placement, scoreboard rank, a
+ * creator page, the share cards"). None of these pays anyone anything or changes the coin's economics: creators receive no fee revenue,
+ * which is a program fact. A rank is a line on a scoreboard. Every sentence here passes the copy lint and the plain-English test
+ * (test/burntickerCreatorBenefits.test.ts, test/burntickerPlainCopy.test.ts). Client-safe.
+ */
+
+/** The short list shown after the no-fee-revenue line on the templates page and the launch page (item 6). No superlatives. */
+export const CREATOR_BENEFITS_TITLE = "What a creator gets besides the coin";
+export const CREATOR_BENEFITS: readonly string[] = [
+  "A creator page that lists every coin your wallet created, with each rule and its receipts.",
+  "A line on the scoreboard for each coin: its rank by receipts, read from the registry.",
+  "A place among the first cards on the home page when the coin meets one of three written rules. Nobody can pay for a place.",
+  "Share cards for each coin: a link, a badge and a live card for other sites.",
+];
+
+/** The creator page (/burnticker/creator/<wallet>). */
+export const CREATOR_PAGE = {
+  title: (short: string) => `Coins created by ${short}`,
+  description: "Every coin this wallet created on Burnticker, with its rule, its receipts, its next result and its line on the scoreboard.",
+  intro: "This page lists the coins this wallet created, read from the coin registry. The images, descriptions and links come from each coin's own metadata.",
+  empty: "This wallet has not created a coin on this site.",
+  unavailable: "The coin registry could not be read just now, so this list is unavailable.",
+  badWallet: "That is not a Solana wallet address.",
+  creatorText: "From the creator, not part of the rule",
+  // HB-25 (hourly run 6): the count is confirmed burns, so its label says so; /v1/tokens labels its recorded-results count apart
+  labels: { receipts: "Burn receipts", lastBurn: "Last burn", next: "Next result", check: "Next source check", rank: "Rank", /** HB-80 residue (hourly run 7): a decided or voided coin has a result, not a next one */ result: "Result" },
+  noBurn: "No burn yet",
+  noNext: "None scheduled",
+  /** audit 7 F08: the coin's line in a partial list, when its own page could not be read */
+  coinUnavailable: "This coin's details could not be read just now.",
+  /** audit 7 creator aggregation: some coins could not be read; the list shows the rest */
+  partial: (n: number) => `${n === 1 ? "One coin" : `${n} coins`} could not be read just now, so ${n === 1 ? "its details are" : "their details are"} missing below.`,
+  /** sixth pass HS-19 / B-10: a coin whose page read has not finished yet (it keeps running for the next visit) */
+  coinLoading: "Still loading this coin. Refresh in a few seconds.",
+  /** sixth pass B-10: some coins are still being read; the list shows each with its rule and receipts meanwhile */
+  loading: (n: number) => `${n === 1 ? "One coin is" : `${n} coins are`} still loading. Refresh in a few seconds to see ${n === 1 ? "its" : "their"} latest details.`,
+} as const;
+
+/** The coin page's link to its creator's page (WIRING-17.md): "Created by Ab12…cd34". */
+export const createdBy = (short: string): string => `Created by ${short}`;
+export const creatorHref = (wallet: string): string => `/burnticker/creator/${encodeURIComponent(wallet)}`;
+
+/** The share block on the creator page and the coin page (item 4). The parts are the existing routes; nothing new is made up. */
+export const SHARE_COPY = {
+  heading: "Share",
+  link: "Link to this page",
+  markdown: "Badge for a README or a forum post",
+  iframe: "Live card for another website",
+  preview: "What a link preview shows",
+  previewNote: "Posting the link shows this card, built from the coin's receipts. It carries no market data.",
+  copy: "Copy",
+  copied: "Copied",
+} as const;
+
+/** Your coins, connected wallet only (item 5). Counts this site does not keep are said plainly. */
+export const ANALYTICS_COPY = {
+  heading: "Numbers for your coins",
+  views: "Page views",
+  viewsNone: "Not counted. This site keeps no page-view counts.",
+  follows: "Follows",
+  followsNone: "Not countable. Follows are kept in each visitor's own browser and are never sent to this site.",
+  receipts: "Receipts",
+  next: "Next result",
+  rank: "Rank",
+  rankUnavailable: "Unavailable. The registry could not be read just now.",
+  weekHeading: "This week",
+  copySummary: "Copy the summary",
+  creatorPage: "Open your creator page",
+} as const;
+
+/**
+ * The creator page's "Next result" cell (prelaunch audit 2026-10-18, A-26; the review of 2026-10-18; audit 7 F08). A one-shot is decided
+ * only when its latest result receipt (the wind-down, drain and sweep receipts at the rule's end aside) settled a result: burned
+ * ("Decided and burned"), or waiting to burn before graduation; a voided one-shot says so; a skipped or failed result decides nothing.
+ * Otherwise the next RESULT time as a UTC day (utcWords.ts), and a time already past says it is overdue, in words. `nextAt` is the next
+ * result (nextResult.ts nextTimes), never the keeper's next poll of the source: a decided game coin never shows a new result date.
+ */
+export const DECIDED_WAITING = "Decided, waiting for graduation";
+export const DECIDED_BURNED = "Decided and burned";
+export const DECIDED = "Decided";
+export const DECIDED_VOID = "Voided, so the rule has ended";
+export function creatorNextLine(c: { oneShot: boolean; receipts: readonly ResultReceipt[]; graduated: boolean; nextAt: string | null; /** the status producer's state when known (the first snow counts only a day that burned) */ result?: ResultState | null }, now: number): string {
+  if (c.oneShot) {
+    const state = c.result && c.result !== "recurring" ? c.result : oneShotState(c.receipts);
+    if (state === "decided") {
+      const latest = latestResult(c.receipts);
+      return latest?.status === "confirmed" ? DECIDED_BURNED : !c.graduated ? DECIDED_WAITING : DECIDED;
+    }
+    if (state === "void") return DECIDED_VOID;
+  }
+  return dayLine(c.nextAt, now);
+}
+
+/**
+ * HB-98 (hourly run 7): the creator view called a source check "overdue" six minutes after it ran, dated by the UTC day. A time is judged
+ * as an instant against `now`, never as a calendar day, and a time past by less than OVERDUE_GRACE_MS is "due now", not overdue (the
+ * cached coin page can be a few minutes behind the keeper's read).
+ */
+export const OVERDUE_GRACE_MS = 15 * 60_000;
+/** HB-98 reopened: "less than a minute ago", "1 minute ago", "20 minutes ago", "2 hours ago". */
+export function agoWords(ms: number): string {
+  const m = Math.floor(Math.max(0, ms) / 60_000);
+  if (m < 1) return "less than a minute ago";
+  if (m < 120) return `${m} minute${m === 1 ? "" : "s"} ago`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h} hours ago` : `${Math.floor(h / 24)} days ago`;
+}
+/**
+ * HB-98 reopened: the next-check cell from the actual check time: "Checked 20 minutes ago, next due at Oct 19, 2026, 10:53 PM MDT".
+ * A next time already past is "due now" inside the grace or when no later time is known; "overdue" only once the grace has passed
+ * since the due time AND the last check is older than it.
+ */
+export function checkedLine(lastAt: number, nextAt: string | null, now: number, /** HB-132: the last attempt, when it failed after the good read */ failedAt: number | null = null): string {
+  const failed = failedAt !== null && Number.isFinite(failedAt) && failedAt > lastAt && failedAt <= now;
+  const head = failed ? `Last good read ${agoWords(now - lastAt)}; ${failedWords(failedAt!)}` : `Checked ${agoWords(now - lastAt)}`;
+  const ran = failed ? failedAt! : lastAt;   // a failed try still ran: the check it was due for is not overdue
+  const t = nextAt ? Date.parse(nextAt) : NaN;
+  if (!Number.isFinite(t)) return `${head}.`;
+  if (t > now) return `${head}, next due at ${denverTime(nextAt)}`;
+  if (ran >= t || now - t < OVERDUE_GRACE_MS) return `${head}, next check due now`;
+  return `${head}; the check due at ${denverTime(nextAt)} is overdue`;
+}
+/** HB-132 (hourly run 11): the failed attempt, said apart from the last good read. */
+export const failedWords = (failedAt: number): string => `the last try failed at ${denverTime(new Date(failedAt).toISOString())}`;
+export const DUE_NOW = "Due now";
+/** A time as a UTC day, "overdue" in words once past the grace; "None scheduled" for none. */
+export function dayLine(at: string | null, now: number): string {
+  if (!at) return CREATOR_PAGE.noNext;
+  const t = Date.parse(at);
+  if (Number.isNaN(t)) return CREATOR_PAGE.noNext;
+  if (t > now) return utcDay(t);
+  return now - t < OVERDUE_GRACE_MS ? DUE_NOW : `Was due on ${utcDay(t)} and is overdue`;
+}
+/** HB-98: the next source check, a time of day in Denver time with its zone, "due now" inside the grace, "overdue" after it. */
+export function checkLine(at: string | null, now: number, lastAt: number | null = null, /** HB-132: the last attempt, when it failed */ failedAt: number | null = null): string {
+  // HB-98 reopened (hourly run 10): with the keeper's own record of its last read (registry feed_state, read live), the cell says when
+  // the check actually ran and when the next is due, so a page built from an older body can never call a check that just ran overdue.
+  // HB-132 (hourly run 11): `lastAt` is the last GOOD read; a failed attempt after it is said on its own ("the last try failed at …")
+  if (lastAt !== null && Number.isFinite(lastAt) && lastAt <= now) return checkedLine(lastAt, at, now, failedAt);
+  const failed = failedAt !== null && Number.isFinite(failedAt) && failedAt <= now ? `No good read yet; ${failedWords(failedAt)}` : null;
+  if (!at) return failed ? `${failed}.` : CREATOR_PAGE.noNext;
+  const t = Date.parse(at);
+  if (Number.isNaN(t)) return failed ? `${failed}.` : CREATOR_PAGE.noNext;
+  if (t > now) return failed ? `${failed}, next due at ${denverTime(at)}` : `About ${denverTime(at)}`;
+  const due = now - t < OVERDUE_GRACE_MS ? DUE_NOW : `Was due at ${denverTime(at)} and is overdue`;
+  return failed ? `${failed}. ${due}` : due;
+}

@@ -1,0 +1,5 @@
+{
+  "command": "wait-pyth",
+  "solAgeSecs": 3,
+  "targetAgeSecs": 12
+}

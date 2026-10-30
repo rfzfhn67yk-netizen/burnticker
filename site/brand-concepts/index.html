@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Brand concepts — Burnticker and $DEFICIT</title>
+<style>
+  :root{--bg:#1b1b1a;--panel:#232322;--ink:#e8e6df;--mute:#9a978e;--line:#34332f;--acc:#f2a60f}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif}
+  .wrap{max-width:1520px;margin:0 auto;padding:28px 24px 80px}
+  h1{font-size:22px;font-weight:600;margin:0 0 4px;letter-spacing:.2px}
+  .sub{color:var(--mute);margin:0 0 18px;max-width:900px}
+  .tools{display:flex;gap:18px;align-items:center;color:var(--mute);margin-bottom:22px;font-size:14px}
+  .tools label{display:flex;gap:6px;align-items:center;cursor:pointer}
+  nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  nav a{color:var(--ink);text-decoration:none;border:1px solid var(--line);padding:4px 10px;font-size:13px}
+  nav a:hover{border-color:var(--acc)}
+  .dir{border-top:1px solid var(--line);padding:22px 0 10px}
+  .dir header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .code{font-weight:700;color:var(--acc);font-size:13px;letter-spacing:2px}
+  h2{font-size:19px;font-weight:600;margin:0}
+  .type{color:var(--mute);font-size:13px}
+  .sw i{display:inline-block;width:14px;height:14px;margin-right:3px;vertical-align:middle;border:1px solid rgba(255,255,255,.12)}
+  .folder{margin-left:auto;color:var(--mute);font-size:12px;text-decoration:none}
+  .row{display:grid;grid-template-columns:320px 600px 1fr;gap:28px;align-items:start}
+  .lbl{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);margin:0 0 6px}
+  .col > .lbl + * {margin-bottom:16px}
+  .tl{display:flex;gap:10px;align-items:center;padding:10px 12px;width:296px;box-sizing:border-box}
+  .tl.light{background:#fff;color:#0f1419;border-radius:0}
+  .tl.dark{background:#000;color:#e7e9ea;margin-top:2px}
+  .tl img{border-radius:50%;display:block}
+  .tl b{display:block;font-size:15px;line-height:1.2}
+  .tl span{font-size:14px;opacity:.6}
+  .av{position:relative;width:320px;height:320px;overflow:hidden}
+  .av:after{content:"";position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 2000px rgba(27,27,26,.55);pointer-events:none;opacity:0;transition:opacity .15s}
+  body.guides .av:after{opacity:1}
+  .av img{display:block}
+  .hd{position:relative;width:600px;height:200px}
+  .hd img{display:block}
+  .g{position:absolute;pointer-events:none;opacity:0;transition:opacity .15s}
+  body.guides .g{opacity:1}
+  .gl{left:0;top:0;width:25%;height:100%;background:rgba(255,80,60,.14);border-right:1px dashed rgba(255,120,100,.8)}
+  .gb{left:0;bottom:0;width:100%;height:15%;background:rgba(255,80,60,.14);border-top:1px dashed rgba(255,120,100,.8)}
+  .gav{left:16px;bottom:-26px;width:54px;height:54px;border-radius:50%;background:rgba(0,0,0,.65);border:2px solid #fff}
+  .og{display:block}
+  .text p{margin:0 0 10px;color:#d6d3ca;font-size:14px;line-height:1.55}
+  .files{color:var(--mute);font-size:12px}
+  @media (max-width:1300px){.row{grid-template-columns:320px 600px}.text{grid-column:1 / -1}}
+  @media (max-width:980px){.row{grid-template-columns:1fr}.hd,.hd img{width:100%;height:auto}.hd{height:auto}.og{width:100%;height:auto}}
+</style></head>
+<body>
+<div class="wrap">
+  <h1>Brand concepts — four for Burnticker, two for $DEFICIT</h1>
+  <p class="sub">Each direction is rendered from standalone HTML with real web fonts. Everything on this page is shown at the same scale (0.4×) so proportions compare truly; the 48 px timeline rows are 1:1. Regenerate with <code>node site/brand-concepts/render.mjs</code>.</p>
+  <div class="tools"><label><input type="checkbox" id="guides"> show X overlay guides (avatar circle crop, header left 25% / bottom 15%)</label></div>
+  <nav><a href="#b1-thermal-receipt">B1 Thermal receipt</a><a href="#b2-split-flap">B2 Split-flap board</a><a href="#b3-wire-service">B3 Wire service</a><a href="#b4-ledger-engraving">B4 Ledger / engraving</a><a href="#d1-debt-clock">D1 Debt clock</a><a href="#d2-treasury-statement">D2 Treasury statement</a></nav>
+  
+  <section class="dir" id="b1-thermal-receipt">
+    <header>
+      <span class="code">B1</span>
+      <h2>Burnticker — Thermal receipt</h2>
+      <span class="type">Courier Prime</span>
+      <span class="sw"><i style="background:#f2eee4" title="#f2eee4"></i><i style="background:#1b1916" title="#1b1916"></i><i style="background:#5b3fa3" title="#5b3fa3"></i><i style="background:#1f1c19" title="#1f1c19"></i></span>
+      <a class="folder" href="b1-thermal-receipt/">b1-thermal-receipt/</a>
+    </header>
+    <div class="row">
+      <div class="col small">
+        <div class="lbl">Avatar at 48 px, as X shows it</div>
+        <div class="tl light"><img src="b1-thermal-receipt/avatar-48.png" width="48" height="48" alt=""><div><b>Burnticker</b><span>@burnticker · 2h</span></div></div>
+        <div class="tl dark"><img src="b1-thermal-receipt/avatar-48.png" width="48" height="48" alt=""><div><b>Burnticker</b><span>@burnticker · 2h</span></div></div>
+        <div class="lbl">Avatar 800 (shown 320, circle = X crop)</div>
+        <div class="av"><img src="b1-thermal-receipt/avatar-400.png" width="320" height="320" alt=""></div>
+      </div>
+      <div class="col big">
+        <div class="lbl">Header 1500×500 (shown 600×200) — guides: avatar overlay zone (left) and mobile bottom crop</div>
+        <div class="hd"><img src="b1-thermal-receipt/header.png" width="600" height="200" alt=""><div class="g gl"></div><div class="g gb"></div><div class="g gav"></div></div>
+        <div class="lbl">OG card 1200×630 (shown 480×252)</div>
+        <img class="og" src="b1-thermal-receipt/og.png" width="480" height="252" alt="">
+      </div>
+      <div class="col text">
+        <div class="lbl">Rationale</div>
+        <p>The brand *is* the artefact the product produces: a thermal receipt. Paper is slightly grey-warm thermal stock with print-head banding, one weak-dot stripe running the length of the slip and torn (serrated) ends; type is Courier Prime used as a receipt (label left, value right, dashed rules), never as UI. The burned amount is literally burned out of the slip — an irregular scorch hole with charred/brown/yellowed rings made with an SVG displacement filter, not a flame icon — and a violet rubber stamp with uneven ink says BURNED ON-CHAIN. Palette: paper #f2eee4, thermal black #1b1916, stamp violet #5b3fa3, dark counter surface behind. At 48 px the avatar reads as a pale slip with a dark hole on a dark ground; the header hangs three receipts from the top edge (Treasury debt, a solar flare, a launch) so the launchpad idea — many feeds, one receipt format — is the picture. What keeps it from looking generated: a real-world idiom carried through consistently, asymmetric tilts and lengths, texture that comes from how thermal printers actually fail, and a joke (the hole) that only works in this idiom.</p>
+        <div class="files">avatar.png · header.png · og.png · avatar-48.png — sources: avatar.html · header.html · og.html</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="b2-split-flap">
+    <header>
+      <span class="code">B2</span>
+      <h2>Burnticker — Split-flap board</h2>
+      <span class="type">Oswald + Barlow Condensed</span>
+      <span class="sw"><i style="background:#131312" title="#131312"></i><i style="background:#2c2c2b" title="#2c2c2b"></i><i style="background:#ece8dc" title="#ece8dc"></i><i style="background:#f2a60f" title="#f2a60f"></i></span>
+      <a class="folder" href="b2-split-flap/">b2-split-flap/</a>
+    </header>
+    <div class="row">
+      <div class="col small">
+        <div class="lbl">Avatar at 48 px, as X shows it</div>
+        <div class="tl light"><img src="b2-split-flap/avatar-48.png" width="48" height="48" alt=""><div><b>Burnticker</b><span>@burnticker · 2h</span></div></div>
+        <div class="tl dark"><img src="b2-split-flap/avatar-48.png" width="48" height="48" alt=""><div><b>Burnticker</b><span>@burnticker · 2h</span></div></div>
+        <div class="lbl">Avatar 800 (shown 320, circle = X crop)</div>
+        <div class="av"><img src="b2-split-flap/avatar-400.png" width="320" height="320" alt=""></div>
+      </div>
+      <div class="col big">
+        <div class="lbl">Header 1500×500 (shown 600×200) — guides: avatar overlay zone (left) and mobile bottom crop</div>
+        <div class="hd"><img src="b2-split-flap/header.png" width="600" height="200" alt=""><div class="g gl"></div><div class="g gb"></div><div class="g gav"></div></div>
+        <div class="lbl">OG card 1200×630 (shown 480×252)</div>
+        <img class="og" src="b2-split-flap/og.png" width="480" height="252" alt="">
+      </div>
+      <div class="col text">
+        <div class="lbl">Rationale</div>
+        <p>A departures board that lists burns instead of flights. Every character sits in its own Solari-style tile: a top flap and a bottom flap with a dark hinge gap and side pins, flat two-tone shading (no glow, no blur), Oswald as the tile face because split-flap boards use a condensed grotesque to fit a word in a fixed number of cells. One tile is always caught mid-flip — a falling flap drawn with a real perspective rotation, the old character still on it — which is the one detail that says "mechanical" rather than "pixel font". Palette: painted-steel board #131312, tile faces #2c2c2b → #141413, off-white type white letter on a dark cell) with the wordmark spelled in small tiles beneath it and a plain-painted status column to the right, so it is a corner of a board, not a logo. The header is the board itself: a row of blank tiles sits under X's avatar overlay, then FEED / DATE / READING / UNITS / BURNED / ST rows for three feeds. Why it does not read as generated: a fixed cell grid with a physical mechanism, dense tabular content, and asymmetry that comes from the data rather than from layout.</p>
+        <div class="files">avatar.png · header.png · og.png · avatar-48.png — sources: avatar.html · header.html · og.html</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="b3-wire-service">
+    <header>
+      <span class="code">B3</span>
+      <h2>Burnticker — Wire service</h2>
+      <span class="type">Archivo Black + Courier Prime</span>
+      <span class="sw"><i style="background:#e8e7e1" title="#e8e7e1"></i><i style="background:#141414" title="#141414"></i><i style="background:#d9301c" title="#d9301c"></i></span>
+      <a class="folder" href="b3-wire-service/">b3-wire-service/</a>
+    </header>
+    <div class="row">
+      <div class="col small">
+        <div class="lbl">Avatar at 48 px, as X shows it</div>
+        <div class="tl light"><img src="b3-wire-service/avatar-48.png" width="48" height="48" alt=""><div><b>Burnticker</b><span>@burnticker · 2h</span></div></div>
+        <div class="tl dark"><img src="b3-wire-service/avatar-48.png" width="48" height="48" alt=""><div><b>Burnticker</b><span>@burnticker · 2h</span></div></div>
+        <div class="lbl">Avatar 800 (shown 320, circle = X crop)</div>
+        <div class="av"><img src="b3-wire-service/avatar-400.png" width="320" height="320" alt=""></div>
+      </div>
+      <div class="col big">
+        <div class="lbl">Header 1500×500 (shown 600×200) — guides: avatar overlay zone (left) and mobile bottom crop</div>
+        <div class="hd"><img src="b3-wire-service/header.png" width="600" height="200" alt=""><div class="g gl"></div><div class="g gb"></div><div class="g gav"></div></div>
+        <div class="lbl">OG card 1200×630 (shown 480×252)</div>
+        <img class="og" src="b3-wire-service/og.png" width="480" height="252" alt="">
+      </div>
+      <div class="col text">
+        <div class="lbl">Rationale</div>
+        <p>Burnticker as a newswire: it files dispatches, it does not sell. Archivo Black masthead (BURNTICKER WIRE, the WIRE in the one signal red), Courier Prime body in all caps with wide tracking, a thick-thin rule system, a dateline with a reversed FLASH tag, a slug line, and the old "— 30 —" / "— MORE —" end marks. The supply figure is struck through in red and restated, which is the whole product in one typographic gesture. Along the top runs a strip of punched paper tape whose holes actually encode BURNTICKER WIRE in 5-level ITA2 code, sprocket track in the right place — texture that is also true. Paper is a cool grey bond (#e8e7e1), ink #141414, red #d9301c; a faint displacement filter gives the type the slightly struck, uneven edge of a typewriter or teleprinter impression. The avatar stacks BURN / TICKER in the heavy grotesque so it reads as a black type block at 48 px. Why it does not read as generated: monochrome plus one colour, left-ranged everything, period-correct editorial furniture (dateline, slug, take number, end mark) and a code strip that is not decorative noise.</p>
+        <div class="files">avatar.png · header.png · og.png · avatar-48.png — sources: avatar.html · header.html · og.html</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="b4-ledger-engraving">
+    <header>
+      <span class="code">B4</span>
+      <h2>Burnticker — Ledger / engraving</h2>
+      <span class="type">Playfair Display SC + Playfair Display</span>
+      <span class="sw"><i style="background:#e9e9df" title="#e9e9df"></i><i style="background:#15302a" title="#15302a"></i><i style="background:#b8923f" title="#b8923f"></i></span>
+      <a class="folder" href="b4-ledger-engraving/">b4-ledger-engraving/</a>
+    </header>
+    <div class="row">
+      <div class="col small">
+        <div class="lbl">Avatar at 48 px, as X shows it</div>
+        <div class="tl light"><img src="b4-ledger-engraving/avatar-48.png" width="48" height="48" alt=""><div><b>Burnticker</b><span>@burnticker · 2h</span></div></div>
+        <div class="tl dark"><img src="b4-ledger-engraving/avatar-48.png" width="48" height="48" alt=""><div><b>Burnticker</b><span>@burnticker · 2h</span></div></div>
+        <div class="lbl">Avatar 800 (shown 320, circle = X crop)</div>
+        <div class="av"><img src="b4-ledger-engraving/avatar-400.png" width="320" height="320" alt=""></div>
+      </div>
+      <div class="col big">
+        <div class="lbl">Header 1500×500 (shown 600×200) — guides: avatar overlay zone (left) and mobile bottom crop</div>
+        <div class="hd"><img src="b4-ledger-engraving/header.png" width="600" height="200" alt=""><div class="g gl"></div><div class="g gb"></div><div class="g gav"></div></div>
+        <div class="lbl">OG card 1200×630 (shown 480×252)</div>
+        <img class="og" src="b4-ledger-engraving/og.png" width="480" height="252" alt="">
+      </div>
+      <div class="col text">
+        <div class="lbl">Rationale</div>
+        <p>The seriousness of a bond certificate: a register of supply reductions, numbered, ruled, engraved. The guilloche rosette is generated as strokes — forty rotated ellipses and three families of sinusoidal wave rings, the way a geometric lathe draws them — with a hatched engraving frame and a single gold hairline inside it. The wordmark is Playfair Display SC in true small caps; figures are Playfair's old-style numerals with a hairline white relief so they sit "cut" into the paper. Palette: security paper #e9e9df with a green-grey cast, engraver's green-black ink #15302a, gold #b8923f — not cream, not terracotta. The brand mark is an ink cartouche with a gold B set on the rosette (at 48 px: a dark lozenge on a textured pale ground), numbered No. 0001 in the corner; one corner of every sheet is burned away to the dark behind it, which is the only concession to the word "burn". The header is the ledger itself: date / feed / reading / units / burned / receipt, three entries, rules between. Why it does not read as generated: period-specific engraving construction (not a filter), small caps and old-style figures used correctly, restraint — one ink, one metal, one italic — and a mark that is a cartouche, not a coin.</p>
+        <div class="files">avatar.png · header.png · og.png · avatar-48.png — sources: avatar.html · header.html · og.html</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="d1-debt-clock">
+    <header>
+      <span class="code">D1</span>
+      <h2>$DEFICIT — Debt clock</h2>
+      <span class="type">Oswald + seven-segment (built)</span>
+      <span class="sw"><i style="background:#0a0a0a" title="#0a0a0a"></i><i style="background:#ff3b2e" title="#ff3b2e"></i><i style="background:#ffb000" title="#ffb000"></i><i style="background:#f1eee6" title="#f1eee6"></i></span>
+      <a class="folder" href="d1-debt-clock/">d1-debt-clock/</a>
+    </header>
+    <div class="row">
+      <div class="col small">
+        <div class="lbl">Avatar at 48 px, as X shows it</div>
+        <div class="tl light"><img src="d1-debt-clock/avatar-48.png" width="48" height="48" alt=""><div><b>$DEFICIT</b><span>@USA_DEFICIT · 2h</span></div></div>
+        <div class="tl dark"><img src="d1-debt-clock/avatar-48.png" width="48" height="48" alt=""><div><b>$DEFICIT</b><span>@USA_DEFICIT · 2h</span></div></div>
+        <div class="lbl">Avatar 800 (shown 320, circle = X crop)</div>
+        <div class="av"><img src="d1-debt-clock/avatar-400.png" width="320" height="320" alt=""></div>
+      </div>
+      <div class="col big">
+        <div class="lbl">Header 1500×500 (shown 600×200) — guides: avatar overlay zone (left) and mobile bottom crop</div>
+        <div class="hd"><img src="d1-debt-clock/header.png" width="600" height="200" alt=""><div class="g gl"></div><div class="g gb"></div><div class="g gav"></div></div>
+        <div class="lbl">OG card 1200×630 (shown 480×252)</div>
+        <img class="og" src="d1-debt-clock/og.png" width="480" height="252" alt="">
+      </div>
+      <div class="col text">
+        <div class="lbl">Rationale</div>
+        <p>The National Debt Clock billboard idiom, used literally: a black LED board in a dark housing with corner bolts, a white condensed marquee ($DEFICIT, Oswald 700), and the debt itself in red seven-segment digits. The digits are not a font: each glyph is seven hexagonal segments built from boxes, the unlit segments left faintly visible as they are on a real board, and the lit ones carry a fine LED-dot matrix instead of a flat fill. The dollar sign is a seven-segment S with a bar through it, which is how such boards actually fake it. The avatar reduces the whole coin to one figure — $1b, the unit of debt per burn — so at 48 px it is three red glyphs on black, unmistakably a counter. Amber is reserved for what we burned; red for what they borrowed. Strap: BURNS WHEN AMERICA BORROWS. Why it does not read as generated: a specific, dated public object (the clock), component-level construction with its real imperfections (ghost segments, dot pitch, a faked $), and no gradients, glow or rounded cards — the only shading is the housing.</p>
+        <div class="files">avatar.png · header.png · og.png · avatar-48.png — sources: avatar.html · header.html · og.html</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="d2-treasury-statement">
+    <header>
+      <span class="code">D2</span>
+      <h2>$DEFICIT — Treasury statement</h2>
+      <span class="type">IBM Plex Mono + IBM Plex Sans Condensed</span>
+      <span class="sw"><i style="background:#f7f7f3" title="#f7f7f3"></i><i style="background:#161616" title="#161616"></i><i style="background:#c8102e" title="#c8102e"></i><i style="background:#2a2a29" title="#2a2a29"></i></span>
+      <a class="folder" href="d2-treasury-statement/">d2-treasury-statement/</a>
+    </header>
+    <div class="row">
+      <div class="col small">
+        <div class="lbl">Avatar at 48 px, as X shows it</div>
+        <div class="tl light"><img src="d2-treasury-statement/avatar-48.png" width="48" height="48" alt=""><div><b>$DEFICIT</b><span>@USA_DEFICIT · 2h</span></div></div>
+        <div class="tl dark"><img src="d2-treasury-statement/avatar-48.png" width="48" height="48" alt=""><div><b>$DEFICIT</b><span>@USA_DEFICIT · 2h</span></div></div>
+        <div class="lbl">Avatar 800 (shown 320, circle = X crop)</div>
+        <div class="av"><img src="d2-treasury-statement/avatar-400.png" width="320" height="320" alt=""></div>
+      </div>
+      <div class="col big">
+        <div class="lbl">Header 1500×500 (shown 600×200) — guides: avatar overlay zone (left) and mobile bottom crop</div>
+        <div class="hd"><img src="d2-treasury-statement/header.png" width="600" height="200" alt=""><div class="g gl"></div><div class="g gb"></div><div class="g gav"></div></div>
+        <div class="lbl">OG card 1200×630 (shown 480×252)</div>
+        <img class="og" src="d2-treasury-statement/og.png" width="480" height="252" alt="">
+      </div>
+      <div class="col text">
+        <div class="lbl">Rationale</div>
+        <p>$DEFICIT as the daily statement it is indexed to: a plain office document, not a government one. No seal, no eagle, no agency name as a masthead — just the dataset cited (Debt to the Penny), a date, and the rows: TOTAL PUBLIC DEBT OUTSTANDING, prior day, CHANGE, unit, units, BURN, with dotted leaders and tabular figures in IBM Plex Mono; the ticker and kicker in IBM Plex Sans Condensed. The sheet has tri-fold creases, two ring-binder punches and a faint grain, and lies slightly askew on a dark desk. The one colour is a rubber stamp: double-ring red, rotated, ink broken by a turbulence mask, placed over the change row with the tx hash in its small line. Palette: sheet #f7f7f3, ink #161616, stamp red #c8102e, desk #2a2a29. At 48 px the avatar is a white sheet with a red stamp mark — a document, not a logo. The header is the page seen close, punches at the left margin where X's avatar sits, with the full arithmetic across the right. Why it does not read as generated: the humour is in the deadpan (a statement that files its own burn), the type is used as accounting type, and the artefact details — creases, punches, leaders, double-rule total — are the ones a real form has.</p>
+        <div class="files">avatar.png · header.png · og.png · avatar-48.png — sources: avatar.html · header.html · og.html</div>
+      </div>
+    </div>
+  </section>
+</div>
+<script>
+  const cb=document.getElementById('guides');const apply=()=>document.body.classList.toggle('guides',cb.checked);
+  try{const v=localStorage.getItem('bc-guides');if(v!==null)cb.checked=v==='1'}catch(e){}
+  cb.addEventListener('change',()=>{apply();try{localStorage.setItem('bc-guides',cb.checked?'1':'0')}catch(e){}});apply();
+</script>
+</body></html>

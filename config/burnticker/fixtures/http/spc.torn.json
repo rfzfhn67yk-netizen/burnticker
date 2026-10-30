@@ -1,0 +1,37 @@
+{
+ "fetchedAt": "2026-10-13T00:12:19Z",
+ "note": "Real responses, captured read-only: SPC's filtered tornado report files for seven report days (each 12:00 UTC to 12:00 UTC the next day). Trimmed to the Time, F_Scale and State columns: location, county and coordinates are dropped, and the adapter never reads them.",
+ "url": "https://www.spc.noaa.gov/climo/reports/{yymmdd}_rpts_filtered_torn.csv",
+ "body": {
+  "__parts": [
+   {
+    "day": "2026-10-11",
+    "body": "Time,F_Scale,State\n1414,UNK,NC\n1556,UNK,NC\n1603,UNK,NC\n1607,UNK,NC\n1625,UNK,NC\n1632,UNK,NC\n1712,UNK,NC\n1715,UNK,NC\n1718,UNK,NC\n1722,UNK,NC\n1725,UNK,NC\n1740,UNK,NC\n1742,UNK,NC\n"
+   },
+   {
+    "day": "2026-10-10",
+    "body": "Time,F_Scale,State\n1833,UNK,GA\n1842,UNK,GA\n1917,UNK,GA\n1927,UNK,GA\n1936,UNK,GA\n2017,UNK,SC\n2034,UNK,SC\n2039,UNK,SC\n2047,UNK,SC\n2110,UNK,SC\n2115,UNK,SC\n2158,UNK,SC\n0432,UNK,NC\n1006,UNK,SC\n"
+   },
+   {
+    "day": "2026-10-09",
+    "body": "Time,F_Scale,State\n"
+   },
+   {
+    "day": "2026-10-08",
+    "body": "Time,F_Scale,State\n"
+   },
+   {
+    "day": "2026-10-07",
+    "body": "Time,F_Scale,State\n"
+   },
+   {
+    "day": "2026-10-06",
+    "body": "Time,F_Scale,State\n"
+   },
+   {
+    "day": "2026-10-05",
+    "body": "Time,F_Scale,State\n"
+   }
+  ]
+ }
+}

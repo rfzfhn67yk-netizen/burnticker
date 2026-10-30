@@ -1,0 +1,14 @@
+{
+  "name": "@burnticker/bot-starter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small TypeScript starter for bots on Burnticker: follow a coin's receipts (with the verifier), preview a launch bundle (unsigned; never signs), and queue lint-clean receipt posts for a human to post.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=22.6" },
+  "scripts": {
+    "follow": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ../../test/alias-hook.mjs src/follow.ts",
+    "launch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ../../test/alias-hook.mjs src/launch.ts",
+    "post": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ../../test/alias-hook.mjs src/post.ts"
+  }
+}

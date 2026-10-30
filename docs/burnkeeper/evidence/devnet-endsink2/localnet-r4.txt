@@ -1,0 +1,24 @@
+BURN_RECEIPTS_LOCALNET=1 BURNKEEPER_EXECUTION=program node --test test/burnReceiptsLocalnet.test.ts
+  ✔ vault mode: init before the mint exists → attested readings → crankAll burns, carries the shortfall, writes memo v1 (3432.673708ms)
+  ✖ buyback mode: LaunchLab-shaped migration (CPMM pool, creator = fee PDA, LP locked) → register → crank defers until the pool has TWAP history (8349.823208ms)
+  ✔ KEEPER, vault mode: executeProgramPending attests the readings with the keeper key, cranks crank_vault, and records the program's facts (5276.36175ms)
+  ✖ KEEPER, buyback: no pool → waits; register_pool → claims best-effort, check_pool_health, then the crank DEFERS (TwapUnavailable) and the ledger records a wait, not an error (7707.937833ms)
+  ✔ KEEPER, quorum 2 with two local keys: shared-message readings fit a legacy transaction, the program counts both keys, the crank burns (5511.763833ms)
+  ✔ END SINKS: an EndSink pinned at initialize_token → quorum-signed RESOLVED end (once) → later readings refused → forward_on_end refuses a flagship that is not live and any other target; a VOID end forwards not
+  ✔ KEEPER + SECOND SIGNER, quorum 2: the co-signed readings land with both bits set; a disagreement holds the day and sends nothing (6127.6565ms)
+  ✖ ADMIN CLI (scripts/burnreceipts-admin.mts): initialize-token dry run decodes the instruction, prints the pinned rules sha and the resulting TokenConfig; --send with test key files creates it; verify-platform-pins p
+✖ burn_receipts on a local validator (TypeScript client end to end) (49950.947375ms)
+ℹ tests 8
+ℹ suites 1
+ℹ pass 5
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 50433.196042
+✖ failing tests:
+✖ buyback mode: LaunchLab-shaped migration (CPMM pool, creator = fee PDA, LP locked) → register → crank defers until the pool has TWAP history (8349.823208ms)
+  AssertionError [ERR_ASSERTION]: register_pool: FeeKeyNotRegistered
+✖ KEEPER, buyback: no pool → waits; register_pool → claims best-effort, check_pool_health, then the crank DEFERS (TwapUnavailable) and the ledger records a wait, not an error (7707.937833ms)
+✖ ADMIN CLI (scripts/burnreceipts-admin.mts): initialize-token dry run decodes the instruction, prints the pinned rules sha and the resulting TokenConfig; --send with test key files creates it; verify-platform-pins pas
+  AssertionError [ERR_ASSERTION]: refusing: config/burnkeeper/deficit.rules.json names mint AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj, not oapfTk8FG2np1vSoGANkbijWiQApHZMFAytSdCoass9

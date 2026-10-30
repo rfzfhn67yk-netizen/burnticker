@@ -1,0 +1,390 @@
+{
+ "note": "The $REHEARSAL coin's holders (docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json), read-only from the public mainnet endpoint: the mint account, getTokenAccounts (this endpoint's DAS-style method takes mintAddress; zero balances hidden) and getProgramAccounts on the token program (dataSlice owner+amount; zero balances included). Used by test/burntickerHolders.test.ts.",
+ "network": "mainnet",
+ "fetchedAt": "2026-10-12T18:54:51Z",
+ "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+ "getAccountInfo": {
+  "context": {
+   "apiVersion": "4.3.0",
+   "slot": 456152503
+  },
+  "value": {
+   "data": [
+    "AAAAAAeDqBUmIQ+UoOjoTSCHADs6QmDSnOedrP4hpOp3H6YoAIDGpH6NAwAGAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+    "base64"
+   ],
+   "executable": false,
+   "lamports": 1066800,
+   "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+   "rentEpoch": 18446744073709551615,
+   "space": 82
+  }
+ },
+ "getTokenAccounts": {
+  "params": {
+   "mintAddress": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+   "limit": 1000
+  },
+  "result": {
+   "total": 4,
+   "limit": 1000,
+   "token_accounts": [
+    {
+     "address": "2Pzksq7WAsc5QTTk49NdwmhJne5kfCuqgPe2z2xd3tqp",
+     "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+     "amount": 14366551,
+     "owner": "9B9qwX8XLjRNfjeDq4jR8rrdQXgFjcfxSqACvHAjgFno",
+     "frozen": false,
+     "delegate": null,
+     "delegated_amount": 0,
+     "close_authority": null,
+     "extensions": null
+    },
+    {
+     "address": "DZvfonWLqsVShe3nvREPv5GZGW3E8K7X2bC5Wvg4tAhk",
+     "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+     "amount": 3529237671923,
+     "owner": "EPTYFR8RhxP6ZA3o2JiaP1zEieQuzo2jZras8H3N1uSE",
+     "frozen": false,
+     "delegate": null,
+     "delegated_amount": 0,
+     "close_authority": null,
+     "extensions": null
+    },
+    {
+     "address": "Dxv3oLjRAQ2s3Dn7pFHBNnZNHX1pxEG2ZHTxUjW6u1g8",
+     "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+     "amount": 996470729833834,
+     "owner": "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh",
+     "frozen": false,
+     "delegate": null,
+     "delegated_amount": 0,
+     "close_authority": null,
+     "extensions": null
+    },
+    {
+     "address": "FEMFwf4XX2MuCqHBtU8HifCFNjaaapFBp73DKV5KQVH3",
+     "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+     "amount": 18127692,
+     "owner": "3cfYXpTX5awbaDDPwHEnPVe9DihQoPm1iDuDhaDzDSRj",
+     "frozen": false,
+     "delegate": null,
+     "delegated_amount": 0,
+     "close_authority": null,
+     "extensions": null
+    }
+   ],
+   "cursor": "FEMFwf4XX2MuCqHBtU8HifCFNjaaapFBp73DKV5KQVH3"
+  }
+ },
+ "getProgramAccounts": [
+  {
+   "pubkey": "2Pzksq7WAsc5QTTk49NdwmhJne5kfCuqgPe2z2xd3tqp",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "eXdNny3v8kyY7mg6z5+/RM3vb8ime7VhkuQJisbYozBXN9sAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "38e928DXKN9afcbdZWVFMsoqYZfx3DbU13wcvKd7ShwQ",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "853of63uThxA5jtccn/pQQNZz3vfuLUt1FMcprABiqIAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "399EUPWmy8g8CqmriYfK7fuiUdZKRFkiA4hb59szu1sP",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "0GJx+5RSm5LmeGvafZ0sa0F6s8+L/Rs0GZkmJFCQb50AAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "3s181QWhGHeRsUCgjFy3FD57fSGNrcErMCr3BVKJ9jdZ",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "kZz5YAeEwGP8/MTapIOhSNcIPG39LkCnZCZPFCnyUUMAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "3zuUgk2MtCbHazUB4YP5nw18P13YDmsPYB94SS9fT8hP",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "AQ8IDrMOnPlsgvyOoEZs8dHH9aQgt91YbExSmzxT2oMAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "52MEziSKvTV5anuGo9iaydyMxRDNhQFgpZ8tpvEpRL1F",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "vXaKSKN4JoSHh/4uMgZvEXS13Zy5tG+mDcTtuCjkK6kAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "53vJEH8gREmmTxDSwgAmz6ZijcUDYC5E1GCXejpPf2Bk",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "Cvh4REmUwKDuKUpRoRYTKKj+lhi7OB0LtyJiH3xYuzUAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "5AGE83Z2qrXnQHKqX5F6MDahmQPgBNszaGKV2NQ3FvCn",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "sB+DzTWxQ9dwEenqrymUHqazJZYLx4s6sZlyQ9miomoAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "5MxcyxnmyG5CKRoN1ZRxTeYnbDayp6wvBaJ2fqZK41Dj",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "jfTyEj/0rDsyT62Edpj/PHx7tmOkQURRCTtEY3aOqs4AAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "6TwpHDiDYznNNBYbH3hVrzcgdXvDkSX7xuuj6Dd1m3W9",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "y4kiCUqanMuZf/uSbMBFIEEMg2n4M30zT2S/BuJhVh0AAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "7LCYoz4oaYyV8adC4znsqBhwPUSKbASmHoPSpFVG53TA",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "NWhhArjG8t4ILiOLuPhPUUPldjIU/PL16lFlrMxjWigAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "9PDyonu3U9uHPH1XqtANyt4hZXMhjWjiE7wp4LX6U2pG",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "k4FPZT5FUDIIO+x89/CJLHca1mLWkHR42AePQZ94KdMAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "DDvHmCqGcucitYbzH9mvtrMxD2Gn73SFzC13fX7X9WGs",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "rNzzC5lx/0XnMwPkCzFMLYCf/9QwclQtIiyjpFh7eiAAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "DGRx263sziSYZGFJdB6b6ZQDoEhRQTk46qbeS4NSckYK",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "8mXO0/DozkGyt+pc8T6LF7OMn0CylizEOCkYEj5tIJkAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "DZvfonWLqsVShe3nvREPv5GZGW3E8K7X2bC5Wvg4tAhk",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "xui3H2jo8TyC+fHUPMrp4wmrj9fVbJ5fa4L39BlvLBfzL/W2NQMAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "Dxv3oLjRAQ2s3Dn7pFHBNnZNHX1pxEG2ZHTxUjW6u1g8",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "B4OoFSYhD5Sg6OhNIIcAOzpCYNKc552s/iGk6ncfpihqfeHrSIoDAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "EaNh6csUyEdTsz2ncysNcYzuV9VyUZyeLud5sis4p3fz",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "JEpQvhCFJt/57C4MAR2qAd3XJd4VFNpNrg8u+dnOQF4AAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "F5Kd6vNWKAtAcLJaCyangcF5ruj5QdDfT9VLqSkEGVbe",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "2eHucK1oiD7C2ZuGsy1c9tQ37eawdy1mHQS4GJOlhugAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "FEMFwf4XX2MuCqHBtU8HifCFNjaaapFBp73DKV5KQVH3",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "JtpImn/ttls73FJGhU+e/UMgicU47uL7w0wdCovEEk5MmxQBAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "G7QXe7xCcHMaLmUKvgtJ2dJUGJYkHHg9mUBVcSjk4hrR",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "FiXwlEsVZnN9ZB9+Dz0t+cHewuOJsjdyebYj5/GRpMQAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "H3NySyFZZcLMTV6vRvAEazm2be1bg3pr21Vyom7dcPHK",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "ij3Vf0pWS1K+0Zn1+8uhyWkbzIrEDXl2ySLo3MDfXDQAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  },
+  {
+   "pubkey": "H8TfJ5Hb38eaeFtkLLnTGwhrvQwJ3qxtrityhcuAbv4H",
+   "account": {
+    "lamports": 1488440,
+    "data": [
+     "pk/6wPWfN0dXtszVifh4PObZ+wzU19FanHhYiHwB7SIAAAAAAAAAAA==",
+     "base64"
+    ],
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "executable": false,
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   }
+  }
+ ]
+}

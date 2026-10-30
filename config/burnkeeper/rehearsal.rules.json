@@ -1,0 +1,56 @@
+{
+  "schema": "burnkeeper.rules/v1",
+  "token": "REHEARSAL",
+  "ticker": "REHEARSAL",
+  "chain": "solana",
+  "mode": "buyback",
+  "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+  "totalSupply": "1000000000",
+  "decimals": 6,
+  "buyback": {
+    "feeAsset": "SOL",
+    "fractionPerUnit": "0.02",
+    "fractionPerUnitDecision": "OWNER DECISION 2026-10-10 (supersedes 2026-10-09's 0.01): 0.02 (2% of the burn pool per $1B unit — the same 2% the Federal Reserve targets for inflation). Any change is a new rule file with a new sha256, which is a new token.",
+    "floorUsd": "1",
+    "reserveSol": "0.02",
+    "slippageBps": 300,
+    "burnShare": "all-received"
+  },
+  "vaultAllocation": "250000000",
+  "vault": {
+    "kind": "vesting",
+    "cliffDays": 0,
+    "vestDays": 365,
+    "shortfall": "carry-until-vault-refills"
+  },
+  "feed": {
+    "id": "treasury.debt_to_penny",
+    "name": "U.S. Treasury, Debt to the Penny (Total Public Debt Outstanding)",
+    "url": "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny",
+    "dateField": "record_date",
+    "field": "tot_pub_debt_out_amt",
+    "memoSource": "fiscaldata.treasury.gov debt_to_penny"
+  },
+  "rule": {
+    "kind": "increase-units",
+    "unitUsd": "1000000000",
+    "burnPerUnitTokens": "100000",
+    "carry": "consecutive-increases",
+    "onNonIncrease": "burn-nothing-reset-carry",
+    "maxAbsDeltaUsd": "2000000000000"
+  },
+  "source": "fee-pool-buyback",
+  "schedule": {
+    "timeZone": "America/New_York",
+    "polls": [
+      "16:30",
+      "20:00"
+    ]
+  },
+  "memo": {
+    "prefix": "REHEARSAL",
+    "version": "v2",
+    "maxBytes": 566
+  },
+  "statement": "REHEARSAL COIN, a disclosed throwaway that tests the Burnticker machinery on mainnet; not for trading. Every full $1,000,000,000 added to the U.S. Total Public Debt Outstanding (Treasury's Debt to the Penny) since the previous business day's reading is one unit. Remainders under $1B carry forward only across consecutive increases; a day the debt falls or stays flat counts nothing and resets the remainder to zero. On each day with units, the burn_receipts program spends 1 - 0.98^units of the token's burn pool (its fee account: the token's creator-fee SOL plus a disclosed seed, less a 0.02 SOL reserve; while the platform's pre-audit cap stands, of at most 25 SOL of it) buying $DEFICIT on the token's Raydium CPMM pool, and burns every token it receives in the same instruction. A day whose spend is under the floor fixed at launch (about $1 of SOL) buys nothing and the pool keeps the SOL; one crank spends at most 2% of the CPMM pool's SOL reserve and carries the rest to the next crank. The program never sells and has no instruction that moves the pool's SOL or tokens anywhere but that swap and burn."
+}

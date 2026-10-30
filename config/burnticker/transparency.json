@@ -1,0 +1,339 @@
+{
+  "schema": "burnticker.transparency/v1",
+  "updatedAt": "2026-10-29",
+  "note": "Rendered on /burnticker/trust by src/lib/burnticker/trust.ts (loadTransparency). Facts only. A null pubkey is a TODO the owner fills in before launch; the page shows it as TODO, never as blank. The operator's name comes from OPERATOR_LINE in src/lib/burnticker/fees.ts, not from this file. `rehearsals` lists every throwaway coin created under the real platform config to prove the machinery; each is also on config/own-tokens.json so the operator's bots refuse it.",
+  "publicRepo": {
+    "url": "https://github.com/rfzfhn67yk-netizen/burnticker",
+    "whatIsPublished": "It holds the on-chain program, the keeper, the platform code, the sites, the docs, the deploy files, the tests and their fixtures, and the refuse list that the operator's trading bots read. It is copied out of a private repository using a fixed list of allowed files (config/public-repo.allowlist). The trading code never leaves the private repository"
+  },
+  "whoRunsThis": {
+    "alsoRuns": "The operator also runs automated trading systems (memecoin trading bots) on other machines, with their own wallets. Those systems are not part of this platform, and their code is private.",
+    "refusal": "Every one of those systems refuses any coin launched on this platform. They check both the mint address and the ticker, on every chain they trade. The refusal is written in code. The file src/lib/ownTokens.ts reads the list in config/own-tokens.json, and every path that opens a trade checks it first. If the list cannot be read, every trade is refused. Both files are in the public repository.",
+    "refuseListCode": "src/lib/ownTokens.ts",
+    "refuseListConfig": "config/own-tokens.json",
+    "holdingsRule": "If any wallet listed below holds a platform coin, this page shows it. The balance is read from the chain once the site has a connection to a Solana node."
+  },
+  "howBuilt": {
+    "aiAssisted": true,
+    "statement": "The program, the keeper, the platform and this page were written with AI help (Claude Code). The operator directed and reviewed the work.",
+    "firmAudit": false,
+    "firmAuditStatement": "No security firm has audited the code.",
+    "bounty": {
+      "status": "funded 2026-10-11",
+      "recordedFunding": { "sol": 5, "date": "2026-10-11", "transaction": null, "evidence": "docs/burnkeeper/evidence/bounty-2026-10-11/funding.json", "source": "owner statement 2026-10-11; the funding transaction (5 SOL, 2026-10-11 20:00 UTC) was read back from mainnet into the evidence file, which the API serves" },
+      "rangeSol": [
+        5,
+        10
+      ],
+      "fundedFrom": "the developer fee (0.25% of trading volume on the launch curve)",
+      "termsPath": "SECURITY.md in the public repository",
+      "contact": "security@burnticker.com",
+      "wallet": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u",
+      "walletTodo": "top-ups from the developer fee",
+      "howReportsArePaid": "SECURITY.md in the public repository, in its Bounty wallet section",
+      "reports": {
+        "paid": [],
+        "rejected": [],
+        "note": "Each report is listed here once it is decided. A paid report shows the payment transaction, and a rejected report shows the reason. There are none yet."
+      }
+    }
+  },
+  "wallets": [
+    {
+      "role": "ops",
+      "label": "operations wallet",
+      "pubkey": null,
+      "envVar": null,
+      "description": "Pays the keeper's transaction fees and rent, and the hosting. It holds no platform coin. The operator and the developer fee fund it."
+    },
+    {
+      "role": "deployer",
+      "label": "program deployer",
+      "pubkey": null,
+      "envVar": null,
+      "description": "The key that deploys the burn program (burn_receipts). At launch the program's upgrade authority passes to the Squads vault, and after the audit it is set to none. The deployer key then holds nothing."
+    },
+    {
+      "role": "keeper",
+      "label": "keeper data key",
+      "pubkey": null,
+      "envVar": "BURNTICKER_KEEPER_PUBKEY",
+      "description": "The keeper signs readings and starts burns. On LaunchLab, each coin's recorded creator is the program's fee PDA (an account the program owns), not this key. At launch it is the only attester (quorum 1), and it signs settled readings. As the fee payer, it sends burn steps, fee claims and health checks. It cannot change a rule, burn more than the rule says, or withdraw from any fee account. The Powers Register lists these limits."
+    },
+    {
+      "role": "dev-fee",
+      "label": "developer fee wallet",
+      "pubkey": null,
+      "envVar": "BURNTICKER_FEE_WALLET",
+      "description": "Receives the platform's 0.25% of trading volume on the launch curve. The LaunchLab platform settings name it as the fee wallet. This page reads its full ledger from the chain."
+    },
+    {
+      "role": "platform-admin",
+      "label": "LaunchLab platform admin",
+      "pubkey": null,
+      "envVar": "BURNTICKER_PLATFORM_ADMIN",
+      "description": "It can change the platform fee rate, the claim wallet, the pool settings (cpConfigId and platformCpCreator) and the LP split, for launches that have not moved to a pool yet. A changed split cannot leave a Fee Key with a person. The burn program refuses to set up a coin, or to run any buyback, for a platform whose LP is not 100 % locked to the fee-keys account. The operator holds this key, encrypted, for this one job. It is a plain wallet: one key on one machine, with no hardware device and no multisig behind it. It cannot be transferred to the Squads vault, because Raydium derives the platform id from the admin key. The Powers Register lists it under 'Powers outside the program' as an untimelocked power, which means it has no time lock. Any change shows on this page within one cycle. When a coin is set up, the program pins the pool settings and the LP scales, and the launch check reads them again just before each create."
+    },
+    {
+      "role": "squads-vault",
+      "label": "Squads 2-of-3 vault",
+      "pubkey": null,
+      "envVar": "BURNTICKER_UPGRADE_AUTHORITY",
+      "description": "Holds three powers. The first is the program upgrade authority. Its Squads time lock is 0 today, by owner decision on 2026-10-11. The 48-hour time lock has no date set yet. This page reads the live value from the chain. The second is the platform authority. The platform authority no longer holds a cap-raise power. The program refuses every cap raise. It can still give itself up for good. The third is each token's config authority. Behind a 48 h time lock, it can change the attester set, propose a new pool for a coin's pinned token (the token and its feed never change), and switch a coin's registration policy, which is allowed only until the platform sunset and only while no pool of the coin works. It can also give up the config authority for good (renounce), which takes effect at once."
+    },
+    {
+      "role": "squads-member-1",
+      "label": "Squads member 1, the owner's first key",
+      "pubkey": null,
+      "envVar": null,
+      "description": "One of the three signers of the vault."
+    },
+    {
+      "role": "squads-member-2",
+      "label": "Squads member 2, the owner's second key",
+      "pubkey": null,
+      "envVar": null,
+      "description": "One of the three signers of the vault."
+    },
+    {
+      "role": "squads-member-3",
+      "label": "Squads member 3, a person outside the operator",
+      "pubkey": null,
+      "envVar": null,
+      "description": "One of the three signers of the vault. Member C is a person outside the operator who holds the third key and is not named publicly."
+    },
+    {
+      "role": "mint-deficit",
+      "label": "$DEFICIT mint keypair (public key)",
+      "pubkey": "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj",
+      "envVar": null,
+      "description": "The mint of the owner's first launch, created on LaunchLab on 2026-10-13. The keypair signed once, when the coin was set up and created. The program holds no mint authority."
+    },
+    {
+      "role": "operator-own",
+      "label": "The operator's own wallet",
+      "pubkey": "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs",
+      "envVar": null,
+      "description": "The operator's own wallet (also the default owner of its Solana trading bot); it created eleven soft-launch coins: $PHINFLWIN, $CLARITY, $PITWIN, $BALWIN, $SEAWIN, $DENWIN, $TWOCUTS, $COLNHLWIN, $BREWERS26, $RAYS26 and $GASCAT. The operator holds the $GASCAT it seeded and none of the others. Apart from one test purchase and immediate sale of $SEAWIN on 2026-10-15 (0.10 SOL in, 0.098 SOL out) and one 5.00 SOL seed purchase of $GASCAT on 2026-10-28, which it holds, it has not traded them. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. The $GASCAT seed was made to put SOL into Gas Cat's curve on launch day; the operator intends to burn every token this bought if the coin graduates. Each of those coin pages names this wallet as the operator's."
+    },
+    {
+      "role": "trading-wallets",
+      "label": "The operator's trading-bot wallets, on other machines",
+      "pubkey": null,
+      "envVar": null,
+      "description": "These are not platform wallets. The bots refuse platform coins in code (src/lib/ownTokens.ts). One of them is listed above: the operator's own wallet, which is also the default owner of the Solana trading bot. The other bot wallets are not listed."
+    }
+  ],
+  "operatorCreatorWallets": [
+    "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs"
+  ],
+  "operatorTrades": [
+    {
+      "mint": "Bg545NmTcascUHGpH8HcJpTgrasUqFZEDNhYhuTbBURN",
+      "ticker": "SEAWIN",
+      "wallet": "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs",
+      "inSol": 0.1015,
+      "outSol": 0.098,
+      "outTokens": "3484436.310353",
+      "buyTx": "2PWU1CBgJsxNFgvFwWboChmzdLXEy1eSNfx2GzLz9M4CuSDABDxnpVbC4QtfNfn1tZHNZSAdqusFqxK3TJhzaojT",
+      "sellTx": "5ieZjtQ3pjBm5BEE79wtTKxmvkp82nFgmPCzGro5gZdcpUcH2N7p4ZB9qxrda1fBRuyzBLBdSaXdS1GQEzUicMaQ",
+      "at": "2026-10-15T02:46:23Z",
+      "sellAt": "2026-10-15T02:46:47Z",
+      "coinCreatedAt": "2026-10-15T02:42:01Z",
+      "reason": "to check that trading through the site worked on a freshly created coin, in and out"
+    },
+    {
+      "mint": "2L3bZbzkYgJ4eU64ed7YvchrxEnzQXQt2gvxq1CLburn",
+      "ticker": "GASCAT",
+      "wallet": "8sJfoY6Xx6o2zZqmX2Vt6NRwzNPr14Ef6qqRd5YLvGbs",
+      "kind": "seed",
+      "inSol": 5.003,
+      "outSol": null,
+      "outTokens": "151969874.816749",
+      "buyTx": "23gjy8snf8i9vMSbnrKND8e4b3xNsT8D4eQR3T9kQMCWaUwWvRi6Vde3LBoREnj47qtt1Q8BL1DsgDa22JqamFwa",
+      "sellTx": null,
+      "at": "2026-10-28T00:48:44Z",
+      "sellAt": null,
+      "coinCreatedAt": "2026-10-28T00:16:37Z",
+      "reason": "to put SOL into Gas Cat's curve on launch day; the operator intends to burn every token this bought if the coin graduates"
+    }
+  ],
+  "rehearsals": [
+    {
+      "symbol": "REHEARSAL",
+      "date": "2026-10-11",
+      "createdAt": "2026-10-11T23:04:58Z",
+      "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+      "status": "done 2026-10-11, first reading signed, no burn yet",
+      "text": "A test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. It was created on 2026-10-11 under the real mainnet platform settings (94x5qDDJ…EfYy9) to prove that fees go where they should and that signed readings work on mainnet. Its liquidity is locked forever only if its curve fills and it moves to a Raydium pool. The curve has not filled, so there is no pool and no lock yet. Its mint is FwXiFscF…pzkp. Its rules hash (sha256) is 2d109965…f99d, which is the $DEFICIT rule with the ticker changed. The operator bought 0.1 SOL of it at creation. The only other trades by an operator wallet in a platform coin were a 0.10 SOL test purchase and immediate sale of $SEAWIN on 2026-10-15 and a 5.00 SOL seed purchase of $GASCAT on 2026-10-28, which that wallet holds. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. The $GASCAT seed was made to put SOL into Gas Cat's curve on launch day; the operator intends to burn every token this bought if the coin graduates. Unrelated wallets bought on its curve within seconds. It does not prove a mainnet burn, because nothing burns unless the curve fills to 85 SOL. The curve has not filled, so nothing has burned. The evidence is in docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json."
+    }
+  ],
+  "limitations": [
+    {
+      "id": "quorum-1",
+      "status": "live design",
+      "text": "At launch the operator's keeper key is the only attester (quorum 1). The program checks the signatures and the quorum. It does not check the reading itself. Creator launches opened on 2026-10-13 before a second, independent attester was added, so today one operator key signs every reading."
+    },
+    {
+      "id": "switchboard-down",
+      "status": "not available",
+      "text": "Switchboard Technology Labs ended all its oracle services on 2026-09-25. The Switchboard attester in this code is built against the pinned SDK and cannot run live. Two replacements are planned, and neither is live. One is a Reclaim zkTLS proof of the source's response, posted by a relayer key. The other is a second person running the reader on another machine. Either one, or both, may be used. One operator attester is configured, and no independent second attester is live. The second-person route is now built in the repository as a signer service that checks each reading on its own host and signs only when it agrees (docs/burnticker/SIGNER-TWO.md). No host, key or proposal for it exists yet. The Reclaim route was read and set aside, because Reclaim's keys cannot sign what the program checks. Who runs the second signer, and when, is an open decision for the owner."
+    },
+    {
+      "id": "kalshi-terms",
+      "status": "decided 2026-10-10",
+      "text": "Kalshi is not a settlement input. Its Developer Agreement v1.1 limits use of its API to a member's own trading. It also forbids caching or sharing API data with third parties without written permission. Its Data Terms of Use forbid using Kalshi data to create, settle or support products without written consent. The Kalshi adapter stays in the code for discovery only, behind a setting that is off by default. The launch check refuses any Kalshi rule, whatever the setting. With the setting off, the keeper does not read Kalshi at all, even for a coin already registered with a Kalshi rule. Such a coin is put on hold. It gets no readings, nothing burns, and an alert says the venue is turned off. The owner decided this on 2026-10-10, after item C1 of the ChatGPT Codex review. No Kalshi coin exists on mainnet. Devnet rehearsal coins may stall. Coins settle on first-party primary sources with an independent cross-read, or on an on-chain Polymarket payout. Polymarket's Gamma API is used only to find markets. No prices, odds or volumes are shown, because its terms limit sharing its market data."
+    },
+    {
+      "id": "one-shot",
+      "status": "live design",
+      "text": "One-shot markets are allowed. A coin tied to a single market resolves once, when that market closes. What happens after that follows the onEnd schedule in its rule. A YES at 100% spends the whole burn pool in one run. For any other ending, it depends on how the market resolved. A resolved ending on a coin with an end sink sends what is left in the pool to that end sink (the flagship, a named coin, the pair winner, or Solana's incinerator, as the rule says). A void ending, or a coin without an end sink, winds the pool down on the coin itself over 28 days, with enough daily units to spend at least 99%. Then the coin retires. When new fees for a retired coin pass the sweep threshold, its pool is swept again, at most once a week. The token page shows the schedule."
+    },
+    {
+      "id": "no-burn-cap",
+      "status": "live design",
+      "text": "There is no burn-pool cap and no limit on how much one burn spends. Each burn spends the rule's full share of the burn pool in one run. The program still checks the spend floor fixed at launch, the TWAP and Pyth guards on the swap rate, the minimum output and the pool's health; a spend under the floor, or one that meets a dead pool, is carried and spent later in one piece. The owner removed both burn caps from the program on 2026-10-25, and the platform authority no longer holds a cap-raise power."
+    },
+    {
+      "id": "devnet-rehearsal",
+      "status": "done 2026-10-10",
+      "text": "The devnet rehearsal ran on 2026-10-10. $DEFICIT launched under a devnet platform config, its readings were signed, and the program ran two buy-back burns, on 2026-10-06 and 2026-10-07. The 2026-10-08 row in docs/burnkeeper/evidence/devnet-2026-10-10/burns.json is planned, not executed, and is not counted. A TwapDeviation check put it off when the keeper was stopped, so it has no burn and no signature. Then the pair program rehearsal ran with two pairs. One graduated to two Raydium pools, and the other was voided and sold back. The records are docs/burnkeeper/devnet-run.md, docs/burnkeeper/devnet-run-log-2026-10-10.md, docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md and docs/burnkeeper/evidence/. A script, scripts/ops/verify-evidence-signatures.mjs, checks every signature against devnet. The mainnet rehearsal coin, $REHEARSAL, was created on 2026-10-11 and its first reading was signed (see Rehearsal coins)."
+    },
+    {
+      "id": "program-not-deployed",
+      "status": "deployed on devnet and mainnet",
+      "text": "The burn program (burn_receipts), at AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM, and the pair program (pair_curve), at 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN, are deployed on devnet (2026-10-10) and on mainnet (2026-10-11), at the same addresses, and both were upgraded to round 4 (end sinks and rivalry pairs) on 2026-10-12 through the Squads vaults. On 2026-10-15 the burn program was upgraded again, to round 5, on devnet and mainnet through the same vaults; the pair program stays on round 4. On both networks a 2-of-3 Squads vault holds the upgrade authority. The mainnet vault is 8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV. Its time lock is 0 today, read from chain, and the trust page shows the live value. The bytes on chain match a build of this repository, as docs/burnticker/VERIFIED-BUILD.md, docs/burnkeeper/evidence/mainnet-round5/onchain-verify-after.log and docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log show. Deployed is not launched. $DEFICIT, the operator's first coin, was created on mainnet on 2026-10-13, and creator launches opened the same evening. The host line in the current status says which network the public site reads."
+    },
+    {
+      "id": "launchlab-admin-timelock",
+      "status": "live design",
+      "text": "Raydium LaunchLab has no on-chain time lock, so the admin of its platform settings has none either. The admin cannot be moved to the Squads vault after creation, because the platform id is derived from the admin key. It is a dedicated key, kept encrypted by the operator, and it is disclosed as a power with no time lock. Three things limit it: the values pinned when each coin is set up, the re-check just before each create, and the comparison of live and designed settings on this page. None of them is a lock."
+    },
+    {
+      "id": "contact-todo",
+      "status": "done",
+      "text": "The operator's contact address is contact@burnticker.com. Security reports go to security@burnticker.com."
+    },
+    {
+      "id": "no-systemd-unit",
+      "status": "units supplied; installation on this host not verified",
+      "text": "The deploy/systemd folder supplies service files for the Burnticker keeper that runs many tokens (mct-burnticker-keeper.service), the web app, the hourly public audit (mct-burnticker-audit.timer), the publish and clone-watch timers and the $DEFICIT keeper. A file in the repository does not prove that it is installed or running on this host. The keeper heartbeat on the status page is the live signal."
+    },
+    {
+      "id": "rpc-dependent",
+      "status": "live design",
+      "text": "This page reads the live platform settings, the fee ledger and wallet holdings from a Solana node (an RPC). If the host has no node address set, the page says the live reads are unavailable. It does not show old numbers in their place."
+    },
+    {
+      "id": "public-repo-not-created",
+      "status": "done",
+      "text": "The public repository is live at https://github.com/rfzfhn67yk-netizen/burnticker. A script, scripts/ops/publish-public-repo.sh, copies it out of the private repository using the list of allowed files in config/public-repo.allowlist. Moving it to a GitHub organization is a step for the owner (docs/burnticker/TODO-OWNER.md)."
+    },
+    {
+      "id": "verified-build-interim",
+      "status": "interim",
+      "text": "The verified build is interim. The program hashes in docs/burnticker/VERIFIED-BUILD.md come from a local build (cargo build-sbf) on the operator's Mac, and they match the bytes deployed on devnet. They do not come from solana-verify's Docker image, which needs a Linux machine with Docker. The script scripts/ops/verified-build.sh runs the Docker build on such a machine. The entry in OtterSec's registry of verified builds is a mainnet-only step after deploy."
+    },
+    {
+      "id": "bounty-wallet",
+      "status": "funded 2026-10-11",
+      "text": "The bounty wallet is HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u. It is a mainnet wallet held by the operator, and it is separate from the Squads vault. Each payout is a plain transfer by the operator, posted in the report's thread. The owner says it was funded with 5 SOL on 2026-10-11, and the chain matches that (docs/burnkeeper/evidence/bounty-2026-10-11/funding.json). There are no payouts yet. Top-ups come from the developer fee. The trust page reads the live balance from a mainnet node and shows funding, payouts and balance side by side."
+    },
+    {
+      "id": "entity",
+      "status": "not done",
+      "text": "No company stands behind the platform yet. One independent person runs it, and their identity is kept private. The operator page (/burnticker/operator) describes them. Whether to form an LLC is an open decision for the owner."
+    },
+    {
+      "id": "third-signer",
+      "status": "not done",
+      "text": "The mainnet Squads vault exists (2-of-3). Member C is a person outside the operator who holds the third key and is not named publicly. The owner holds members A and B, two of the three keys, so today the owner alone meets the threshold. With a time lock of 0, an upgrade can go through at once. The third key adds no independent approval until that changes."
+    },
+    {
+      "id": "signed-operator-message",
+      "status": "done 2026-10-21",
+      "text": "The operator's statement was signed on 2026-10-21 by the mainnet developer fee wallet (8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5), after its text changed to name both keeper keys and both disclosed test trades. The statement and its signature are on /burnticker/operator, which checks the signature with ed25519 each time and shows the result and the time of the check."
+    },
+    {
+      "id": "operator-treasury-mainnet",
+      "status": "done",
+      "text": "Two addresses are compiled into the mainnet builds of the burn program and the pair program. One is the operator treasury, 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5, which is also the LaunchLab platform fee wallet. The other is the Burnticker LaunchLab platform, 94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9. The owner chose both on 2026-10-11 (docs/burnticker/VERIFIED-BUILD.md). The fee claim (claim_lock_fees) pays the operator's 20 % to that treasury, and the program sets up coins only on that platform."
+    }
+  ],
+  "policies": [
+    {
+      "id": "x-no-deletions",
+      "text": "Nothing posted on X is deleted. A mistake is corrected in the same thread, with the receipt attached. The receipt is the transaction and the recomputation."
+    },
+    {
+      "id": "no-telegram-discord",
+      "text": "No Telegram or Discord: Burnticker and $DEFICIT communicate only through @burnticker / @USA_DEFICIT on X and the public repository. Any channel claiming otherwise is not ours."
+    },
+    {
+      "id": "failure-definition",
+      "text": "Failure definition: if any coin on this platform trades at any price, nothing changes — no relaunch, no v2, no rebrand, no change to a rule. The rule runs and the receipts post."
+    },
+    {
+      "id": "no-paid-promotion",
+      "text": "There is no paid promotion, no payment to influencers and no referral kickback. One disclosed exception, added 2026-10-29: the operator paid one X creator, @TeaonaX, 50 dollars for a single post about Burnticker. The post carries the paid-partnership label, the operator reads the draft before it goes up, it stays factual (what the coin does, the receipt, the site), and it links to burnticker.com. Any further paid placement is listed here before it runs. There is no price talk and no countdown. The site shows no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence. Burn Derby's flippening is one such rule, and derby admission refuses a Burnticker coin as an input."
+    },
+    {
+      "id": "platform-never-buys",
+      "text": "The platform buys no coin, including its own, with three disclosed exceptions: the operator bought 0.1 SOL of $REHEARSAL, a test coin, when it was created on 2026-10-11, the operator's own wallet bought 0.10 SOL of $SEAWIN on 2026-10-15 and sold all of it 24 seconds later, and the same wallet put 5.00 SOL into $GASCAT's curve on 2026-10-28 as a seed and holds what it bought. The $SEAWIN test was made to check that trading through the site worked on a freshly created coin, in and out. The $GASCAT seed was made to put SOL into Gas Cat's curve on launch day; the operator intends to burn every token this bought if the coin graduates. A burn pool buys only through the program's buyback step (crank_buyback), as the rule says, and burns what it receives. The operator's trading bots refuse platform coins."
+    },
+    {
+      "id": "nothing-coming-soon",
+      "text": "Nothing on any surface is described as coming later. If something is not built, this page lists it as not built, with its status."
+    },
+    {
+      "id": "no-creator-cash",
+      "text": "Creators receive no cash from fees. The creator-fee slot pays 100% to the burn pool. No coin has a team allocation. Anyone who seeds a burn pool makes a gift and gets no claim on it."
+    },
+    {
+      "id": "lp-locked-forever",
+      "text": "When a coin graduates, its LP is locked forever, and its fees fund the burn. For every coin, after graduation, about 0.98% of every swap goes to the coin's burn pool and about 0.13% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.15%. Coins made before 19 October 2026 recorded tier 9 when they were created, but LaunchLab moves every graduating coin into a pool on the platform's current fee tier, 14, so they pay the same. At graduation, 100 % of every coin's LP is locked with Raydium's LP lock and can never be withdrawn. The Fee Key NFT belongs to an account of the burn program (the PDA [\"fee_keys\"]), not to a person. Anyone can call the fee claim (claim_lock_fees). It sends the SOL side 80 % to the coin's burn pool and 20 % to the operator treasury (on mainnet, the developer fee wallet 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5), and it burns the coin side. The split is compiled into the program as LOCK_FEE_BURN_BPS = 8000 and LOCK_FEE_OPERATOR_BPS = 2000. No admin key or config field can change it. The owner decided this on 2026-10-10 (decisions.md). It replaced the burned-LP policy of 2026-10-09."
+    },
+    {
+      "id": "no-return-marketing",
+      "text": "The platform does not reply to or share posts that market returns. A creator who markets returns using our pages loses the embed. The coin's rule stays as it is."
+    },
+    {
+      "id": "append-only",
+      "text": "Rules, readings and receipts are append-only. A correction is a new entry that names what it corrects. The incident log and this decision log are never edited after the fact."
+    },
+    {
+      "id": "disclaimer-everywhere",
+      "text": "The memecoin disclaimer and the event-contract disclosure appear on every surface that describes how the burn works."
+    }
+  ],
+  "trustPack": {
+    "note": "These pages are for skeptics (2026-10-10). Each one reads only public files and the chain. Placeholders stay visible and are listed in docs/burnticker/TODO-OWNER.md.",
+    "pages": [
+      {
+        "path": "/burnticker/check",
+        "title": "Check this yourself",
+        "what": "where money can go, who can do what, what is locked, what is not done, and a receipt verifier that runs in your browser",
+        "doc": "docs/burnticker/CHECK-THIS-YOURSELF.md"
+      },
+      {
+        "path": "/burnticker/fees/ledger",
+        "title": "Fee ledger",
+        "what": "every lamport the developer fee wallet received, from chain, by month, and the expenses it pays",
+        "doc": "config/burnticker/expenses.json"
+      },
+      {
+        "path": "/burnticker/operator",
+        "title": "Operator",
+        "what": "who runs this, every operator wallet, the signed statement slot and the never-buys monitor",
+        "doc": "config/burnticker/operator.json"
+      }
+    ],
+    "verifiedBuild": "docs/burnticker/VERIFIED-BUILD.md",
+    "wellKnown": "public/.well-known/burnticker.json",
+    "ownerTodo": "docs/burnticker/TODO-OWNER.md",
+    "metadataUri": {
+      "status": "arweave at launch (in use on mainnet since 2026-10-13)",
+      "text": "Each coin's metadata file and its art are uploaded to Arweave at launch. The metadata holds the name, the ticker, the image and the generated description, byte for byte. The token URI is the Arweave address. LaunchLab creates the metadata so it cannot be changed (is_mutable = false), and a launch is refused if the upload fails (src/lib/burnticker/pin.ts). The mainnet coins use it: $DEFICIT's metadata, created on 2026-10-13, is at https://gateway.irys.xyz/4dfxjEwmnfLjKaUbdpn2SGffS6jk9r1eKbnqRSxKXk6T (docs/burnkeeper/evidence/mainnet-deficit-2026-10-13/launch.json). The devnet rehearsal coins came before it, so their metadata is hosted on our server. The rule, the mint and the burns never depended on it."
+    }
+  }
+}

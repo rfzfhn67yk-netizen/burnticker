@@ -1,0 +1,39 @@
+{
+ "fetchedAt": "2026-10-12T19:26:30Z",
+ "note": "Real response, captured read-only; each event trimmed to magnitude, time, review status and type. Place names, felt reports and alert levels are dropped: the adapter never reads them.",
+ "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minmagnitude=4&starttime=2026-08-28&endtime=2026-10-12&minlatitude=32&maxlatitude=42&minlongitude=-125&maxlongitude=-114&orderby=time-asc",
+ "body": {
+  "type": "FeatureCollection",
+  "metadata": {
+   "generated": 1791833253000,
+   "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minmagnitude=4&starttime=2026-08-28&endtime=2026-10-12&minlatitude=32&maxlatitude=42&minlongitude=-125&maxlongitude=-114&orderby=time-asc",
+   "count": 2,
+   "status": 200,
+   "api": "2.8.1"
+  },
+  "features": [
+   {
+    "type": "Feature",
+    "id": "nn00924930",
+    "properties": {
+     "mag": 4.07,
+     "time": 1790492501497,
+     "updated": 1791717769287,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "nn00924954",
+    "properties": {
+     "mag": 4.1,
+     "time": 1790499247495,
+     "updated": 1791709454734,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   }
+  ]
+ }
+}

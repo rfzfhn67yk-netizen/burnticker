@@ -1,0 +1,23 @@
+# dependencies and builds
+/node_modules
+/.next/
+/.next-*/
+next-env.d.ts
+/out/
+*.tsbuildinfo
+programs/burn-receipts/target/
+programs/burn-receipts/.anchor/
+programs/burn-receipts/fixtures/*.so
+
+# runtime state: the registries, the published sites, the pause files
+/data/
+# the mint key bank (sealed mint keys; never leaves the Burnticker host, never committed, never published)
+/data/burnticker-mintbank.db*
+/logs/
+
+# local environment files — never committed, never read by the code in this tree
+.env
+.env.*
+
+# OS
+.DS_Store

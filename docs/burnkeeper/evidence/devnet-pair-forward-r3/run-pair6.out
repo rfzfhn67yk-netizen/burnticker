@@ -1,0 +1,7 @@
+pair6-reading-B-20261012.json  sim None sent X8X2qJPDYTkSzR6dMtnQRgc4id5B3qHTACEaWH8tS1vJMxyqrXxGUpXqdET3b5j29LmssHiVGuAh5E81KxUi2qC None []
+pair6-win-before-winner-reading-refused-dry.json  sim {"InstructionError":[2,{"Custom":6090}]} sent None None ["Program log: AnchorError thrown in programs/burn_receipts/src/instructions/pair.rs:373. Error Code: PairResultNotServable. Error Number: 6090. Error Message: pair result: a winner needs both coins' readings for the date and the loser's still unprocessed."]
+pair6-reading-A-20261012.json  sim None sent 2m4qyXomyDrfEFPMWz8GoByhPLitDqrDsemkXuSSyCBiyRvRxuTntKLJYmZy7EAfPfCUCNKoYiT1kM6QZwn4Bx5A None []
+pair6-pair-result-20261012.json  sim None sent pnqsynZbBpe5nwSa9uvezwhwnxE5MR5Pz9fcyqAvTdNwKrXbMC3TNqsE8qGkbMZnvM2JJM1PNFR93F7yXY3suSw None []
+pair6-forward-B-to-A-20261012.json forward sim None sent 2NX8e73qYpjQJdDyrDjepEji8qQBuN9U1esf6faaeC67txcF8v3fxfzSzMyjViSTPGvqYm3K3gEThfSPvdfd2MCN None ['Program log: Memo (len 85): "PCLB|forward|from=6jxEWF78rtBs|to=7dNGQuvijwxF|period=2026-10-12|lamports=44549246|v1"']
+pair6-crank-A-20261012.json buyback sim None sent qcDG2BD66Ywv3v2TdDwBkjKx2t8o4JYB3wyMojF3RSp25SuH1r56dTnk38p5TXmgAmaQounpm3c7pPmMNVynXj2 None ['Program log: Memo (len 245): "PCLA|2026-10-12|src=fiscaldata.treasury.gov debt_to_penny|prev=40299000000000.00|now=40302000000000.00|delta=3000000000.00|units=3|pool=125757413|spent=1804270|got=2579448.694185|burn=2579448.694185|swap=7GRjCd6JjiHM|rules=sha256:9263c189340a|v2"']
+DONE

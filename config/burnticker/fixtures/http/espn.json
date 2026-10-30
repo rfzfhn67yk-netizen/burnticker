@@ -1,0 +1,43 @@
+{
+ "fetchedAt": "2026-10-10T02:50:00Z",
+ "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261005",
+ "body": {
+  "events": [
+   {
+    "id": "401872979",
+    "date": "2026-10-06T00:15Z",
+    "name": "Atlanta Falcons at New Orleans Saints",
+    "status": {
+     "type": {
+      "completed": true,
+      "name": "STATUS_FINAL"
+     }
+    },
+    "competitions": [
+     {
+      "competitors": [
+       {
+        "homeAway": "home",
+        "score": "24",
+        "winner": false,
+        "team": {
+         "abbreviation": "NO",
+         "displayName": "New Orleans Saints"
+        }
+       },
+       {
+        "homeAway": "away",
+        "score": "45",
+        "winner": true,
+        "team": {
+         "abbreviation": "ATL",
+         "displayName": "Atlanta Falcons"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

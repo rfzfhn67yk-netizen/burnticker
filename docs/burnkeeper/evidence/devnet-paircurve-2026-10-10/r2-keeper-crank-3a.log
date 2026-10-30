@@ -1,0 +1,28 @@
+[2026-10-11 01:01:21Z] burn keeper starting — $PCRA (rule PCRA, sha256:f11a515f8187) · execution program · devnet · ledger data/burnkeeper-paircurve-3a.db · site data/burnkeeper-paircurve-3a-site
+[2026-10-11 01:01:24Z] cluster devnet · EXECUTION program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM · mode buyback · mint 7CchrBNaKTkmZ3nkSLVrNduenpP2awgs5wJoAmVtScjV · fee PDA 4QTLtw7TCu7kr5UyRK8i44WAPRYQS2tUFYmfmvRWqknj · attesters 1 (quorum 1) · pool cix9ZfHG9Q6Um23AScu3yPVZHSFYGrHEcfs3EV8ST3e · keeper D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn (pays fees, signs readings) · rules sha256:f11a515f8187
+[2026-10-11 01:01:25Z]   [fees] curve: no LaunchLab creator-fee vault for the fee PDA (9teYcWv7…) — nothing accrued, or not launched on this cluster
+[2026-10-11 01:01:25Z]   [fees] cpmm: LaunchLab pool 33oJtjrtmewt16QgiFxMogibYK9RGKurzXra1zPzcXU8 not found
+[2026-10-11 01:01:26Z]   [pool] check_pool_health: pool tradeable · 5wvrvAUhUiEdfehCd7nwDLxewUnL3UEpCkGA7DQdMJUK4Pa22U6Nz1RM8CTS1UPf6LSfp7fUoveWU3SX9CtoQPbV
+[2026-10-11 01:01:27Z]   [program] 2026-10-06: crank_buyback deferred by the program (TwapDeviation) — waiting — the spot price sits more than the rule's deviation below the pool's TWAP (a pushed price); retried until it reverts
+[2026-10-11 01:01:27Z] burn keeper stopped
+[2026-10-11 01:11:37Z] burn keeper starting — $PCRA (rule PCRA, sha256:f11a515f8187) · execution program · devnet · ledger data/burnkeeper-paircurve-3a.db · site data/burnkeeper-paircurve-3a-site
+[2026-10-11 01:11:37Z] cluster devnet · EXECUTION program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM · mode buyback · mint 7CchrBNaKTkmZ3nkSLVrNduenpP2awgs5wJoAmVtScjV · fee PDA 4QTLtw7TCu7kr5UyRK8i44WAPRYQS2tUFYmfmvRWqknj · attesters 1 (quorum 1) · pool cix9ZfHG9Q6Um23AScu3yPVZHSFYGrHEcfs3EV8ST3e · keeper D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn (pays fees, signs readings) · rules sha256:f11a515f8187
+[2026-10-11 01:11:38Z]   [fees] curve: no LaunchLab creator-fee vault for the fee PDA (9teYcWv7…) — nothing accrued, or not launched on this cluster
+[2026-10-11 01:11:38Z]   [fees] cpmm: LaunchLab pool 33oJtjrtmewt16QgiFxMogibYK9RGKurzXra1zPzcXU8 not found
+[2026-10-11 01:11:39Z]   [pool] check_pool_health: pool tradeable · 3hCv293Jei2MVyk1H5B9BBdJWtfYfRhuMyzQb5QzC6ic7XCcDGVRmbsoRi99YwUL4eQE3BCafWva9DX1xm8NWcBf
+[2026-10-11 01:11:40Z]   [program] 2026-10-06: crank_buyback deferred by the program (TwapDeviation) — waiting — the spot price sits more than the rule's deviation below the pool's TWAP (a pushed price); retried until it reverts
+[2026-10-11 01:11:40Z] burn keeper stopped
+[2026-10-11 01:21:53Z] burn keeper starting — $PCRA (rule PCRA, sha256:f11a515f8187) · execution program · devnet · ledger data/burnkeeper-paircurve-3a.db · site data/burnkeeper-paircurve-3a-site
+[2026-10-11 01:21:53Z] cluster devnet · EXECUTION program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM · mode buyback · mint 7CchrBNaKTkmZ3nkSLVrNduenpP2awgs5wJoAmVtScjV · fee PDA 4QTLtw7TCu7kr5UyRK8i44WAPRYQS2tUFYmfmvRWqknj · attesters 1 (quorum 1) · pool cix9ZfHG9Q6Um23AScu3yPVZHSFYGrHEcfs3EV8ST3e · keeper D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn (pays fees, signs readings) · rules sha256:f11a515f8187
+[2026-10-11 01:21:54Z]   [fees] curve: no LaunchLab creator-fee vault for the fee PDA (9teYcWv7…) — nothing accrued, or not launched on this cluster
+[2026-10-11 01:21:54Z]   [fees] cpmm: LaunchLab pool 33oJtjrtmewt16QgiFxMogibYK9RGKurzXra1zPzcXU8 not found
+[2026-10-11 01:21:56Z]   [pool] check_pool_health: pool tradeable · 4KsXAJ6rhZC2ZT9ZjNyahhNgtsU4pkiAH1Pcdd1wN6oikNTNMhGAx8cgYTGsSQm7nd3t84R7L1nZej4iqu7baL6x
+[2026-10-11 01:21:58Z]   [program] 2026-10-06: CRANKED · burned · spent 1424941 lamports, got 1283876.587878, burned 1283876.587878 · 2vP8pqb1oYWMnGonNLhhCm65RfZiDEG6EGGuXHsJRQXuP1NNS9KSCejqWSUmb3ZH8kMkW1QeS3REgrvuzRJqMUNu · PCRA|2026-10-06|src=fiscaldata.treasury.gov debt_to_penny|prev=40249104431078.48|now=40273024579219.17|delta=23920148140.69|units=23|pool=6904257|spent=1424941|got=1283876.587878|burn=1283876.587878|swap=cix9ZfHG9Q6U|rules=sha256:f11a515f8187|v2
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 2000ms delay...
+Server responded with 429 .  Retrying after 4000ms delay...
+[2026-10-11 01:22:07Z]   [program] 2026-10-07: CRANKED · below-floor · spent 0 lamports, got 0, burned 0 · 58h3RdwkGPAJxrrYDTtWJFb3yRVs3Z7PtAGQ9Hp7ofHx5q7GfavGEMQyuE7cv8ujHsuetkSuxieNkSCdYuFCtvMj · PCRA|2026-10-07|src=fiscaldata.treasury.gov debt_to_penny|prev=40273024579219.17|now=40284036147367.19|delta=11011568148.02|units=11|pool=5479316|spent=0|got=0|burn=0|swap=none|rules=sha256:f11a515f8187|v2
+[2026-10-11 01:22:08Z]   [program] 2026-10-08: crank_buyback deferred by the program (TwapDeviation) — waiting — the spot price sits more than the rule's deviation below the pool's TWAP (a pushed price); retried until it reverts
+[2026-10-11 01:22:08Z]   [burn] 2026-10-06: 1283876.587878 burned by the program · https://explorer.solana.com/tx/2vP8pqb1oYWMnGonNLhhCm65RfZiDEG6EGGuXHsJRQXuP1NNS9KSCejqWSUmb3ZH8kMkW1QeS3REgrvuzRJqMUNu?cluster=devnet
+[2026-10-11 01:22:08Z] burn keeper stopped

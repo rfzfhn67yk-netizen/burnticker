@@ -1,0 +1,186 @@
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 2000ms delay...
+Server responded with 429 .  Retrying after 4000ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+  [pair-curve] EPKsftLQ… seed(A): 3gQxMN7YJG9H… · 42514 CU
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+  [pair-curve] EPKsftLQ… register(B): qRPVVikkFEsh… · 37996 CU
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+  [pair-curve] EPKsftLQ… fee_key(B): 4ypyW64smJ3H… · 41566 CU
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 2000ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 2000ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+  [pair-curve] EPKsftLQ… seed(B): 2WNHeA9j6Y7s… · 44031 CU
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 2000ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+{
+  "command": "crank",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": false,
+  "pair": "EPKsftLQWu3WL3xhDH6hD1qDenbmzdMPXX8wMAuSykx2",
+  "steps": [
+    {
+      "action": {
+        "kind": "seed",
+        "side": 0,
+        "why": "the pool has no oracle observation yet: a dust swap seeds the TWAP"
+      },
+      "result": {
+        "ok": true,
+        "signature": "3gQxMN7YJG9H…",
+        "error": null,
+        "unitsConsumed": 42514,
+        "txBytes": 711
+      }
+    },
+    {
+      "action": {
+        "kind": "register",
+        "side": 1,
+        "why": "the pool exists but is not registered in burn_receipts"
+      },
+      "result": {
+        "ok": true,
+        "signature": "qRPVVikkFEsh…",
+        "error": null,
+        "unitsConsumed": 37996,
+        "txBytes": 450
+      }
+    },
+    {
+      "action": {
+        "kind": "fee_key",
+        "side": 1,
+        "why": "the coin's lock position is not recorded yet (register_fee_key)"
+      },
+      "result": {
+        "ok": true,
+        "signature": "4ypyW64smJ3H…",
+        "error": null,
+        "unitsConsumed": 41566,
+        "txBytes": 549
+      }
+    },
+    {
+      "action": {
+        "kind": "seed",
+        "side": 1,
+        "why": "the pool has no oracle observation yet: a dust swap seeds the TWAP"
+      },
+      "result": {
+        "ok": true,
+        "signature": "2WNHeA9j6Y7s…",
+        "error": null,
+        "unitsConsumed": 44031,
+        "txBytes": 711
+      }
+    }
+  ],
+  "after": {
+    "pair": "EPKsftLQWu3WL3xhDH6hD1qDenbmzdMPXX8wMAuSykx2",
+    "exists": true,
+    "status": "graduated",
+    "phase": "graduated",
+    "deadline": "2026-10-13T21:09:27.000Z",
+    "vault": "JDSrY62WgEtk4PQni2yGwg94JLDJs9N9vBRMymATkJ4G",
+    "vaultLamports": 5848259,
+    "devWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+    "devAccrued": "5198019",
+    "devWalletLamports": 5041618,
+    "sides": [
+      {
+        "side": "A",
+        "mint": "CMzLptRtzEjgPD4HX18BVaZwE2FuVGswWoBk1ujoU2z7",
+        "supplyRaw": "612248438180361",
+        "sold": "399875776422600",
+        "sol": "0",
+        "burnPool": "BMmeV5eTwBiyx8rJ8nsxPdvUj7x5NCkwkFJQfQP9vBHG",
+        "burnPoolLamports": 31887771,
+        "burnFees": "8910891",
+        "devFees": "2970297",
+        "burnEscrow": "0",
+        "refunding": false,
+        "redeemPool": "0",
+        "redeemSupply": "0",
+        "trades": 1,
+        "pool": "C3mFryCLym8rqAyMFC4fbhnCgqFtH7F4enSRvqWfqmmw",
+        "poolSol": "1005860812",
+        "poolTokens": "212372661757761",
+        "lpSupplyAtCreation": "462187557169",
+        "lpLocked": "462187557069",
+        "tokensBurned": "387751561819639",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "C3mFryCLym8rqAyMFC4fbhnCgqFtH7F4enSRvqWfqmmw",
+          "poolVerified": true,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      },
+      {
+        "side": "B",
+        "mint": "ApweYSiiZA5uBAfBi39cWxzqjzpwJ1D3ukWKMnCLaeaA",
+        "supplyRaw": "512710019042935",
+        "sold": "330719178105070",
+        "sol": "0",
+        "burnPool": "4MnfmK97iFQXikzgAB76rrXUWa859JEz5CKSnwAEgJuD",
+        "burnPoolLamports": 29660049,
+        "burnFees": "6683169",
+        "devFees": "2227722",
+        "burnEscrow": "0",
+        "refunding": false,
+        "redeemPool": "0",
+        "redeemSupply": "0",
+        "trades": 1,
+        "pool": "DbfYCATcbN4wwQnejNViRE2kh5XWTwXfzu8rfDaK3PXs",
+        "poolSol": "708831109",
+        "poolTokens": "181990840937865",
+        "lpSupplyAtCreation": "359166771305",
+        "lpLocked": "359166771205",
+        "tokensBurned": "487289980957065",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "DbfYCATcbN4wwQnejNViRE2kh5XWTwXfzu8rfDaK3PXs",
+          "poolVerified": true,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      }
+    ],
+    "params": {
+      "virtualSol": "2000000000",
+      "virtualToken": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "reserve": "206900000000000",
+      "targetRaise": "2000000000",
+      "minSideShareBps": 2500
+    }
+  }
+}

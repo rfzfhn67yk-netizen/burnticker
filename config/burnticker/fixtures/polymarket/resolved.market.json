@@ -1,0 +1,51 @@
+{
+ "fetchedAt": "2026-10-10T17:00:56Z",
+ "note": "Gamma body pruned to the fields the adapter reads (values verbatim); chain = eth_call results keyed by call data",
+ "gamma": {
+  "url": "https://gamma-api.polymarket.com/markets?condition_ids=0xd43898f7e10c30da1adf9c23c808fc8861ec7c0a53195e4a187c199a9b19f376&closed=true",
+  "body": [
+   {
+    "id": "3951230",
+    "question": "Buccaneers vs. Cowboys",
+    "conditionId": "0xd43898f7e10c30da1adf9c23c808fc8861ec7c0a53195e4a187c199a9b19f376",
+    "questionID": "0x6a2cad14ceb2c976cb9641c7c225d72f02d547b104fbe2ab9b98e06a50cbab7e",
+    "slug": "nfl-tb-dal-2026-10-09",
+    "outcomes": "[\"Buccaneers\", \"Cowboys\"]",
+    "outcomePrices": "[\"1\", \"0\"]",
+    "closed": true,
+    "active": true,
+    "umaResolutionStatus": "resolved",
+    "closedTime": "2026-10-09 03:36:14+00",
+    "umaEndDate": "2026-10-09T03:36:14Z",
+    "endDate": "2026-10-09T00:15:00Z",
+    "startDate": "2026-08-28T12:00:48Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.999,
+    "bestAsk": 1,
+    "lastTradePrice": 0.999,
+    "events": [
+     {
+      "id": "925590",
+      "slug": "nfl-tb-dal-2026-10-09",
+      "title": "Buccaneers vs. Cowboys",
+      "ticker": "nfl-tb-dal-2026-10-09"
+     }
+    ]
+   }
+  ]
+ },
+ "chain": {
+  "url": "https://polygon-bor.publicnode.com",
+  "contract": "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+  "blockNumber": "0x5ae2045",
+  "calls": {
+   "0xd42dc0c2d43898f7e10c30da1adf9c23c808fc8861ec7c0a53195e4a187c199a9b19f376": "0x0000000000000000000000000000000000000000000000000000000000000002",
+   "0xdd34de67d43898f7e10c30da1adf9c23c808fc8861ec7c0a53195e4a187c199a9b19f376": "0x0000000000000000000000000000000000000000000000000000000000000001",
+   "0x0504c814d43898f7e10c30da1adf9c23c808fc8861ec7c0a53195e4a187c199a9b19f3760000000000000000000000000000000000000000000000000000000000000000": "0x0000000000000000000000000000000000000000000000000000000000000001",
+   "0x0504c814d43898f7e10c30da1adf9c23c808fc8861ec7c0a53195e4a187c199a9b19f3760000000000000000000000000000000000000000000000000000000000000001": "0x0000000000000000000000000000000000000000000000000000000000000000"
+  }
+ }
+}

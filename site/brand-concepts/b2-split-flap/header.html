@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B2 header</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500&family=Barlow+Condensed:wght@500;600&display=block" rel="stylesheet">
+<link rel="stylesheet" href="flap.css">
+<style>
+  html,body{margin:0;width:1500px;height:500px;overflow:hidden;background:#131312}
+  body{position:relative;font-family:'Barlow Condensed',sans-serif}
+  .board{position:absolute;inset:0;background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 4px),
+    linear-gradient(170deg,#1a1a19 0%,#111110 100%);}
+  .wm{position:absolute;left:392px;top:34px;--w:52px;--h:72px;--fs:58px}
+  .strap{position:absolute;left:1000px;top:46px;color:#8e8a80;font-size:20px;letter-spacing:3px;text-transform:uppercase;line-height:26px}
+  .strap b{display:block;color:#ece8dc;font-weight:600;font-size:24px;letter-spacing:2px}
+  .cols{position:absolute;left:0;top:132px;width:1500px;height:16px;color:#8e8a80;font-size:15px;letter-spacing:3px;text-transform:uppercase}
+  .cols span{position:absolute;top:0}
+  .r{position:absolute;left:24px;--w:24px;--h:35px;--fs:28px}
+  .foot{position:absolute;left:392px;top:302px;color:#ece8dc;font-size:22px;letter-spacing:2px;text-transform:uppercase;font-weight:500}
+  .foot i{font-style:normal;color:#8e8a80;margin-right:10px}
+  .foot em{font-style:normal;color:#f2a60f}
+  .foot div{margin-bottom:8px}
+  .disc{position:absolute;left:392px;top:392px;color:#6c6960;font-size:16px;letter-spacing:1.5px}
+</style></head>
+<body>
+<div class="board"></div>
+<div class="wm" id="wm"></div>
+<div class="strap">Event-indexed memecoins<b>Burns on the news. With receipts.</b></div>
+<div class="cols">
+  <span style="left:397px">Feed</span><span style="left:770px">Date</span><span style="left:930px">Reading</span>
+  <span style="left:1170px">Units</span><span style="left:1249px">Burned</span>
+</div>
+<div class="r" id="r1" style="top:154px"></div>
+<div class="r" id="r2" style="top:198px"></div>
+<div class="r" id="r3" style="top:242px"></div>
+<div class="foot">
+  <div><i>Next reading</i> 16:30 ET <i style="margin-left:26px">Pool</i> 3.21 SOL <i style="margin-left:26px">Rule</i> sha256:9f3e…c21b <i style="margin-left:26px">Burned to date</i> <em>7,350,000</em></div>
+</div>
+<div class="disc">memecoins — the rule says what supply does, not what price does</div>
+<script src="flap.js"></script>
+<script>
+  flapRow(document.getElementById('wm'),'BURNTICKER',{flipAt:4,flipFrom:'I'});
+  // 14 blank cells on the left (under X's avatar overlay), then the columns
+  const pad='              ';
+  // cells: pad 14 · FEED 13 · sp · DATE 5 · sp · READING 8 · sp · UNITS 2 · sp · BURNED 6
+  flapRow(document.getElementById('r1'),pad+'TREASURY.DEBT'+' '+'10-08'+' '+'+21.284B'+' '+'21'+' '+'2.10M ',{amberFrom:46,amberTo:52});
+  flapRow(document.getElementById('r2'),pad+'NOAA.FLARES  '+' '+'10-07'+' '+'X1.2 FLR'+' '+'10'+' '+'1.00M ',{amberFrom:46,amberTo:52,flipAt:49,flipFrom:'8'});
+  flapRow(document.getElementById('r3'),pad+'LL2.LAUNCHES '+' '+'10-06'+' '+'FALCON 9'+' '+' 1'+' '+'50.0K ',{amberFrom:46,amberTo:52});
+</script>
+</body></html>

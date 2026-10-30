@@ -1,0 +1,40 @@
+{
+  "command": "pair-status",
+  "cluster": "devnet",
+  "mint": "6jxEWF78rtBsMCA44FYaCG4nFUjk4S15e4wAKKjgMzmN",
+  "pair_state": 2,
+  "pair_void_by": 0,
+  "pair_after_date": 0,
+  "pair_unlinked_at": "0",
+  "link": {
+    "version": 1,
+    "bump": 255,
+    "mint": "6jxEWF78rtBsMCA44FYaCG4nFUjk4S15e4wAKKjgMzmN",
+    "pair_mint": "7dNGQuvijwxFBw6PXUHnw2mfmTuRd2KmV6nBGrFxXb2T",
+    "paired": true,
+    "witness": 1,
+    "created_at": "1791734857",
+    "pairing_deadline": "0",
+    "paired_at": "1791734857",
+    "attester_set_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "date": 20261012,
+  "result": {
+    "version": 1,
+    "bump": 252,
+    "mint_lo": "6jxEWF78rtBsMCA44FYaCG4nFUjk4S15e4wAKKjgMzmN",
+    "mint_hi": "7dNGQuvijwxFBw6PXUHnw2mfmTuRd2KmV6nBGrFxXb2T",
+    "record_date": 20261012,
+    "winner": "7dNGQuvijwxFBw6PXUHnw2mfmTuRd2KmV6nBGrFxXb2T",
+    "signers_mask_lo": 1,
+    "signers_mask_hi": 1,
+    "source_url_hash": "7478da506af45dc445fd6edae78bd1a6e44f0d9221e900d05ba1fe44aca4e1ea",
+    "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "submitted_at": "1791763314",
+    "forwarded": true,
+    "forwarded_lamports": "44549246",
+    "forwarded_at": "1791763317",
+    "reserved": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "view": 2
+}

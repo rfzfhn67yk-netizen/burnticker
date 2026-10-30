@@ -1,0 +1,291 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { abandonedSentence, browserPlanStorage, formatFallbackAllowed, v0Format, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, pinPlanFormat, planAbandoned, planConfirmations, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, sentAckOf, sentReporter, signAndSendPlan, simulationFailureText, stepStatusText, planPastDeadline, planHasUnrecordedCoin, deadlineCardStartsOver, PLAN_EXPIRED_SENTENCE, RECORD_LANDED_LABEL, type PreparedSignPlan, type SendDeps, type V0SendDeps, type SendDepsCommon, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { connectionRpc, simulateBase64, v1Format, v1StepProblems } from "@/lib/burnticker/signPlanV1";
+import { chainIdOf, decideStepFormat, formatProblems, formatReadinessLine, FORMAT_SETTING_READING, launchSignVersions, phantomVersionLine, signWithStandardWallet, standardAccountFor, standardWalletOf, V0_FALLBACK_NOTICE, withoutV1, type TxFormat } from "@/lib/burnticker/walletTxVersion";
+import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
+import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
+import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
+import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
+import { archivePlanRecord, chainReadDeps } from "@/lib/burnticker/launchRecovery";
+import { launchGateFromCatalogue, signGateOf } from "@/lib/burnticker/launchGateState";
+import { beforeUnloadGuard, holdPlan, planHoldsKeys } from "@/lib/burnticker/planHold";
+import { resumeReviewHref } from "@/lib/burnticker/launchDraftStore";
+import { matchesSuffix } from "@/lib/burnticker/vanityMint";
+import { MINT_ADDRESS_NOTE, waitLineFor, type LaunchWaitPhase } from "@/lib/burnticker/mintAddressCopy";
+import { WALLET_SLOW_LINE, withWalletWatchdog } from "@/lib/burnticker/walletProof";
+import { LaunchedTrade } from "../_components/TradeLinks";
+import { withFlight } from "@/lib/burnticker/rpcProxy";
+import { retry429 } from "@/lib/burnticker/retry429";
+
+/** The launch record's fetch: a 429 is asked again after its Retry-After (audit 2026-10-16 F-21; retry429.ts). */
+const confirmFetch = retry429((u: string, init: { method: string; headers: Record<string, string>; body: string }) => fetch(u, init));
+
+/**
+ * THE SIGNING CARD (2026-10-11): the one component that signs every launch — a single LaunchLab coin, two coins, a pair-curve set — from
+ * the plan signPlan.ts builds, so single coins and pairs cannot behave differently. After the review card's Launch (the
+ * acknowledgement) the bundle arrives here: each step is signed by the key it names, then by the wallet, sent and confirmed, with
+ * progress per step; then each draft is confirmed with the launch route (`action: "launched"`, the transaction its mint signed; a 404
+ * retried ~5 × 4 s; 409 / 422 / 429 / 503 a plain sentence); then the coin page. A failure stops the run and a second press resumes at
+ * the failed step. Nothing is sent before the creator presses the button; nothing about odds or prices is shown.
+ *
+ * Review-2 F4: every signed transaction is written to sessionStorage (signPlan.ts PlanRecord) before it is sent. A step whose
+ * confirmation was lost shows "Sent; confirmation unavailable — signature …" (never "Nothing was sent"), and the next press looks that
+ * signature up on chain before anything new is built. On mount the card reads the stored record for these drafts and shows it.
+ *
+ * Re-check 2026-10-11: every step is a version-0 transaction compiled against the network's lookup table, which is fetched and verified
+ * (lookupTable.ts) before anything is signed. A plan that put something on chain but lost a mint key on reload is abandoned: each step
+ * shows confirmed / sent / abandoned, the sentence gives the fee already spent, and the only action is a new plan.
+ *
+ * launch-10 (2026-10-12): the table's address is read from the host at runtime (GET /api/burnticker/launch; networks.ts lookupTablePin),
+ * so pinning a table needs no code release; until that answer arrives, or if it fails, nothing can be signed. The plan never carries an
+ * opening purchase (hostedLaunch.ts): the creator trades on the curve after the create like anyone else.
+ *
+ * Phantom v1 scope step 2 (2026-10-19, ticket 438485): the wallet's `solana:signTransaction` feature decides the format ONCE per plan
+ * (walletTxVersion.ts) — version 1 when it advertises 1 (signPlanV1.ts: kit, no lookup table, signed through the feature with raw bytes,
+ * the dry run as raw base64 over the proxy), version 0 when it advertises 0 (the path above, untouched, the table included), neither:
+ * refused. The choice is pinned in the plan record before anything is built, so a resumed run keeps it; the table's pin and the v0
+ * size check apply only while version 0 is in play.
+ */
+export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true, onLive, onStartOver }: { /** F06: every launch plan carries its deadline (withPlanDeadline) */ plan: PreparedSignPlan; creator: string | null; title: string; notes?: string[]; /** the coin page by its mint (coinKey.ts coinCanonicalHref): a ticker can be shared */ coinHref: (mint: string) => string; /** launch night 2026-10-13: every coin is live and recorded (the page drops its saved draft) */ onLive?: () => void; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean; /** F06: Start over once the plan is past its deadline (default: back to the review for a new plan) */ onStartOver?: () => void }) {
+  const wallet = useWallet();
+  const { connection } = useConnection();
+  // recovery: what an earlier run (this tab, before a reload) left in storage for these drafts. Read in the initial state — the card
+  // only ever renders in the browser, after the bundle request — so the first paint already shows a sent step and its signature.
+  const [storage] = useState(() => browserPlanStorage());
+  const [stored] = useState(() => loadPlanRecord(storage, plan));
+  const [notice, setNotice] = useState<string | null>(null);
+  // owner decision 2026-10-19: the wait the run is in, so the card says it (mintAddressCopy.ts waitLineFor)
+  const [phase, setPhase] = useState<LaunchWaitPhase>(null);
+  const [busy, setBusy] = useState(false), [done, setDone] = useState<string[]>(() => stored?.confirmed ?? []), [confirmed, setConfirmed] = useState<string[]>(() => stored?.recorded ?? []);
+  const abandonedAtMount = planAbandoned(plan, stored) && (stored?.confirmed.length ?? 0) < plan.steps.length;
+  const [err, setErr] = useState<string | null>(() => (stored?.pending ? sentRecoverySentence(stored.pending, plan.steps.length, stored.confirmed) : stored && abandonedAtMount ? abandonedSentence({ ...stored, confirms: plan.confirms, steps: plan.steps.length }) : null));
+  /** the step a run stopped at: its state ("sent" = outcome unknown; "abandoned" = a mint key lost on reload) and signature */
+  const [stopped, setStopped] = useState<Pick<SendResult, "failedAt" | "state" | "signature"> | null>(() => (stored?.pending ? { failedAt: stored.pending.step, state: "sent", signature: stored.pending.signature } : stored && abandonedAtMount ? { failedAt: stored.confirmed.length, state: "abandoned" } : null));
+  const walletKey = wallet.publicKey?.toBase58() ?? null;
+  const network = planNetwork(plan.steps.map((st) => st.instructions));
+  // the lookup-table pin from the host (undefined = still reading, null = the read failed)
+  // launch audit 231: a failed read is retried in place (Read the setting again); a reload would drop the mint keys held in memory
+  const [pins, setPins] = useState<Record<Network, LookupTablePin> | null | undefined>(undefined), [pinTry, setPinTry] = useState(0);
+  // LA7 fix B: the host's BURNTICKER_WALLET_TX_V1 switch, read with the pins (undefined = still reading; an unreadable answer = off)
+  const [txV1, setTxV1] = useState<boolean | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    setPins(undefined);
+    fetch("/api/burnticker/launch", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live) { setPins(j?.lookupTables ?? null); setTxV1(j ? j.walletTxV1 !== false : false); } }).catch(() => { if (live) { setPins(null); setTxV1(false); } });
+    return () => { live = false; };
+  }, [pinTry]);
+  const pin = network && pins ? pins[network] ?? null : null;
+  // Phantom v1 step 2: the format this plan runs in — pinned by an earlier run of this plan (the stored record), else decided from the
+  // wallet's signTransaction feature the moment the run starts (and pinned then). `effective` is what the card shows and checks now.
+  // Phantom support, ticket 438485 (2026-10-20): version 1 only when the connected account itself lists solana:signTransaction, is on
+  // this launch's chain, and the feature advertises 1 (walletTxVersion.ts accountSignsV1); never from the extension's version number
+  // LA7 fix B: with the host switch off (BURNTICKER_WALLET_TX_V1=0) version 1 is never offered, and a plan pinned to version 1 that has
+  // not reached a wallet or the chain yet is decided again (it becomes version 0); a plan already signed in version 1 keeps it
+  const advertised = launchSignVersions(wallet.wallet?.adapter, walletKey, network);
+  const versions = txV1 === false ? withoutV1(advertised) : advertised;
+  const [pinnedFormat, setFormat] = useState<TxFormat | null>(() => stored?.format ?? null);
+  const format = pinnedFormat === 1 && txV1 === false && formatFallbackAllowed({ version: 1, versionRefused: true, hasFallback: true, usedFallback: false, walletSigned: false, rec: loadPlanRecord(storage, plan) ?? { confirmed: [], pending: null, failed: null } }) ? null : pinnedFormat;
+  const effective = format ?? decideStepFormat(null, versions);
+  const v0InPlay = effective !== 1;
+  const pinProblems = !v0InPlay ? [] : pins === undefined || pins === null ? pinReadProblems(pins) : lookupTablePinProblems(network, pin);
+  const problems = [...planProblems(plan, creator), ...pinProblems, ...(v0InPlay ? planSizeProblems(plan.steps, creator, network) : [...(network ? [] : ["the network of this launch could not be read from its instructions"]), ...v1StepProblems(plan.steps, creator, plan.expect)]), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet ? formatProblems(format, versions) : []), ...(effective === 1 && txV1 === undefined ? [FORMAT_SETTING_READING] : [])];
+  const formatLine = walletKey && wallet.wallet ? formatReadinessLine(effective) : null;
+  const phantomLine = walletKey && wallet.wallet ? phantomVersionLine(standardWalletOf(wallet.wallet.adapter), versions) : null;
+  /** the one safe action for an abandoned plan: drop its record and go back to the review, which builds a new plan with fresh mint keys */
+  // launch audit 234: the replaced plan's signatures and mints stay readable in this tab's history (never a key)
+  // review of block J: a coin whose create landed but was not recorded keeps its plan record here too (LaunchRecovery still finds it)
+  const startNewPlan = () => { if (!planHasUnrecordedCoin(plan, done, confirmed)) archivePlanRecord(storage, planStorageKey(plan)); window.location.assign(resumeReviewHref(window.location.pathname)); };
+  // F06 (prelaunch audit 2026-10-18): past the plan's deadline no new step is signed here (the runner refuses it too, also after a long
+  // wallet wait); a step already sent can still be checked on chain and a landed coin recorded. The clock is read again when the deadline
+  // passes and whenever the tab is shown again (a tab left open overnight).
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = () => setClock(Date.now());
+    const timer = window.setTimeout(tick, Math.max(0, plan.deadlineAt - Date.now()) + 1_000);
+    document.addEventListener("visibilitychange", tick); window.addEventListener("focus", tick);
+    return () => { window.clearTimeout(timer); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
+  }, [plan.deadlineAt]);
+  const [ranOut, setRanOut] = useState(false), [closedStop, setClosedStop] = useState(false);
+  const expired = ranOut || planPastDeadline(plan, clock);
+  // review fix: a coin whose create step is confirmed on chain but whose record was not accepted yet keeps the card (it can still be
+  // recorded after the deadline), and Start over never archives its plan record, so the reload notice can still find and record it
+  const unrecorded = planHasUnrecordedCoin(plan, done, confirmed);
+  const startOver = () => { if (!unrecorded) archivePlanRecord(storage, planStorageKey(plan)); if (onStartOver) onStartOver(); else window.location.assign(resumeReviewHref(window.location.pathname)); };
+  const allLive = plan.confirms.length > 0 && plan.confirms.every((c) => confirmed.includes(c.mint));
+  // prelaunch audit 2026-10-18 A-12: while this plan holds mint keys for steps not sent, the version notice offers no reload and leaving
+  // the page asks first (planHold.ts)
+  // review of block M: a plan stopped because launches closed holds nothing worth a prompt (no step can be sent), like an abandoned one
+  const holdsKeys = planHoldsKeys(plan, done.length, { abandoned: stopped?.state === "abandoned" || closedStop, finished: allLive || expired });
+  useEffect(() => {
+    const key = planStorageKey(plan);
+    holdPlan(key, holdsKeys);
+    if (!holdsKeys) return () => holdPlan(key, false);
+    const guard = beforeUnloadGuard(() => true);
+    window.addEventListener("beforeunload", guard);
+    return () => { window.removeEventListener("beforeunload", guard); holdPlan(key, false); };
+  }, [holdsKeys, plan]);
+  useEffect(() => { if (allLive) onLive?.(); }, [allLive]); // eslint-disable-line react-hooks/exhaustive-deps
+  const n = plan.steps.length;
+  // launch audit 230: once live, the card stays as a completion card with an Open link per coin (no timed redirect)
+  // launch audit 250: `busy` is React state, so two presses in one render, or a card mounted again mid-run, both read false; the plan
+  // lock (signPlan.ts withPlanLock, shared with the recovery notice) lets one run at a time touch this plan in this tab
+  const go = async () => {
+    if (!creator || !wallet.signTransaction || problems.length || busy) return;
+    // prelaunch audit C2 re-review 3: the proxy's flight token rides this run's reads and sends only (rpcProxy.ts withFlight)
+    const locked = await withPlanLock(planStorageKey(plan), () => withFlight(run));
+    if (!locked.ran) setErr(PLAN_LOCKED_SENTENCE);
+  };
+  const run = async () => {
+    if (!creator || !wallet.signTransaction) return;
+    // the format is decided once, before anything is built, and pinned in the plan record so a resumed run (after a reload) keeps it
+    const chosen = format ?? decideStepFormat(null, versions);
+    if (chosen === null) return;
+    const planRun = { ...plan, format: chosen };
+    if (format === null) setFormat(chosen);
+    pinPlanFormat(storage, planRun);
+    setBusy(true); setErr(null); setNotice(null); setClosedStop(false);
+    // LA7 fix B: the version-1 dry run's words when this run fell back to version 0 (reported with the create's send, for the ops log)
+    let fallbackWhy: string | null = null;
+    try {
+      const common: SendDepsCommon = {
+        // prelaunch audit 2026-10-18 A-11: launches closed while signing stop the plan before its next step (a fresh catalogue read)
+        launchGate: () => fetch("/api/burnticker/catalogue", { cache: "no-store" }).then((x) => (x.ok ? x.json() : Promise.reject(new Error(`HTTP ${x.status}`)))).then((j) => signGateOf(launchGateFromCatalogue(j)), () => "unknown" as const),
+        latestBlockhash: () => connection.getLatestBlockhash("confirmed"),
+        onRefused: (info) => { console.warn("[burnticker launch] the wallet's transaction was refused", info.why, "\nhanded:", info.handed, "\nreturned:", info.returned); },
+        // a version-1 envelope rides sendRaw unchanged: web3.js only base64-encodes the bytes it is given
+        sendRaw: (raw) => connection.sendRawTransaction(raw, { preflightCommitment: "confirmed" }),
+        confirm: async (sig, bh) => { setPhase("chain"); try { return (await connection.confirmTransaction({ signature: sig, ...bh }, "confirmed")).value; } finally { setPhase(null); } },
+        // launch night 2026-10-13: a wallet slower than the blockhash's life gets the step rebuilt and is asked again (signPlan.ts)
+        isBlockhashValid: async (b) => (await connection.isBlockhashValid(b, { commitment: "confirmed" })).value,
+        onNotice: (t) => setNotice(t),
+        // B-2 (third audit 2026-10-19): the site records the coin's create just before it is sent, so pressing Launch again after a
+        // refresh while it is pending is refused (launch-pending) instead of building and paying for a second coin
+        // SEC-05 (continuous audit 2026-10-19): the create is sent only once the site's answer names the recorded send for that mint
+        // (sentAckOf); a network error, a non-2xx, a refusal or an answer about another mint stops the run before anything is sent
+        onSent: sentReporter(plan, async (body) => {
+          const res = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, ...(fallbackWhy ? { formatFallback: fallbackWhy.slice(0, 200) } : {}) }), cache: "no-store" });
+          return sentAckOf(res.status, await res.json().catch(() => null), body.mint);
+        }),
+        // launch recovery 255: status, height, the transaction history and the accounts a step creates, before anything is called unlanded
+        ...chainReadDeps(connection),
+        storage,
+      };
+      const std = standardWalletOf(wallet.wallet?.adapter), account = standardAccountFor(std, walletKey);
+      const v0: Pick<V0SendDeps, "signTransaction" | "simulate" | "lookupTable"> = {
+        signTransaction: async (tx) => { setPhase("wallet"); const signed = await withWalletWatchdog(wallet.signTransaction!(tx), () => setNotice(WALLET_SLOW_LINE)); setPhase("chain"); return signed; },
+        // Phantom ticket 438485: dry-run each step before the wallet sees it (a transaction that fails on chain trips the wallet's warning)
+        simulate: async (tx) => { const r = (await connection.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" })).value; return r.err ? simulationFailureText(r.err, r.logs) : null; },
+        lookupTable: () => verifiedLookupTable(connection, network, pin),
+      };
+      // LA7 fix B: the version-0 fallback for a version-1 run, wired only when this wallet signs version 0, the table's pin is read and
+      // valid, and the plan fits version 0's size; the runner uses it only before the wallet is asked (signPlan.ts formatFallbackAllowed)
+      const v0Ready = !!versions?.has(0) && !!network && !!pin && lookupTablePinProblems(network, pin).length === 0 && planSizeProblems(plan.steps, creator, network).length === 0;
+      const deps: SendDeps = chosen === 1 ? {
+        ...common,
+        ...(v0Ready ? {
+          fallback: v0Format(v0),
+          onFormatFallback: ({ step, why }: { step: number; why: string }) => { fallbackWhy = why; console.info(`[burnticker launch] version 1 refused by the dry run of step ${step + 1}; sending as version 0:`, why); setFormat(0); setNotice(V0_FALLBACK_NOTICE); },
+        } : {}),
+        // Phantom v1 (ticket 438485): the wallet signs the raw bytes through its wallet-standard feature; the dry run is raw base64 over
+        // the same-origin proxy (the adapter's Connection carries the flight token), and it sizes the step (signPlanV1.ts)
+        format: v1Format({ signBytes: async (bytes) => { setPhase("wallet"); const signed = await withWalletWatchdog(signWithStandardWallet(std, account, chainIdOf(network ?? "devnet"), bytes), () => setNotice(WALLET_SLOW_LINE)); setPhase("chain"); return signed; }, simulate: (b64) => simulateBase64(connectionRpc(connection), b64) }, planRun),
+      } : { ...common, ...v0 };
+      const r = await signAndSendPlan(planRun, creator, deps, (i, sig) => setDone((d) => (d.length === i ? [...d, sig] : d)), done);
+      setDone(r.signatures);
+      if (r.format !== undefined && r.format !== chosen) setFormat(r.format);
+      if (r.expired) setRanOut(true);
+      if (r.error) {
+        setStopped({ failedAt: r.failedAt, state: r.state, signature: r.signature }); setErr(failureSentence(r, n)); setClosedStop(!!r.closed);
+        // AUDIT A C1 (5): a coin whose own create landed before the stop is recorded now (a LaunchLab pair whose B create failed: A exists)
+        if (planConfirmations(plan, r.signatures).some((l) => !confirmed.includes(l.mint))) {
+          setPhase("record");
+          const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed, gate: r.gate ?? null });
+          setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);
+          // review (9): a failed record of the coin that landed is said too, beside why the run stopped
+          if (c.error) setErr(`${failureSentence(r, n)} ${c.error}`);
+        }
+        return; }
+      setStopped(null);
+      setPhase("record");
+      const c = await confirmPlan(confirmFetch, plan, r.signatures, (st, b, ra) => recordFailureSentence(st, b, ra, launchedErrorMessage), { already: confirmed, gate: r.gate ?? null });
+      setConfirmed(c.confirmed); markRecorded(storage, plan, c.confirmed);
+      if (c.error) setErr(`All ${n} transaction${n === 1 ? " is" : "s are"} confirmed on chain. ${c.error}`);
+    } catch (e) {
+      setErr(`Something went wrong before the result could be read (${String((e as Error)?.message ?? e).slice(0, 120)}). The progress above is kept; pressing the button again checks the chain first.`);
+    } finally {
+      setBusy(false); setPhase(null);
+    }
+  };
+  // Launch on the review card was the decision; the wallet's own prompt is the signature — no second button on the happy path
+  const [started, setStarted] = useState(false);
+  useEffect(() => { if (autoStart && !started && !expired && !problems.length && creator && wallet.signTransaction) { setStarted(true); void go(); } }, [autoStart, started, expired, problems.length, creator, wallet.signTransaction]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Plain step names: "Create $RAYS26" for the transaction the mint signs; "Link the two coins" for a pair-curve set-up; else the bundle's. */
+  const stepName = (t: SignPlan["steps"][number], i: number) => {
+    const c = plan.confirms.find((x) => x.step === i);
+    if (c) return `Create $${c.ticker} with its rule locked in`;
+    if (/init_pair/.test(t.label)) return "Link the two coins as one pair";
+    return t.label;
+  };
+  const signerName = (s: string) => (s === "creator" ? "your wallet" : plan.labels[s] ?? s);
+  const states = planStepStates(n, done, stopped);
+  return (
+    <div className="rounded-xl border border-amber-400/60 bg-neutral-900 p-4 space-y-3 text-sm" aria-label="Sign and send" data-sign-card>
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <ol className="space-y-1 text-xs" aria-label="Steps">
+        {plan.steps.map((t, i) => {
+          const st = states[i], sig = st === "confirmed" ? done[i] : stopped?.failedAt === i ? stopped.signature : undefined;
+          return (
+            <li key={`${i}-${t.label}`} className="flex flex-wrap items-baseline gap-2" data-step-state={st}>
+              <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] ${st === "confirmed" ? "border-emerald-400 text-emerald-400" : st === "sent" || (busy && i === done.length) ? "border-amber-400 text-amber-300" : st === "failed" || st === "abandoned" ? "border-red-400 text-red-400" : "border-neutral-600 text-neutral-400"}`}>{st === "confirmed" ? "✓" : busy && i === done.length ? <span aria-hidden className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" data-step-spinner /> : i + 1}</span>
+              <span className="text-neutral-200" title={t.label}>{stepName(t, i)}</span>
+              <span className="text-neutral-500">signed by {t.signers.map(signerName).join(" + ")}</span>
+              {st === "confirmed" && <span className="text-neutral-500">· {stepStatusText("confirmed", sig)}</span>}
+              {st === "sent" && <span className="text-amber-300 break-all">· {stepStatusText("sent", sig)}</span>}
+              {st === "failed" && <span className="text-red-400">· {stepStatusText("failed", sig)}</span>}
+              {st === "not-sent" && stopped?.failedAt === i && <span className="text-neutral-500">· {stepStatusText("not-sent")}</span>}
+              {st === "abandoned" && <span className="text-red-400">· {stepStatusText("abandoned")}</span>}
+            </li>
+          );
+        })}
+        {plan.confirms.map((c) => <li key={c.mint} className="text-neutral-500">{confirmed.includes(c.mint) ? "✓" : "·"} ${c.ticker} recorded as launched</li>)}
+      </ol>
+      {/* 2026-10-14 (owner): the address each coin gets, shown before anything is signed (prepared by the site, or found in this browser when none was ready; it ends in burn) */}
+      <ul className="space-y-0.5 text-xs text-neutral-300" aria-label="Coin addresses" data-mint-addresses>{plan.confirms.map((c) => <li key={c.mint} className="break-all" data-mint-address={c.mint}>${c.ticker}&apos;s address is <code className="text-amber-200">{c.mint}</code></li>)}</ul>
+      {plan.confirms.length > 0 && plan.confirms.every((c) => matchesSuffix(c.mint)) && <p className="text-xs text-neutral-500" data-mint-note>{MINT_ADDRESS_NOTE}</p>}
+      <p className="text-xs text-neutral-500" data-no-opening-purchase>{NO_OPENING_PURCHASE_SENTENCE}</p>
+      {/* Phantom v1 step 2: which transaction format this wallet signs (version 1, the version-0 fallback with the table, or neither above) */}
+      {formatLine && <p className="text-xs text-neutral-500" data-tx-format={effective ?? undefined}>{formatLine}</p>}
+      {phantomLine && <p className="text-xs text-neutral-500" data-phantom-version>{phantomLine}</p>}
+      {notes.length > 0 && <ul className="list-disc pl-5 text-xs text-neutral-500">{notes.map((x) => <li key={x}>{x}</li>)}</ul>}
+      {allLive ? (
+        <div className="space-y-2" data-launch-complete>
+          <p className="text-emerald-400">{plan.confirms.length > 1 ? "Both coins are live and recorded." : "Your coin is live and recorded."}</p>
+          <p className="flex flex-wrap gap-2">{plan.confirms.map((c) => <a key={c.mint} className="rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={coinHref(c.mint)}>Open ${c.ticker}</a>)}</p>
+          {/* the trade links on the success screen (find-and-trade, 2026-10-14) */}
+          <LaunchedTrade coins={plan.confirms} />
+        </div>
+      ) : deadlineCardStartsOver({ expired, stoppedState: stopped?.state ?? null, done: done.length, steps: n, unrecorded }) ? (
+        <div className="space-y-2" data-plan-expired>
+          <p className="text-amber-300">{PLAN_EXPIRED_SENTENCE}</p>
+          <button type="button" data-decision="new-plan" className="rounded border border-amber-400 px-5 py-2 text-base font-semibold text-amber-300" onClick={startOver}>Start over</button>
+        </div>
+      ) : stopped?.state === "abandoned" ? (
+        <button type="button" data-decision="new-plan" className="rounded border border-amber-400 px-5 py-2 text-base font-semibold text-amber-300" onClick={startNewPlan}>Start a new plan</button>
+      ) : problems.length > 0 ? (
+        <div className="text-amber-400 text-xs"><p>Not signable here yet:</p><ul className="list-disc pl-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul>{pins === null && <button type="button" data-pin-retry className="mt-1 rounded border border-amber-400 px-2 py-1 text-amber-300" onClick={() => setPinTry((x) => x + 1)}>Read the setting again</button>}</div>
+      ) : (
+        <button type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-50" disabled={busy} onClick={go}>
+          {busy && <span aria-hidden className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-neutral-950 border-t-transparent align-[-2px]" data-launch-spinner />}
+          {busy ? `Signing step ${Math.min(done.length + 1, n)} of ${n}…` : stopped?.state === "sent" ? `Check step ${(stopped.failedAt ?? 0) + 1} on chain and continue` : expired && unrecorded ? RECORD_LANDED_LABEL : done.length >= n ? "Record the launch again" : done.length ? `Continue from step ${done.length + 1} of ${n}` : `Sign in your wallet (${n} step${n === 1 ? "" : "s"})`}
+        </button>
+      )}
+      {!allLive && <p className="text-xs text-neutral-500" data-session-scope>{SESSION_SCOPE_LINE}</p>}
+      {waitLineFor(busy, phase) && <p className="text-xs text-amber-300" role="status" aria-live="polite" data-launch-wait={phase ?? ""}>{waitLineFor(busy, phase)}</p>}
+      {notice && busy && <p className="text-xs text-amber-300" role="status" data-resign-notice>{notice}</p>}
+      {err && <p className="text-xs text-red-400">{err}</p>}
+    </div>
+  );
+}

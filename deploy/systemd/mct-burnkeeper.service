@@ -1,0 +1,27 @@
+[Unit]
+Description=Burn keeper for $DEFICIT (rule DEBT — buyback-and-burn indexed to Treasury Debt to the Penny; mainnet refused without BURNKEEPER_MAINNET=1 + BURNKEEPER_RULES_SHA + the rule file's mint)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/meme-coin-trader
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/service/run-burnkeeper.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+# Logs read in Denver time like every unit here (2026-09-05); the keeper's POLL clock is America/New_York regardless (Treasury's clock).
+Environment=TZ=America/Denver
+Environment=BURNKEEPER_RULES=config/burnkeeper/deficit.rules.json
+Environment=BURNKEEPER_PUBLISH_DIR=%h/meme-coin-trader/data/burnkeeper-site
+# BURNKEEPER_RPC_URL, BURNKEEPER_MINT, BURNKEEPER_VAULT, BURNKEEPER_SIGNER_PATH (and on mainnet BURNKEEPER_MAINNET + BURNKEEPER_RULES_SHA)
+# live in the host's environment file (not committed), read by run-burnkeeper.sh — never in this file.
+Restart=always
+RestartSec=30
+KillSignal=SIGTERM
+# A burn in flight finishes its confirmation wait (≤ 2 min) before the process exits; its signature is on the ledger either way.
+TimeoutStopSec=150
+StandardOutput=append:%h/meme-coin-trader/logs/burnkeeper.log
+StandardError=append:%h/meme-coin-trader/logs/burnkeeper.log
+
+[Install]
+WantedBy=default.target
