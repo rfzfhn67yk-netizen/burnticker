@@ -1,6 +1,6 @@
 {
   "schema": "burnticker.transparency/v1",
-  "updatedAt": "2026-10-21",
+  "updatedAt": "2026-10-29",
   "note": "Rendered on /burnticker/trust by src/lib/burnticker/trust.ts (loadTransparency). Facts only. A null pubkey is a TODO the owner fills in before launch; the page shows it as TODO, never as blank. The operator's name comes from OPERATOR_LINE in src/lib/burnticker/fees.ts, not from this file. `rehearsals` lists every throwaway coin created under the real platform config to prove the machinery; each is also on config/own-tokens.json so the operator's bots refuse it.",
   "publicRepo": {
     "url": "https://github.com/rfzfhn67yk-netizen/burnticker",
@@ -275,7 +275,7 @@
     },
     {
       "id": "no-paid-promotion",
-      "text": "There is no paid promotion, no payment to influencers and no referral kickback. There is no price talk and no countdown. The site shows no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence. Burn Derby's flippening is one such rule, and derby admission refuses a Burnticker coin as an input."
+      "text": "There is no paid promotion, no payment to influencers and no referral kickback. One disclosed exception, added 2026-10-29: the operator paid one X creator, @TeaonaX, 50 dollars for a single post about Burnticker. The post carries the paid-partnership label, the operator reads the draft before it goes up, it stays factual (what the coin does, the receipt, the site), and it links to burnticker.com. Any further paid placement is listed here before it runs. There is no price talk and no countdown. The site shows no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence. Burn Derby's flippening is one such rule, and derby admission refuses a Burnticker coin as an input."
     },
     {
       "id": "platform-never-buys",
