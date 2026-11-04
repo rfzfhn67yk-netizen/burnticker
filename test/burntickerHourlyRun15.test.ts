@@ -2,6 +2,7 @@
 // HB-156 to HB-166; suggestions HS-59, HS-60, HS-11 widened). The three P2 leads on the publish-103 tree first (HB-164 the first snow's
 // end, HB-163 the memo refresher's cadence, HB-165 the market search filter), then the live P3 copy items.
 import { describe, test } from "node:test";
+import { EARLIER_MAX_AGE_MS } from "@/lib/burnticker/boundedReads";
 import assert from "node:assert/strict";
 import { Keypair } from "@solana/web3.js";
 import { openRegistry } from "@/lib/burnticker/registry";
@@ -14,7 +15,7 @@ import { nativeRule } from "@/lib/burnticker/sources/native";
 import { nwsSeries } from "@/lib/burnticker/sources/nws";
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { ATTESTER, CREATOR } from "./burntickerRivalrySeriesHelpers.ts";
-import { ACTIVE_MS, WARM_HEADER, isVisitorRequest, memoRefresher } from "@/lib/burnticker/memoRefresher";
+import { ACTIVE_MS, WARM_HEADER, isVisitorRequest, memoRefresher, IDLE_MS } from "@/lib/burnticker/memoRefresher";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -150,6 +151,15 @@ describe("HB-163: the memo timer builds on demand only; nothing for nobody, no f
     const before = h.refreshes;
     h.advance(ACTIVE_MS + 60_000);
     assert.ok(h.refreshes - before <= 1, "after the visitors leave, at most the one rebuild their last ask earned");
+  });
+  test("2026-11-03 idle floor: a quiet route rebuilds once its copy is older than idleMs, and the routes pass IDLE_MS", () => {
+    let t = 1_000_000, builtAt: number | null = t, refreshes = 0;
+    const r = memoRefresher({ refresh: async () => { refreshes++; builtAt = t; }, ageMs: () => (builtAt === null ? null : t - builtAt), freshMs: () => 15_000, now: () => t, enabled: true, tickMs: 60_000_000, idleMs: IDLE_MS });
+    r.touch(true);   // one visitor, then nobody
+    for (let k = 0; k < 7 * 3_600_000; k += 2_000) { t += 2_000; r.tick(); }
+    assert.equal(refreshes, 4, "one rebuild for the visit, then one every two idle hours over seven hours (nothing per minute)");
+    assert.ok(IDLE_MS < EARLIER_MAX_AGE_MS, "the idle floor keeps every kept read inside the six-hour limit");
+    for (const f of ["src/app/api/burnticker/home/route.ts", "src/app/api/burnticker/tokens/route.ts"]) assert.match(read(f), /idleMs: IDLE_MS/);
   });
   test("the routes pass the request; web-warm marks its calls; the league table has no timer of its own", () => {
     for (const f of ["src/app/api/burnticker/home/route.ts", "src/app/api/burnticker/tokens/route.ts"]) {

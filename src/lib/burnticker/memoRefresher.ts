@@ -22,6 +22,13 @@
  * never in the test runner unless a test drives it with its own clock (`tick`).
  */
 export const ACTIVE_MS = 5 * 60_000, TICK_MS = 2_000;
+/**
+ * 2026-11-03 (the Coins page listed $DEFICIT and one coin after a quiet evening): with no visitor the timer built nothing, every coin's
+ * last good read (boundedReads.ts) aged past its six-hour limit, and the first visitor's build dropped eleven coins. Now a quiet route still
+ * rebuilds once its copy is older than IDLE_MS: one build every two hours for nobody keeps the kept reads inside the limit, and costs
+ * twelve builds a day, not the sixty an hour of publish 103.
+ */
+export const IDLE_MS = 2 * 3_600_000;
 /** The header the start-up warm call sends (scripts/service/web-warm.cjs): its request is not a visitor. */
 export const WARM_HEADER = "x-burnticker-warm";
 /** Whether a request is a visitor's (anything but the warm call). A route called with no request (a test) counts as a visitor. */
@@ -47,6 +54,8 @@ export function memoRefresher(o: {
   now?: () => number;
   enabled?: boolean;
   activeMs?: number; tickMs?: number;
+  /** rebuild a quiet route's copy once it is older than this (undefined: never, the HB-163 behaviour) */
+  idleMs?: number;
 }): MemoRefresher {
   const now = o.now ?? Date.now;
   const enabled = o.enabled ?? (process.env.NODE_ENV === "production" || process.env.BURNTICKER_MEMO_REFRESHER === "1");
@@ -62,8 +71,13 @@ export function memoRefresher(o: {
       timer.unref?.();
     },
     tick() {
-      // HB-163: no visitor in the last ACTIVE_MS, no build (the next visitor is served the kept copy and the route rebuilds behind it)
-      if (lastAsk === null || now() - lastAsk >= activeMs) return;
+      // HB-163: no visitor in the last ACTIVE_MS, no build (the next visitor is served the kept copy and the route rebuilds behind it),
+      // except the idle floor: a copy older than idleMs is rebuilt so the coins' kept reads never age out (see IDLE_MS)
+      if (lastAsk === null || now() - lastAsk >= activeMs) {
+        const idleAge = o.ageMs();
+        if (o.idleMs !== undefined && idleAge !== null && idleAge >= o.idleMs) void o.refresh().catch(() => { /* logged by the route */ });
+        return;
+      }
       const age = o.ageMs();
       // a copy past its window is rebuilt only when a visitor asked after it was built (demand, not a beat)
       if (age === null || (age >= o.freshMs() && lastAsk >= now() - age)) void o.refresh().catch(() => { /* the route logs its own build failures */ });

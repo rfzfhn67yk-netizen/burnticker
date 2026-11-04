@@ -21,7 +21,7 @@ import { stageClock, type StageClock } from "@/lib/burnticker/buildStages";
 import { LIST_BUILD_BUDGETS, earlierReadsNote, readAgoText, readCoinsBounded, anyReadLate } from "@/lib/burnticker/boundedReads";
 import { PUBLIC_READ_CORS } from "@/lib/burnticker/api/http";
 import { SWR_BUILD_TIMEOUT_MS } from "@/lib/burnticker/keyedSwr";
-import { isVisitorRequest, memoRefresher } from "@/lib/burnticker/memoRefresher";
+import { IDLE_MS, isVisitorRequest, memoRefresher } from "@/lib/burnticker/memoRefresher";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +53,7 @@ function refreshHome(): Promise<void> {
 
 // HB-145 (2026-10-20): the memo is rebuilt by a timer behind the requests (memoRefresher.ts); a request never waits for a rebuild while
 // there is a copy to serve, only for the very first build after a start
-const homeRefresher = memoRefresher({ refresh: refreshHome, ageMs: () => (homeMemo ? Date.now() - homeMemo.at : null), freshMs: () => homeMemo?.memoMs ?? 15_000 });
+const homeRefresher = memoRefresher({ refresh: refreshHome, ageMs: () => (homeMemo ? Date.now() - homeMemo.at : null), freshMs: () => homeMemo?.memoMs ?? 15_000, idleMs: IDLE_MS });
 
 // HB-145 second half (2026-10-20): the last good one-line status and rehearsal curve, used when their read runs past its stage budget
 let lastStatus: unknown = null;
