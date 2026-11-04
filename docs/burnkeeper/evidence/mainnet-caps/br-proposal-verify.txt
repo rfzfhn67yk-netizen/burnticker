@@ -1,0 +1,20 @@
+      "spill": "F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P",
+      "authority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
+    }
+  ],
+  "problems": [
+    "buffer AdyxJ3ZBCy6xPZXcQB7eFcVUdduHKbjx78h8WhrUBzea does not exist"
+  ],
+  "proposal": {
+    "address": "ABfWPBsNJCstacyW17uRJvGZkySX6c4T5NjkAEgHLF6K",
+    "status": "Executed",
+    "statusAt": "2026-10-25T22:10:51.000Z",
+    "approved": [
+      "57ugkFkTscnsFpLdSSNshZmCExMWXaXGrUEjeLuV4crt",
+      "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ"
+    ],
+    "rejected": [],
+    "cancelled": []
+  },
+  "verdict": "DO NOT APPROVE"
+}

@@ -1,0 +1,203 @@
+// REVIEW 2 §2/§3 (ChatGPT/Codex, 2026-10-11) — the live-site cuts: one launch-availability state (no launch CTA while creator launches
+// are closed), one served $DEFICIT destination, no green badge over zero receipts, the trust page's contradictions (host wiring vs chain
+// deployment vs compiled value; no scheduled second attester; the shipped Powers Register recognised; systemd units "supplied, installation
+// not verified"; the one-shot end is the onEnd schedule), the fee ledger's provenance, the status page's unknown state, the operator page's
+// signing steps moved to the runbook, and the league pages' team names.
+import { test, describe } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { auditBadgeView, NO_RECEIPTS_TO_CHECK } from "@/lib/burnticker/auditBadge";
+import { buildPlatformIndex, renderPlatformIndexHtml } from "@/lib/burnticker/tokenPage";
+import { closedHostLine, DEFICIT_SITE, deficitHref, launchAvailability, launchAvailabilityFromCatalogue, LAUNCH_AVAILABILITY_UNKNOWN } from "@/lib/burnticker/creatorLaunches";
+import { NAV } from "../src/app/burnticker/_components/nav.ts";
+import { loadPowersRegister, programFacts } from "@/lib/burnticker/trust";
+import { attesterStatusLine } from "@/lib/burnticker/fees";
+import { LEDGER_COPY } from "@/lib/burnticker/trustpack/copy";
+import { teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
+import { GLOSSARY, NO_WALLET_LINE, termLine, type TermId } from "@/lib/burnticker/glossary";
+
+const ROOT = path.join(import.meta.dirname, "..");
+const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
+const lint = (t: string) => lintCopy(t, loadCopyLintConfig()).hits.map((h) => `${h.phrase}:${h.rule}`);
+const transparency = JSON.parse(read("config/burnticker/transparency.json")) as { limitations: { id: string; status: string; text: string }[] };
+const lim = (id: string) => transparency.limitations.find((l) => l.id === id)!;
+
+describe("review 2 — one launch-availability state", () => {
+  test("from the catalogue: only an explicit launches.creators true opens; unknown or unreadable is closed; the closed line names the cluster", () => {
+    assert.equal(launchAvailabilityFromCatalogue({ launches: { creators: true }, cluster: "devnet" }).open, true);
+    for (const j of [null, {}, { launches: {} }, { launches: { creators: "true" } }, { launches: { creators: false } }]) assert.equal(launchAvailabilityFromCatalogue(j).open, false, JSON.stringify(j));
+    assert.equal(LAUNCH_AVAILABILITY_UNKNOWN.open, false);
+    assert.equal(closedHostLine("devnet"), "Creator launches are closed. This site is showing devnet.");
+    assert.equal(launchAvailability({}).open, false, "default off");
+    assert.equal(launchAvailability({ BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" }).open, true);
+    assert.deepEqual(lint(closedHostLine("devnet")), []);
+  });
+
+  test("every launch CTA on the app's pages renders only while launches are open", () => {
+    const cases: [string, RegExp[]][] = [
+      // since 2026-10-12 the page's own "Launch a coin" moved into the header (SiteHeader.tsx: a link while open, the closed dialog otherwise)
+      // website-13: one gated link for both empty grids (coins and pairs), only when nothing is launched and launches are open
+      ["src/app/burnticker/CoinsIndex.tsx", [/\{state\.notLaunched && launch\.open && <div className="mt-2"><Link href=\{tab === "pairs" \? "\/burnticker\/launch\?pair=1" : "\/burnticker\/launch"\} className="underline">\{tab === "pairs" \? "Launch a pair" : "Launch the first one"\}<\/Link><\/div>\}/]],
+      ["src/app/burnticker/_components/SiteHeader.tsx", [/\{launchOpen\s*\? <Link className="bt-launch-btn bt-launch-head" href="\/burnticker\/launch"/]],
+      ["src/app/burnticker/leagues/[league]/[season]/page.tsx", [/\{\(launch\.open \|\| launchPreview\) && <Link className="text-xs underline" href=\{t\.launchHref\}>\{launch\.open \? "launch a coin for this team" : "preview a coin for this team"\}/, /\{\(launch\.open \|\| launchPreview\) && <Link className="underline" href=\{t\.launchHref\}>/, /No team-coin receipts for this season yet\. This page tracks processed coin receipts, not every game\.\{launch\.open \? " Pick a team below to launch one\." : ""\}/]],
+      // HB-151 (hourly run 13): c.href is null unless the wizard is open and the card can launch (templateCard.ts)
+      ["src/app/burnticker/templates/page.tsx", [/\{c\.href && <div className="mt-auto pt-3"><TemplateLink className="text-sm font-medium text-amber-300 underline" href=\{c\.href\}>\{t\.cta\} →<\/TemplateLink><\/div>\}/]],
+      ["src/app/burnticker/t/[ticker]/page.tsx", [/\{launch\.open && <p><Link [^>]*href=\{likeHref\(s\.ticker\)\}>Launch one like this</]],
+      ["src/app/burnticker/p/[pairId]/page.tsx", [/\{launch\.open && <p className="mt-1"><Link [^>]*href=\{likeHref\(A\)\}>Launch a pair like this</]],
+      ["src/app/burnticker/rivalries/page.tsx", [/\{launch\.open \? <> A team coin is launched from the <Link/]],
+    ];
+    for (const [file, res] of cases) { const src = read(file); for (const re of res) assert.match(src, re, `${file}: ${re}`); }
+    // no ungated "Pick a team below to launch one." / "Launch the first one" anywhere in the app
+    for (const file of ["src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/leagues/[league]/[season]/page.tsx"]) assert.doesNotMatch(read(file), /yet\. Pick a team below to launch one\.<\/p>/);
+  });
+});
+
+describe("review 2 — one served $DEFICIT destination", () => {
+  test("the featured card, the launch page's closed state and the coin page's not-registered state all use DEFICIT_SITE; no app link goes to /burnticker/t/DEFICIT", async () => {
+    assert.equal(DEFICIT_SITE, "https://deficit.burnticker.com/");
+    assert.equal(deficitHref(false), DEFICIT_SITE); assert.equal(deficitHref(true), "/burnticker/t/DEFICIT");
+    // since 2026-10-12 (the owner's review item 12) $DEFICIT is the first featured card, not a nav entry; the card links the served site
+    assert.equal(NAV.find((n) => n.label === "$DEFICIT"), undefined);
+    const { featuredCoins } = await import("@/lib/burnticker/home");
+    assert.equal(featuredCoins(ROOT)[0].href, DEFICIT_SITE, "not created yet: the card links the $DEFICIT site");
+    assert.doesNotMatch(read("src/app/burnticker/about/page.tsx"), /href="\/burnticker\/t\/DEFICIT"/);
+    // website brief §1: the closed state is LaunchGate.tsx, handed DEFICIT_SITE by the launch page
+    assert.match(read("src/app/burnticker/launch/page.tsx"), /<LaunchGate .*deficitHref=\{DEFICIT_SITE\}/);
+    assert.match(read("src/app/burnticker/launch/LaunchGate.tsx"), /<a className="underline" href=\{deficitHref\}>\$DEFICIT<\/a>/);
+    const coin = read("src/app/burnticker/t/[ticker]/page.tsx");
+    assert.match(coin, /\/no token\/i\.test\(err\) \? <NotRegistered ticker=\{ticker\} \/>/);
+    // website brief §1: $DEFICIT's not-registered state is the pre-launch page, canonical to DEFICIT_SITE
+    assert.match(coin, /if \(t === "DEFICIT"\) return <DeficitPrelaunch fallbackSite=\{DEFICIT_SITE\} \/>/);
+    for (const f of ["src/app/burnticker/launch/page.tsx", "src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/_components/nav.ts"]) assert.doesNotMatch(read(f), /href="\/burnticker\/t\/DEFICIT"/, f);
+  });
+});
+
+describe("review 2 — no trust badge over an empty audit", () => {
+  test("zero receipts reads 'No receipts available to check on this host' (neutral), on the coins page and the static index; a real run keeps its result", () => {
+    const empty = auditBadgeView({ ok: true, receipts: 0, mismatches: 0, chainChecked: false });
+    assert.deepEqual([empty.text, empty.tone], [NO_RECEIPTS_TO_CHECK, "muted"]);
+    assert.equal(auditBadgeView({ ok: true, receipts: 4, mismatches: 0, chainChecked: true }).tone, "ok");
+    assert.equal(auditBadgeView({ ok: false, receipts: 4, mismatches: 1, chainChecked: true }).text, "1 mismatch");
+    assert.equal(auditBadgeView(null).text, "not run yet");
+    const html = renderPlatformIndexHtml(buildPlatformIndex([], Date.parse("2026-10-11T00:00:00Z"), { ok: true, ranAt: "2026-10-11T00:00:00Z", receipts: 0, mismatches: 0, chainChecked: false }));
+    assert.match(html, /No receipts available to check on this host/);
+    assert.doesNotMatch(html, /all receipts recompute/);
+    assert.match(read("src/app/burnticker/CoinsIndex.tsx"), /\["Public audit", audit\.text\]/);
+  });
+});
+
+describe("review 2 — trust page: current facts, no contradictions", () => {
+  test("the shipped Powers Register is recognised (no 'placeholder until … ships'): the privileged instructions and the upgrade authority", () => {
+    const reg = loadPowersRegister({}, ROOT);
+    assert.equal(reg.placeholder, false);
+    const ids = reg.powers.map((p) => p.id);
+    for (const id of ["propose_attesters", "renounce_admin", "set_registration_policy", "program-upgrade-authority"]) assert.ok(ids.includes(id), id);
+    assert.equal(reg.powers.filter((p) => p.source.includes("instructions.")).length, 13, "the register's thirteen privileged instructions (round 5 adds propose / cancel / veto_target_pool)");
+    assert.doesNotMatch(read("src/app/burnticker/trust/page.tsx"), /placeholder until/);
+  });
+  test("program: this host's wiring, the chain deployment and the compiled value are three separate labels", () => {
+    const p = programFacts({}, ROOT);
+    assert.match(p.hostWiring, /^This site is not connected to a burn program\./);
+    const br = p.chain.find((c) => c.library === "burn_receipts")!;
+    // B-17 (2026-10-21): the table's burn_receipts build is the B-17 build. Mainnet was upgraded to it that evening (vault transaction 4,
+    // read back 2026-10-25T22:11:49Z), so mainnet matches and has no pending sentence; devnet was upgraded the same evening (vault transaction 23) and matches too; round 5
+    assert.match(br.devnet, /^deployed \(read 2026-10-25T20:57:02Z, and the bytes match the recorded build\)$/);
+    assert.match(br.mainnet, /^deployed \(read 2026-10-25T22:11:49Z, and the bytes match the recorded build; upgrade authority 8zsH/);
+    assert.doesNotMatch(`${br.devnet} ${br.mainnet}`, /DO NOT match/);
+    assert.doesNotMatch(br.mainnet, /earlier build|has not been deployed/);
+    assert.ok(!br.pending || br.pending.length === 0, "no pending sentence once both networks hold the build (devnet upgraded 2026-10-21 18:49 Denver, vault transaction 23)");
+    for (const t of [br.devnet, br.mainnet, ...(br.pending ?? [])]) assert.deepEqual(lint(t), [], t);
+    const pc = p.chain.find((c) => c.library === "pair_curve")!;
+    assert.match(pc.mainnet, /^deployed \(read 2026-10-25T22:16:11Z, and the bytes match the recorded build; upgrade authority 8zsH/); assert.equal(pc.pending, undefined);
+    // the page's build hash is the bytes on chain for the cluster (devnet: the B-17 build since 2026-10-21), never a build the chain does not hold
+    assert.equal(p.buildHash, "e52d27fcfa14f75148bfc00a298f061d3e522321370e6cb99f0f41dcdf8e13d1"); // devnet by default: programHashFact reads deployed.devnet.hash
+    assert.match(read("src/app/burnticker/trust/page.tsx"), /c\.pending\?\.map\(\(t\) => <span key=\{t\} className="block text-amber-300" data-upgrade-pending>/);
+    assert.match(p.compiled, /^The burn program's address, compiled into the program and its interface file \(IDL\), is AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM\.$/);
+    assert.ok(!p.verify.some((v) => /not deployed yet/.test(v)), "no 'not deployed' line on a host that is merely not wired");
+    const page = read("src/app/burnticker/trust/page.tsx");
+    assert.doesNotMatch(page, /"not deployed"\}/);
+    for (const s of ["This site:", "On chain, {c.library}", "Compiled in:"]) assert.ok(page.includes(s), s);
+  });
+  test("attesters: the present fact, no scheduled second attester; systemd: supplied, installation not verified; one-shot: the onEnd schedule", () => {
+    const a = attesterStatusLine(Date.parse("2026-10-07T00:00:00Z")).line;
+    assert.equal(a, "One operator attester is configured; no independent second attester is live. Quorum 1.");
+    assert.doesNotMatch(a, /Switchboard|scheduled/);
+    assert.doesNotMatch(lim("switchboard-down").text, /schedule/);
+    assert.equal(lim("no-systemd-unit").status, "units supplied; installation on this host not verified");
+    assert.match(lim("no-systemd-unit").text, /mct-burnticker-keeper\.service/);
+    for (const u of ["mct-burnticker-keeper.service", "mct-burnticker-audit.timer"]) assert.ok(fs.existsSync(path.join(ROOT, "deploy/systemd", u)), u);
+    assert.doesNotMatch(lim("one-shot").text, /supply is fixed/);
+    assert.match(lim("one-shot").text, /onEnd schedule/);
+    for (const id of ["switchboard-down", "no-systemd-unit", "one-shot"]) assert.deepEqual(lint(lim(id).text), [], id);
+  });
+  test("fee ledger: no universal provenance claim; each block names its source", () => {
+    assert.doesNotMatch(LEDGER_COPY.intro, /Nothing on this page comes from our own records/);
+    assert.match(LEDGER_COPY.intro, /Each block names where its data comes from/);
+    assert.match(LEDGER_COPY.incomeTitle, /from chain/); assert.match(LEDGER_COPY.entriesTitle, /from chain/);
+    assert.match(LEDGER_COPY.expensesSource, /operator-entered/);
+    assert.match(read("src/app/burnticker/fees/ledger/page.tsx"), /\{LEDGER_COPY\.expensesSource\}/);
+  });
+  test("status and fallback pages: an unreadable status file stays unknown — no 'unaffected'", () => {
+    const st = read("site/burnticker/status/index.html");
+    // UX report 3 items 4/8 tightened it: every group the feed fills says unavailable (test/burntickerWebsite4.test.ts runs the script)
+    assert.match(st, /"The automation data did not load just now \(status\.json: " \+ why \+ "\)\. The current-status summary is separate\. It does not show whether burns are being processed now\."/);
+    assert.doesNotMatch(st, /unaffected/);
+    assert.doesNotMatch(read("site/burnticker/fallback/index.html"), /unaffected/);
+  });
+  test("operator page: the 'not signed yet' fact stays; the signing steps live in the runbook", () => {
+    const op = JSON.parse(read("config/burnticker/operator.json")) as { signedMessage: { how: string } };
+    assert.doesNotMatch(op.signedMessage.how, /sign-offchain-message|signMessage|Phantom/);
+    assert.match(op.signedMessage.how, /docs\/burnticker\/runbook\.md/);
+    assert.match(read("docs/burnticker/runbook.md"), /## Signing the operator statement[\s\S]*solana sign-offchain-message/);
+  });
+});
+
+describe("review 2 — team names on the league pages", () => {
+  test("no 'Chicago C Cubs' / 'Athletics Athletics': the disambiguating letter is dropped and a city equal to the nickname is not repeated", () => {
+    const names = (["mlb", "nba", "nfl", "nhl"] as LeagueId[]).flatMap((l) => teamsOf(l).map((t) => t.name));
+    for (const n of names) {
+      assert.doesNotMatch(n, /\s[A-Z]{1,2}\s/, n);
+      const w = n.split(" ");
+      assert.ok(!(w.length === 2 && w[0] === w[1]), n);
+    }
+    for (const n of ["Athletics", "Chicago Cubs", "Chicago White Sox", "Los Angeles Angels", "Los Angeles Dodgers", "New York Mets", "New York Yankees"]) assert.ok(names.includes(n), n);
+  });
+});
+
+describe("review 2 — the glossary at first use", () => {
+  test("one short plain sentence per term, lint-clean; a one-line note, not a paragraph", () => {
+    const ids = Object.keys(GLOSSARY) as TermId[];
+    assert.deepEqual(ids.sort(), ["attester", "burn", "burnPool", "feeKey", "graduation", "keeper", "lockedLp", "receipt", "windDown"]);
+    for (const id of ids) {
+      const s = GLOSSARY[id].short;
+      assert.deepEqual(lint(s), [], id);
+      assert.ok(s.length <= 170 && (s.match(/\. /g) ?? []).length === 0, `${id}: one sentence, short (${s.length})`);
+    }
+    assert.equal(GLOSSARY.graduation.term, "moved to trading pool"); assert.equal(GLOSSARY.keeper.term, "automation");
+    assert.deepEqual(lint(NO_WALLET_LINE), []);
+  });
+  test("placed where the terms are used: the about page, the coins page's tabs, the trust page header, both pair pages; no jargon in the home's headlines; the no-wallet line beside every scoreboard", () => {
+    const home = read("site/burnticker/index.html");
+    // the owner's review items 7 and 10 (2026-10-12): the hero is one plain line and one subline, with no defined terms in it; the
+    // precise words live on the about page (every glossary term, defined once) and on the coin pages
+    assert.doesNotMatch(home, /data-glossary|<abbr class="term"/, "no glossary or tooltip terms on the home");
+    const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('id="coins"'));
+    for (const w of ["reading signer", "burn budget", "keeper", "crank", "attester"]) assert.ok(!hero.toLowerCase().includes(w), `no "${w}" in the hero`);
+    // website-13 (Claude site audit 2 item 3): the no-wallet line is a repeated disclaimer, so the home and the coins page no longer print it
+    assert.ok(!home.includes(NO_WALLET_LINE));
+    const about = read("src/app/burnticker/about/page.tsx");
+    assert.match(about, /Object\.values\(GLOSSARY\)\.map\(\(g\) =>/, "the about page defines every term once");
+    // website-13 (Codex review 5 glossary): the coins page's tabs state their rule, and the card rows' meanings open on demand
+    const coins = read("src/app/burnticker/CoinsIndex.tsx");
+    assert.match(coins, /Object\.values\(CARD_MEANINGS\)\.map/); assert.match(coins, /id="bt-tab-rule">\{rule\}/); // A-29 (2026-10-18): the selected tab's rule is printed and describes the panel; the tab is named by its label
+    assert.match(read("src/app/burnticker/trust/page.tsx"), /data-trust-evidence[\s\S]*<TermNote ids=\{\["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"\]\} \/>/, "beside the evidence that uses the words");
+    const pair = read("src/app/burnticker/p/[pairId]/page.tsx");
+    assert.match(pair, /<TermNote ids=\{\["receipt", "burnPool"\]\} \/>/); assert.doesNotMatch(pair, /\{NO_WALLET_LINE\}/, "website-13: no repeated disclaimer on the pair page");
+    assert.match(read("src/lib/burnticker/tokenPage.ts"), /\$\{esc\(NO_WALLET_LINE\)\} \$\{esc\(termLine\(\["receipt", "burnPool"\]\)\)\}/);
+    assert.ok(termLine(["receipt"]).startsWith("receipt — "));
+    for (const f of ["src/app/burnticker/derby/page.tsx", "src/app/burnticker/leagues/[league]/[season]/page.tsx", "src/app/burnticker/rivalries/page.tsx"]) assert.match(read(f), /\{NO_WALLET_LINE\}/, f);
+    assert.doesNotMatch(read("src/app/burnticker/CoinsIndex.tsx"), /NO_WALLET_LINE/, "website-13: the coins page drops the repeated disclaimer");
+  });
+});

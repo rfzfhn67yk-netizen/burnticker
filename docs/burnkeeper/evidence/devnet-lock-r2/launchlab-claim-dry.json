@@ -1,0 +1,306 @@
+{
+  "command": "claim-lock-fees",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": true,
+  "feeNftMint": "D6ZTNvkuaM8RH8QRBf3dvnWBPoneXshAprLDiJ8Y1TbX",
+  "lockedLiquidity": "79Lqk6qZVAJ9PdvspRgSRJRKsgqRu7LcUjADsFBAwAdS",
+  "treasury": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+  "instructions": [
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "claim_lock_fees",
+      "accounts": [
+        {
+          "name": "cranker",
+          "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "name": "platform",
+          "pubkey": "EXz6enAb7mSUfC1bWJstF96uLZiCSdFcLLSQ9cwhhxx6",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "config",
+          "pubkey": "7ZjCmiGzZMCKf4wuwzgQFmJWMhrQ1s9NHP1uwnL1DAso",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "fee_key",
+          "pubkey": "26rU845tC6Rrr7HARwS2xFiTMKgJMdWu9hUZQ6uQR4Wq",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_keys",
+          "pubkey": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_vault",
+          "pubkey": "5vchyCzCe8HtxfHE49UfuysNgAqTbtfv8eckoRvxzrND",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "operator_treasury",
+          "pubkey": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "pubkey": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "wsol_mint",
+          "pubkey": "So11111111111111111111111111111111111111112",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "fee_keys_wsol",
+          "pubkey": "AmzZN5Y43VTPb7QQExaUq9AvY9bsmQE9WSciSkD2hSEg",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_keys_token",
+          "pubkey": "BKdCttMdcTweH7XrX9nzbZnhraTzKJeRDs4RwXB2US1t",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_nft_account",
+          "pubkey": "4rkMGyj1XoBNV2gG5arEPG2XRQBsGRMruGpMVjR7ZqiK",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "locked_liquidity",
+          "pubkey": "79Lqk6qZVAJ9PdvspRgSRJRKsgqRu7LcUjADsFBAwAdS",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "lock_program",
+          "pubkey": "DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "lock_authority",
+          "pubkey": "7qWVV8UY2bRJfDLP4s37YzBPKUkVB46DStYJBpYbQzu3",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "cpmm_program",
+          "pubkey": "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "cpmm_authority",
+          "pubkey": "CXniRufdq5xL8t8jZAPxsPZDpuudwuJSPWnbcD5Y5Nxq",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "pool_state",
+          "pubkey": "AKRxMfAjMjP4ZFPKtUw6R13Gi8KczYWiKua6t5acEsoQ",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "lp_mint",
+          "pubkey": "CWZQ9aFr46HacS97hJ2SXuFz8X4aVy6iFrYVJsTADA5s",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "token_0_vault",
+          "pubkey": "BopTNCCb2hLZCp74AbJth3RBU3u228bdCpF5BRku4ef6",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "token_1_vault",
+          "pubkey": "9mCJMUoYowen8ef4F9A9uDyUSssUw4PJLjC4CTjmjSr1",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "lock_lp_vault",
+          "pubkey": "HNnHHvSfkU3EQixxyo7aWpfnPVcecDL7s6JQER13R4KJ",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "token_2022_program",
+          "pubkey": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "memo_program",
+          "pubkey": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "associated_token_program",
+          "pubkey": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {}
+    }
+  ],
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 254382,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: ClaimLockFees",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [2]",
+      "Program log: CreateIdempotent",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [3]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 179 of 341824 compute units",
+      "Program return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program 11111111111111111111111111111111 invoke [3]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: Initialize the associated token account",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [3]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 336735 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [3]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 229 of 334272 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 13514 of 347253 compute units",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [2]",
+      "Program log: CreateIdempotent",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [3]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 179 of 321820 compute units",
+      "Program return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program 11111111111111111111111111111111 invoke [3]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: Initialize the associated token account",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [3]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 316731 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [3]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 233 of 314268 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 15018 of 328749 compute units",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 201 of 311507 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX invoke [2]",
+      "Program log: Instruction: CollectCpFees",
+      "Program data: HU6lBfanW/RnI3gPAAAAAAAAAAAAAAAAXluP1mkAAADCW4/WaQAAAMJbj9ZpAAAAz+62N/1xyuPcKwAAAAAAAIjXFLW9CE0S0CsAAAAAAAA=",
+      "Program DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb invoke [3]",
+      "Program log: Instruction: Withdraw",
+      "Program data: eaPNyTnadTyKcdpa5pbbgSmLxWdsjN0eOLvnmSnaPlPeyINjszxh48Jbj9ZpAAAA7WZKJQAAAAArmQRFHi0BAE1zBQAAAAAASfnrAiwAAAAAAAAAAAAAAAAAAAAAAAAAAQ==",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [4]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 131 of 233861 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [4]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 112 of 231608 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [4]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 105 of 229363 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb consumed 22481 of 250704 compute units",
+      "Program DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb success",
+      "Program DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX consumed 84228 of 306356 compute units",
+      "Program DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 131 of 217036 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 118 of 215165 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 118 of 213345 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [2]",
+      "Program log: Memo (len 118): \"LOCKT|lockfees|wsol=357197|burnpool=285758|operator=71439|paid=71439|pending=0|burned=189027580233|nft=D6ZTNvkuaM8R|v2\"",
+      "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 43237 of 196981 compute units",
+      "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 1573 of 150041 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 254232 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "5vchyCzCe8HtxfHE49UfuysNgAqTbtfv8eckoRvxzrND",
+      "kind": "lamports",
+      "state": {
+        "lamports": 20658019
+      }
+    },
+    {
+      "address": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+      "kind": "lamports",
+      "state": {
+        "lamports": 2219307
+      }
+    },
+    {
+      "address": "26rU845tC6Rrr7HARwS2xFiTMKgJMdWu9hUZQ6uQR4Wq",
+      "kind": "lamports",
+      "state": {
+        "lamports": 2306320
+      }
+    }
+  ]
+}

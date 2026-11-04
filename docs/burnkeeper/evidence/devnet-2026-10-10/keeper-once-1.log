@@ -1,0 +1,21 @@
+[2026-10-10 16:16:16Z] burn keeper starting — $DEFICIT (rule DEBT, sha256:b9ad29b48ef1) · execution program · devnet · ledger data/burnkeeper-devnet.db · site data/burnkeeper-devnet-site
+[2026-10-10 16:16:16Z] cluster devnet · EXECUTION program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM · mode buyback · mint 4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F · fee PDA 3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a · attesters 1 (quorum 1) · pool 5RoGVSCTBmcTSXdUgoktteBAi5sXTrax7QiJ6rh8hNyR · keeper D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn (pays fees, signs readings) · rules sha256:b9ad29b48ef1
+[2026-10-10 16:16:17Z]   [feed] 2026-10-05 $40249104431078.48 — baseline (nothing is burned for the first reading)
+[2026-10-10 16:16:17Z]   [feed] 2026-10-06 $40273024579219.17 — 23 unit(s): burn planned
+[2026-10-10 16:16:17Z]   [feed] 2026-10-07 $40284036147367.19 — 11 unit(s): burn planned
+[2026-10-10 16:16:17Z]   [feed] 2026-10-08 $40305316210829.72 — 22 unit(s): burn planned
+[2026-10-10 16:16:18Z]   [attest] 2026-10-05: $40249104431078.48 attested and submitted (the program counted 0 unit(s)) — 2MoVGRc3UfZQGPKr6EeP25iL81LkJPcWChYkxD7jTFcN5GQTaYySxap89HawK9fothbNHQFXqzfmhWFaGYaV6N3y
+[2026-10-10 16:16:20Z]   [attest] 2026-10-06: $40273024579219.17 attested and submitted (the program counted 23 unit(s)) — 48z66Ct4FSRHN9i9ixohaqGTBjAY6TAdA2kd3sYCFLRX1u9ybDkz21PZGnV12mypy8RvnkQN1D6SfVUiacBkUnry
+[2026-10-10 16:16:21Z]   [attest] 2026-10-07: $40284036147367.19 attested and submitted (the program counted 11 unit(s)) — 63v24yDMcGHh7LT4HD8j3xHk6uZhSJsZuZ1co9jo99rmc4ruCwX2vCZJRRjW7yfi29dSt37CoeHQZ1zZUhngdKSe
+[2026-10-10 16:16:23Z]   [attest] 2026-10-08: $40305316210829.72 attested and submitted (the program counted 22 unit(s)) — 64SV55oiFpAyxhZsh3dqNniH3RxyBCBMhMBAjad3CzubJjEP9cVUEJtJwudJcbjEKr9gZUw3dcgZssjoKr1EECLW
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 2000ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+[2026-10-10 16:16:30Z]   [fees] creator fees moved into the fee PDA: 33vVy1QY1x5pSzRR5YhpjxAsSwhakjXgTPiy2mFDpjutZB7C8FkRQAxvWT33CamTebVXJDfSS5GEpKhjFyrwRjs7
+[2026-10-10 16:16:30Z]   [fees] creator fees moved into the fee PDA: RHTuiM8b3oRfiooqE3iA5KkmEchgz2N4yy4sLCDimUnv7xXiPyaUFjcz4U8Y9ESZMFA2y3C8Mw4MLN5mya5dtwZ
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+[2026-10-10 16:16:35Z]   [pool] check_pool_health: pool tradeable · 3aKTy5YuQ3CQzYJorxDAbx33rVBKzir9CqjNiz3AzbKFT4UUNsmzX5SCDEHtqhJhweaKHheF2ubypyPrdrsdZZ4W
+[2026-10-10 16:16:35Z]   [program] 2026-10-06: crank_buyback deferred by the program (TwapUnavailable) — waiting for TWAP history — the pool's oracle needs 600–1,200 s of observations before the program will buy (late, never lost)
+[2026-10-10 16:16:35Z] burn keeper stopped

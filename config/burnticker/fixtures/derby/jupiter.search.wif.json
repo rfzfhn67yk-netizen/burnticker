@@ -1,0 +1,323 @@
+{
+ "fetchedAt": "2026-10-10T21:50:00Z",
+ "source": "https://lite-api.jup.ag/tokens/v2/search?query=wif",
+ "note": "trimmed to the fields Burn Derby reads",
+ "body": [
+  {
+   "id": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+   "name": "dogwifhat",
+   "symbol": "$WIF",
+   "decimals": 6,
+   "circSupply": 998837273.197508,
+   "totalSupply": 998837273.197508,
+   "liquidity": 6497073.603400052,
+   "mcap": 217993488.0351596,
+   "usdPrice": 0.2182472499622609,
+   "isVerified": true,
+   "tags": [
+    "community",
+    "moonshot-verified",
+    "strict",
+    "verified",
+    "meme"
+   ]
+  },
+  {
+   "id": "5tCju6YNxHq5zrA6tGndr6F7TK42mpUFmeE31cSFpump",
+   "name": "cat wif sword",
+   "symbol": "swordcat",
+   "decimals": 6,
+   "circSupply": 960011117.806588,
+   "totalSupply": 960011117.806588,
+   "liquidity": 373637.89411066455,
+   "mcap": 2508014.8956185514,
+   "usdPrice": 0.0026124852609507353,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ],
+   "twitter": "https://x.com/catwifswordsoll/status/2104490990811926792",
+   "website": "https://x.com/SoyLaMejori/status/2103894236466761867"
+  },
+  {
+   "id": "B1UruZt969UkzY6vAGD8H82pPRkFoHJv4dKMHsv9pump",
+   "name": "Retard Wif Sword",
+   "symbol": "RWS",
+   "decimals": 6,
+   "circSupply": 898937116.371872,
+   "totalSupply": 898937116.371872,
+   "liquidity": 12668.037519390358,
+   "mcap": 2365.7779904505683,
+   "usdPrice": 0.0000026317502607956552,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ],
+   "twitter": "https://x.com/RetardWifSword",
+   "website": "https://retardwifsword.fun/"
+  },
+  {
+   "id": "FV8fzQvgDM2jxL8mzmneFAC24rDhzPR5W8ZFydeXpump",
+   "name": "Jean phil's wife",
+   "symbol": "brigitte",
+   "decimals": 6,
+   "circSupply": 972923437.702637,
+   "totalSupply": 972923437.702637,
+   "liquidity": 14462.049405294307,
+   "mcap": 126836.46218448912,
+   "usdPrice": 0.00013036633435821828,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ]
+  },
+  {
+   "id": "E4sbkHSpUGvoUXLHZRkcLveEwD6iB268YsgXiWoHpump",
+   "name": "Gimme Your WiFi ",
+   "symbol": "WIFI",
+   "decimals": 6,
+   "circSupply": 999999134.438425,
+   "totalSupply": 999999134.438425,
+   "liquidity": 4597.240389183471,
+   "mcap": 6018.1908210340625,
+   "usdPrice": 0.000006018196030153297,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ]
+  },
+  {
+   "id": "6JrR1iqPdinYTNvNPWTR2P7e2wSJ1rwdsrKGyhnzjUVr",
+   "name": "wifout",
+   "symbol": "wifout",
+   "decimals": 6,
+   "circSupply": 999752945.808552,
+   "totalSupply": 999752945.808552,
+   "liquidity": 24929.54652100773,
+   "mcap": 191366.01212388455,
+   "usdPrice": 0.00019141330158233935,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ],
+   "twitter": "https://x.com/LaunchOnSF/status/2098147516449800337"
+  },
+  {
+   "id": "45qc5sPDRrEzqxBwqY6F2iNnbzQYHUWTMbtqLVBGpump",
+   "name": "Hasbulla Wif Sword",
+   "symbol": "HASBULLA",
+   "decimals": 6,
+   "circSupply": 1000000000,
+   "totalSupply": 1000000000,
+   "liquidity": 3604.9973972442817,
+   "mcap": 3661.447313616419,
+   "usdPrice": 0.0000036614473136164187,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ]
+  },
+  {
+   "id": "Gwie4jhUTdCbMLjHyxVdJYi7MsH5tfsc7a7RiFy1pump",
+   "name": "cat wif rocket",
+   "symbol": "rocketcat",
+   "decimals": 6,
+   "circSupply": 939984156.462852,
+   "totalSupply": 939984156.462852,
+   "liquidity": 4501.9235557064385,
+   "mcap": 23583.480209620287,
+   "usdPrice": 0.000025089231608290733,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ]
+  },
+  {
+   "id": "EUrva7z4NwzJkhgU6ccimqNgiMeJDu6pjhmMMfVP3Co1",
+   "name": "dogwifsama",
+   "symbol": "wifsama",
+   "decimals": 6,
+   "circSupply": 999318011.228118,
+   "totalSupply": 999318011.228118,
+   "liquidity": 1921.4912842887074,
+   "mcap": 1967.097229092015,
+   "usdPrice": 0.0000019684396828538484,
+   "tags": [
+    "unknown"
+   ]
+  },
+  {
+   "id": "6Rwcmkz9yiYVM5EzyMcr4JsQPGEAWhcUvLvfBperYnUt",
+   "name": "Kitten Wif Hat",
+   "symbol": "KWIF",
+   "decimals": 6,
+   "circSupply": 996081071.920629,
+   "totalSupply": 996081071.920629,
+   "liquidity": 38892.25684421151,
+   "mcap": 233210.5023417009,
+   "usdPrice": 0.0002341280332654327,
+   "isVerified": true,
+   "tags": [
+    "community",
+    "verified",
+    "meme"
+   ]
+  },
+  {
+   "id": "CEVvhUZXHC9iH9L6witLYaEj2eSs4hz3SfTJNtudpump",
+   "name": "Pug Wif Lollipop",
+   "symbol": "PUGKNIGHT",
+   "decimals": 6,
+   "circSupply": 999999999.998658,
+   "totalSupply": 999999999.998658,
+   "liquidity": 3290.9777058399463,
+   "mcap": 3068.734954563166,
+   "usdPrice": 0.0000030687349545672845,
+   "tags": [
+    "token-2022",
+    "unknown"
+   ]
+  },
+  {
+   "id": "HT97AY7PZ5S341qdEyyvRD6iQjtLXcrJwS5Lrbuspump",
+   "name": "Quantum Wif Hat",
+   "symbol": "QWH",
+   "decimals": 6,
+   "circSupply": 972840998.983515,
+   "totalSupply": 972840998.983515,
+   "liquidity": 172.31916124636726,
+   "mcap": 2098.856113527827,
+   "usdPrice": 0.000002157450308653565,
+   "tags": [
+    "token-2022",
+    "unknown"
+   ],
+   "twitter": "https://x.com/QuantumWifHat",
+   "website": "https://quantumwifhat.pro"
+  },
+  {
+   "id": "4kgpGJ5Xwc7wbdfhM6mW2yRpSRkkU55YSzH6KgxGpump",
+   "name": "dog wif cap",
+   "symbol": "cap",
+   "decimals": 6,
+   "circSupply": 1000000000,
+   "totalSupply": 2000000000,
+   "liquidity": 24362.721086259728,
+   "mcap": 25561.40803540371,
+   "usdPrice": 0.00002556140803540371,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ]
+  },
+  {
+   "id": "DZaQRdmPHNaqNsMVqRU8P4q5f2mErab4GipPghowFvaz",
+   "name": "Giraffe Wif Cap",
+   "symbol": "GIF",
+   "decimals": 6,
+   "circSupply": 981406359.601631,
+   "totalSupply": 981406359.601631,
+   "liquidity": 3377.832264220877,
+   "mcap": 11445.53656527923,
+   "usdPrice": 0.000011662382715682789,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ],
+   "twitter": "https://x.com/Bymotionn/status/2107974590961979424"
+  },
+  {
+   "id": "FDQ6JUoBn6rzd9AVZHceh64wfMGtL8WPDDLS8KA4xBrk",
+   "name": "Giraffe Wif Cap",
+   "symbol": "Aya",
+   "decimals": 6,
+   "circSupply": 1000000000,
+   "totalSupply": 1000000000,
+   "liquidity": 3453.4721060668744,
+   "mcap": 3228.8235232291213,
+   "usdPrice": 0.0000032288235232291214,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ],
+   "twitter": "https://x.com/i/status/2107985483272015982"
+  },
+  {
+   "id": "3BCrhsEpcJT3B5kyfhni432LZTqVjRCYgHiBNN76pump",
+   "name": "cat wif rpg ",
+   "symbol": "RPGCAT",
+   "decimals": 6,
+   "circSupply": 1000000000,
+   "totalSupply": 1000000000,
+   "liquidity": 3333.0576090830973,
+   "mcap": 3235.7070671229844,
+   "usdPrice": 0.0000032357070671229842,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ],
+   "twitter": "https://x.com/noobKOVRAA/status/2108977117614473316"
+  },
+  {
+   "id": "2Vm7DW34Ug6mTFXTbN78GBHUaULAwSvXXZHicXtVpump",
+   "name": "pigeon wif hat",
+   "symbol": "pigeonwif",
+   "decimals": 6,
+   "circSupply": 1000000000,
+   "totalSupply": 1000000000,
+   "liquidity": 3294.3774679789867,
+   "mcap": 3160.2918781869935,
+   "usdPrice": 0.0000031602918781869936,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ]
+  },
+  {
+   "id": "GcZRWEbEzf6He8Ffb5UMDRAshGHcNMDd25z73n3mpump",
+   "name": "musk wif chainsaw",
+   "symbol": "SAWMUSK",
+   "decimals": 6,
+   "circSupply": 1000000000,
+   "totalSupply": 1000000000,
+   "liquidity": 3326.0284022085157,
+   "mcap": 3264.0650352207686,
+   "usdPrice": 0.0000032640650352207687,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ]
+  },
+  {
+   "id": "AoEVKXLkxwCq6vvEvc8ziV9ZhjBJ7dpWZgwb5nQCpump",
+   "name": "dog wif suit",
+   "symbol": "Mandu",
+   "decimals": 6,
+   "circSupply": 999999999.999999,
+   "totalSupply": 999999999.999999,
+   "liquidity": 3315.1378914755883,
+   "mcap": 3252.1582185465345,
+   "usdPrice": 0.0000032521582185465377,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ],
+   "twitter": "https://x.com/imoffchain/status/2108974366893707286?s=20"
+  },
+  {
+   "id": "552HFVkHTuiXYbGDNJ6EuhHEMyMhmRgi5KVsqDpPpump",
+   "name": "Super Inu Wif Hat",
+   "symbol": "SIWIF",
+   "decimals": 6,
+   "circSupply": 1000000000,
+   "totalSupply": 1000000000,
+   "liquidity": 3555.3325896337387,
+   "mcap": 3313.830259992169,
+   "usdPrice": 0.000003313830259992169,
+   "tags": [
+    "unknown",
+    "token-2022"
+   ]
+  }
+ ]
+}

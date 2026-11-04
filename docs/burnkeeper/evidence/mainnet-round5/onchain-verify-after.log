@@ -1,0 +1,4 @@
+# verified-build.sh --onchain mainnet, read-only, 2026-10-16 (after the round-5 execute)
+MATCH  mainnet burn_receipts AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM 152929ce72292d2113655c09a193a15cb49443109e4db202efdbc68232520821
+MATCH  mainnet pair_curve 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN 567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895
+burn_receipts ProgramData CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn: last deployed slot 457461970, upgrade authority 8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV (the Squads vault), 1,028,929 code bytes in 1,029,776 B

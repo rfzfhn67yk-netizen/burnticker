@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B2 og</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500&family=Barlow+Condensed:wght@500;600&display=block" rel="stylesheet">
+<link rel="stylesheet" href="flap.css">
+<style>
+  html,body{margin:0;width:1200px;height:630px;overflow:hidden;background:#131312}
+  body{position:relative;font-family:'Barlow Condensed',sans-serif}
+  .board{position:absolute;inset:0;background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 4px),
+    linear-gradient(170deg,#1a1a19 0%,#111110 100%);}
+  .wm{position:absolute;left:60px;top:70px;--w:92px;--h:128px;--fs:104px}
+  .l1,.l2{position:absolute;left:60px;--w:33px;--h:46px;--fs:37px}
+  .l1{top:250px}.l2{top:306px}
+  .cols{position:absolute;left:60px;top:396px;color:#8e8a80;font-size:15px;letter-spacing:3px;text-transform:uppercase;width:1100px;height:16px}
+  .cols span{position:absolute;top:0}
+  .ev{position:absolute;left:60px;top:418px;--w:25px;--h:36px;--fs:29px}
+  .foot{position:absolute;left:60px;top:496px;color:#ece8dc;font-size:22px;letter-spacing:2px;text-transform:uppercase}
+  .foot i{font-style:normal;color:#8e8a80;margin-right:8px}
+  .disc{position:absolute;left:60px;top:574px;color:#6c6960;font-size:16px;letter-spacing:1.5px}
+</style></head>
+<body>
+<div class="board"></div>
+<div class="wm" id="wm"></div>
+<div class="l1" id="l1"></div>
+<div class="l2" id="l2"></div>
+<div class="cols"><span style="left:0">Feed</span><span style="left:389px">Date</span><span style="left:555px">Reading</span><span style="left:805px">Units</span><span style="left:888px">Burned</span></div>
+<div class="ev" id="ev"></div>
+<div class="foot"><i>Feeds</i> Treasury debt · solar flares · orbital launches · asteroid passes <i style="margin-left:20px">Rules</i> locked at launch</div>
+<div class="disc">a memecoin launchpad — the rule says what supply does, not what price does</div>
+<script src="flap.js"></script>
+<script>
+  flapRow(document.getElementById('wm'),'BURNTICKER',{flipAt:8,flipFrom:'L'});
+  flapRow(document.getElementById('l1'),'SUPPLY BURNS ON REAL EVENTS');
+  flapRow(document.getElementById('l2'),'EVERY BURN HAS A RECEIPT',{amberFrom:17,amberTo:24});
+  flapRow(document.getElementById('ev'),'TREASURY.DEBT'+' '+'10-08'+' '+'+21.284B'+' '+'21'+' '+'2.10M ',{amberFrom:32,amberTo:38});
+</script>
+</body></html>

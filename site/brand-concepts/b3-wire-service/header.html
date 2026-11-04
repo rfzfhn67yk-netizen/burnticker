@@ -1,0 +1,40 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B3 header</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Courier+Prime:wght@400;700&display=block" rel="stylesheet">
+<style>
+  :root{--paper:#e8e7e1;--ink:#141414;--red:#d9301c}
+  html,body{margin:0;width:1500px;height:500px;overflow:hidden;background:var(--paper)}
+  body{position:relative;color:var(--ink);font-family:'Courier Prime',monospace}
+  .grain{position:absolute;inset:0;opacity:.11;mix-blend-mode:multiply;pointer-events:none}
+  .tape{position:absolute;left:0;top:0;width:1500px;height:56px;background:#dedcd3;box-shadow:0 1px 0 rgba(0,0,0,.25)}
+  .tape svg{position:absolute;inset:0}
+  .rule{position:absolute;left:0;width:1500px;background:var(--ink)}
+  .mast{position:absolute;left:400px;top:84px;font-family:'Archivo Black',sans-serif;font-size:92px;line-height:1;letter-spacing:-2px;white-space:nowrap;filter:url(#typo)}
+  .mast i{font-style:normal;color:var(--red);margin-left:22px}
+  .dateline{position:absolute;left:402px;top:196px;font-size:20px;letter-spacing:4px;white-space:nowrap;filter:url(#typo)}
+  .dateline b{display:inline-block;background:var(--red);color:var(--paper);font-weight:700;padding:1px 10px 0;margin-left:16px;letter-spacing:5px}
+  .body{position:absolute;left:402px;top:250px;font-size:19px;letter-spacing:2px;line-height:34px;filter:url(#typo);white-space:nowrap}
+  .body s{text-decoration:none;position:relative;color:#5a5955}
+  .body s:after{content:"";position:absolute;left:-2px;right:-2px;top:52%;height:3px;background:var(--red)}
+  .end{position:absolute;left:402px;top:356px;font-size:18px;letter-spacing:6px;color:#5a5955}
+  .disc{position:absolute;left:402px;top:398px;font-size:15px;letter-spacing:1.5px;color:#6a6964}
+  .slug{position:absolute;right:40px;top:96px;font-size:16px;letter-spacing:3px;color:#5a5955;text-align:right;line-height:24px}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="typo" x="-2%" y="-2%" width="104%" height="104%"><feTurbulence type="fractalNoise" baseFrequency=".95" numOctaves="2" seed="5" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.5"/></filter>
+  <filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".75" numOctaves="3" stitchTiles="stitch"/></filter>
+</svg>
+<svg class="grain" width="1500" height="500"><rect width="1500" height="500" filter="url(#g)"/></svg>
+<div class="tape"><svg id="tape" viewBox="0 0 1500 56" width="1500" height="56"></svg></div>
+<div class="rule" style="top:62px;height:6px"></div>
+<div class="rule" style="top:72px;height:1px"></div>
+<div class="mast">BURNTICKER<i>WIRE</i></div>
+<div class="dateline">SOLANA — 2026-10-08 — 16:31 ET — TREASURY.DEBT — TAKE 1<b>FLASH</b></div>
+<div class="body">DEBT TO THE PENNY ROSE $21,284,113,007 ON THE DAY — TWENTY-ONE UNITS OF $1B.<br>2,100,000 DEFICIT BOUGHT BACK WITH FEES AND BURNED. RECEIPT 5XQM7…KR7A.<br>SUPPLY <s>1,000,000,000</s> 997,900,000 — SOURCE ROW, ARITHMETIC, RULE HASH ON-CHAIN.</div>
+<div class="end">— MORE —</div>
+<div class="disc">memecoins — the rule says what supply does, not what price does</div>
+<script src="wire.js"></script>
+<script>punchTape(document.getElementById('tape'),'BURNTICKER WIRE ',{pitch:20,r:4.4,sprocket:1.8,height:56});</script>
+</body></html>

@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>D1 avatar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&display=block" rel="stylesheet">
+<link rel="stylesheet" href="seg.css">
+<style>
+  html,body{margin:0;width:800px;height:800px;overflow:hidden;background:#0a0a0a}
+  body{position:relative;font-family:'Oswald',sans-serif}
+  .housing{position:absolute;inset:0;background:linear-gradient(180deg,#141414,#0b0b0b 40%,#070707)}
+  .face{position:absolute;left:72px;top:72px;right:72px;bottom:72px;background:#030303;
+    box-shadow:inset 0 0 0 2px #1c1c1c, inset 0 0 0 3px #000, inset 0 10px 24px rgba(0,0,0,.9);}
+  .bolt{position:absolute;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#3a3a3a,#111 70%)}
+  .marquee{position:absolute;left:120px;top:122px;color:#f1eee6;font-weight:700;font-size:96px;letter-spacing:6px;line-height:1}
+  .label{position:absolute;left:124px;top:232px;color:#8f8b82;font-weight:500;font-size:20px;letter-spacing:5px}
+  .main{position:absolute;left:124px;top:290px;--w:138px;--h:250px}
+  .strap{position:absolute;left:124px;top:588px;color:#f1eee6;font-weight:500;font-size:33px;letter-spacing:5px;line-height:1}
+  .sub{position:absolute;left:124px;top:636px;color:#8f8b82;font-weight:500;font-size:19px;letter-spacing:3px}
+</style></head>
+<body>
+<div class="housing"></div><div class="face"></div>
+<div class="bolt" style="left:84px;top:84px"></div><div class="bolt" style="right:84px;top:84px"></div>
+<div class="bolt" style="left:84px;bottom:84px"></div><div class="bolt" style="right:84px;bottom:84px"></div>
+<div class="marquee">$DEFICIT</div>
+<div class="label">ONE BURN PER</div>
+<div class="main" id="main"></div>
+<div class="strap">BURNS WHEN AMERICA BORROWS</div>
+<div class="sub">U.S. DEBT TO THE PENNY · EVERY BUSINESS DAY · WITH A RECEIPT</div>
+<script src="seg.js"></script>
+<script>seg7(document.getElementById('main'),'$1b');</script>
+</body></html>

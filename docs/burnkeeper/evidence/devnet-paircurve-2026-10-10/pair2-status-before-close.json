@@ -1,0 +1,74 @@
+{
+  "command": "status",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "3WzEhdXaWZVA8K21rywXzgwK3RktQzPmxsWfZvcDb9fh",
+  "exists": true,
+  "status": "voided",
+  "phase": "voided",
+  "deadline": "2026-10-10T23:15:54.000Z",
+  "vault": "83awQv1zQxLdSqgeXNRKui8ZqHEzaZiP1sTcVRgAkEGk",
+  "vaultLamports": 650240,
+  "devWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+  "sides": [
+    {
+      "side": "A",
+      "mint": "3YDPagcYCMggYEEmQNLPpPQK5rWibRD8fE5GdEMVGChg",
+      "supplyRaw": "1000000000000000",
+      "sold": "0",
+      "sol": "0",
+      "burnPool": "CB3cvXpYHC8SPNiu62wfczbVjrSn5LENVKvUxA5aGZrf",
+      "burnPoolLamports": 20519802,
+      "burnFees": "519802",
+      "devFees": "173264",
+      "trades": 4,
+      "pool": "11111111111111111111111111111111",
+      "poolSol": "0",
+      "poolTokens": "0",
+      "lpSupplyAtCreation": "0",
+      "lpBurned": "0",
+      "tokensBurned": "0",
+      "tokenConfig": {
+        "registrationPolicy": 2,
+        "cpmmPool": "11111111111111111111111111111111",
+        "poolVerified": false,
+        "burns": 0,
+        "totalBurned": "0"
+      }
+    },
+    {
+      "side": "B",
+      "mint": "EwPkr3SmMurWmX7JX5C9Gca1qvzfdsgtkATWozpjqNTr",
+      "supplyRaw": "1000000000000000",
+      "sold": "0",
+      "sol": "0",
+      "burnPool": "GhgVRikYbvGEoakZ3uzixjUPr3SEs4BQkzwH5RgsyGHA",
+      "burnPoolLamports": 20445544,
+      "burnFees": "445544",
+      "devFees": "148514",
+      "trades": 2,
+      "pool": "11111111111111111111111111111111",
+      "poolSol": "0",
+      "poolTokens": "0",
+      "lpSupplyAtCreation": "0",
+      "lpBurned": "0",
+      "tokensBurned": "0",
+      "tokenConfig": {
+        "registrationPolicy": 2,
+        "cpmmPool": "11111111111111111111111111111111",
+        "poolVerified": false,
+        "burns": 0,
+        "totalBurned": "0"
+      }
+    }
+  ],
+  "params": {
+    "virtualSol": "300000000",
+    "virtualToken": "1073000000000000",
+    "curveSupply": "793100000000000",
+    "reserve": "206900000000000",
+    "targetRaise": "650000000",
+    "minSideShareBps": 3000
+  }
+}

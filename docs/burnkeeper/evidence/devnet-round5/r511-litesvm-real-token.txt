@@ -1,0 +1,60 @@
+# R5-11 pre-check 2026-10-15: LiteSVM suites with the REAL SPL Token + ATA programs dumped from mainnet-beta (and identical on devnet)
+# Tokenkeg sha256 8190d3f7ceb6cb7a7a8d8924bff89f9f611e15ce1f806f2b6237f3311a98f697 (108,600 B), ATA sha256 6804554e69fd3a58caa191dc4a58f4c67223d30ca28ab8987f39fc18d2f7374d (105,032 B)
+# REVIEW_TOKEN_SO=<dump> REVIEW_ATA_SO=<dump> cargo test -p burn_receipts --test end_sink --test burn_target --test carried -- --test-threads=1
+# control: REVIEW_TOKEN_SO=<4,000 zero bytes> panics at add_program, so the override is live
+test a_cpmm_target_is_re_pinned_to_an_amm_v4_pool_and_then_cranks_there ... ok
+test a_fee_tier_raised_above_one_percent_after_the_pin_holds_the_sol_and_never_wedges ... ok
+test a_feed_that_is_not_the_pools_market_cannot_be_pinned ... ok
+test a_jito_style_push_crank_push_back_is_refused_by_the_pyth_guard ... ok
+test a_pool_that_disappears_holds_the_sol ... ok
+test a_pool_under_the_floor_holds_the_sol_then_the_queue_unblocks_after_thirty_days ... ok
+test a_re_pin_to_a_pool_that_fails_admission_is_refused ... ok
+test a_stale_snapshot_cannot_force_the_thirty_day_carry_on_a_healthy_target ... ok
+test a_target_coin_swaps_sol_for_the_target_on_the_pinned_pool_and_burns_it ... ok
+test a_target_is_pinned_only_once_and_only_before_the_coin_exists ... ok
+test a_target_with_more_than_eighteen_decimals_is_refused ... ok
+test admission_refuses_a_wrong_mint_pool_a_thin_pool_and_a_high_fee_tier ... ok
+test admission_refuses_token_2022_freeze_and_mint_authorities ... ok
+test after_the_platform_cap_sunsets_a_crank_spends_two_percent_of_the_pool_and_a_push_is_still_refused ... ok
+test amm_v4_admission_refuses_a_pool_not_swap_only_a_high_fee_a_wrong_authority_and_a_reserve_under_the_floor_after_pnl ... ok
+test an_amm_v4_target_burns_through_swap_base_in_v2_with_the_pyth_floor_on_its_output ... ok
+test another_pool_cannot_be_substituted_and_the_target_is_never_guessed ... ok
+test crank_buyback_refuses_a_coin_with_a_target ... ok
+test r5_12_a_target_coins_own_pool_registration_leaves_pool_verified_false ... ok
+test r5_1_a_target_coins_end_burn_waits_for_its_result_reading ... ok
+test r5_2_a_pool_inside_the_band_but_under_the_pyth_min_out_is_held_then_unblocked ... ok
+test r5_5_pin_burn_target_requires_an_end_sink ... ok
+test r5_6_a_stalled_target_releases_its_carry_to_the_flagship ... ok
+test r5_6_a_target_that_burns_is_never_released ... ok
+test r5_7_pyth_never_goes_backwards_and_the_two_feeds_must_agree_in_time ... ok
+test stale_wide_future_partial_or_foreign_pyth_accounts_never_price_a_crank ... ok
+test the_per_crank_spend_is_capped_at_two_percent_of_the_target_pools_sol_reserve ... ok
+test the_pool_is_re_pinned_only_after_the_timelock_and_an_attester_can_veto ... ok
+test the_target_crank_in_the_keepers_shape_fits_a_legacy_transaction ... ok
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.58s
+test a_carried_spend_drains_in_three_capped_pieces_without_touching_readings ... ok
+test a_piece_above_the_per_crank_cap_is_refused_not_clamped ... ok
+test a_waiting_reading_is_always_cranked_first ... ok
+test refused_with_nothing_carried_and_for_a_zero_piece ... ok
+test the_twap_guard_holds_a_piece_against_a_pushed_price ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+test a_forward_on_end_is_capped_and_a_reading_after_a_resolved_end_never_cranks ... ok
+test a_named_sink_receives_while_live_and_the_flagship_otherwise ... ok
+test a_named_sink_that_never_launched_falls_to_the_flagship_and_the_first_forward_ignores_the_minimum ... ok
+test a_pair_sides_remainder_goes_to_the_partner_that_won_the_final_period_else_the_flagship ... ok
+test a_resolved_coin_forwards_its_remaining_fuel_and_later_trickle_to_the_flagship ... ok
+test a_resolved_coin_without_a_pool_forwards_despite_its_uncrankable_reading ... ok
+test a_resolved_incinerator_coin_sends_its_sol_to_the_incinerator_and_nothing_else_moves ... ok
+test a_round3_token_config_reads_and_cranks_unchanged_under_round4 ... ok
+test a_void_end_keeps_the_hashed_wind_down ... ok
+test an_end_sink_is_pinned_at_initialize_token_and_bad_ones_are_refused ... ok
+test an_r5_coin_keeps_self_on_the_won_path ... ok
+test burn_sol_on_end_refuses_other_sinks_and_void_ends ... ok
+test r5_3_crank_carried_runs_after_a_void_end ... ok
+test r5_4_a_resolved_end_forwards_only_the_fuel_above_the_carry_while_crank_carried_drains_it ... ok
+test r5_5_the_mainnet_build_retires_initialize_token ... ok
+test submit_rule_end_needs_an_end_sink_a_quorum_and_a_valid_date_and_runs_once ... ok
+test the_incinerator_sink_is_pinned_with_its_address_and_names_nothing_else ... ok
+test the_r5_create_refuses_self_on_the_lost_path_and_takes_every_other_sink ... ok
+test write_round3_token_config_fixture ... ignored, generator: run with the ROUND-3 test-pins build in target/deploy-test and R3_FIXTURE_OUT set
+test result: ok. 18 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 3.30s

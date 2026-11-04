@@ -1,0 +1,1403 @@
+{
+ "fetchedAt": "2026-10-10T17:31:39Z",
+ "note": "Gamma's open NFL moneyline markets by end date (page 1 of 50); pruned to the fields the adapter reads, values verbatim; prices are display only",
+ "gamma": {
+  "url": "https://gamma-api.polymarket.com/markets?tag_id=450&closed=false&order=endDate&ascending=true&limit=50&offset=0&sports_market_types=moneyline",
+  "body": [
+   {
+    "id": "4024655",
+    "question": "Eagles vs. Jaguars",
+    "conditionId": "0xc2cf94d904ba94a2d446c7fcda06fb3e62f0b3708ab0d1519b2904e84a1fb96b",
+    "questionID": "0x9fe9a2617e04409dd048204ddb2c0c9817cdaa8593bd3b918a4bd56155672745",
+    "slug": "nfl-phi-jax-2026-10-11",
+    "outcomes": "[\"Eagles\", \"Jaguars\"]",
+    "outcomePrices": "[\"0.235\", \"0.765\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T13:30:00Z",
+    "startDate": "2026-08-31T12:00:45Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.23,
+    "bestAsk": 0.24,
+    "lastTradePrice": 0.23,
+    "events": [
+     {
+      "id": "941330",
+      "slug": "nfl-phi-jax-2026-10-11",
+      "title": "Eagles vs. Jaguars",
+      "ticker": "nfl-phi-jax-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024657",
+    "question": "Bengals vs. Dolphins",
+    "conditionId": "0x030b74606dc6d85673931a49594d9601a64ce8afdfe97e7cc7ffd4895864316c",
+    "questionID": "0x69ef6a708513c0b4678d050726fc84ac203f266d6cb86428f058804e3ee38ff8",
+    "slug": "nfl-cin-mia-2026-10-11",
+    "outcomes": "[\"Bengals\", \"Dolphins\"]",
+    "outcomePrices": "[\"0.755\", \"0.245\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T17:00:00Z",
+    "startDate": "2026-08-31T12:00:46Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.75,
+    "bestAsk": 0.76,
+    "lastTradePrice": 0.76,
+    "events": [
+     {
+      "id": "941332",
+      "slug": "nfl-cin-mia-2026-10-11",
+      "title": "Bengals vs. Dolphins",
+      "ticker": "nfl-cin-mia-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024660",
+    "question": "Raiders vs. Patriots",
+    "conditionId": "0x625636ba175df2cf3d51809404716a52019cc7f4d96158225f755bd3eb15efff",
+    "questionID": "0x8ce8f830aab3ca6e21dde06ec889a42ad87443b57cc63f9c2a202b65172c8e34",
+    "slug": "nfl-lv-ne-2026-10-11",
+    "outcomes": "[\"Raiders\", \"Patriots\"]",
+    "outcomePrices": "[\"0.365\", \"0.635\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T17:00:00Z",
+    "startDate": "2026-08-31T12:00:45Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.36,
+    "bestAsk": 0.37,
+    "lastTradePrice": 0.37,
+    "events": [
+     {
+      "id": "941334",
+      "slug": "nfl-lv-ne-2026-10-11",
+      "title": "Raiders vs. Patriots",
+      "ticker": "nfl-lv-ne-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024664",
+    "question": "Vikings vs. Saints",
+    "conditionId": "0xfe12f4fdccaa16e65da0eed135d9fadee0b02d961f282633e21b98509a3b379d",
+    "questionID": "0x6648ded64d34bbd9a41a89994d71b49a640e5dcb0520008132dcfb8d9b82d645",
+    "slug": "nfl-min-no-2026-10-11",
+    "outcomes": "[\"Vikings\", \"Saints\"]",
+    "outcomePrices": "[\"0.565\", \"0.435\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T17:00:00Z",
+    "startDate": "2026-08-31T12:00:47Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.56,
+    "bestAsk": 0.57,
+    "lastTradePrice": 0.57,
+    "events": [
+     {
+      "id": "941335",
+      "slug": "nfl-min-no-2026-10-11",
+      "title": "Vikings vs. Saints",
+      "ticker": "nfl-min-no-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024666",
+    "question": "Browns vs. Jets",
+    "conditionId": "0xbfb4a383d3a8bdfb1f47a388eaf0534af7f56403e1571d3e1e1f2f074d27838f",
+    "questionID": "0x9bb11c3c333ef778902a69efc808186ee3870ffdff8afc5cae01ab2feae75f1e",
+    "slug": "nfl-cle-nyj-2026-10-11",
+    "outcomes": "[\"Browns\", \"Jets\"]",
+    "outcomePrices": "[\"0.435\", \"0.565\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T17:00:00Z",
+    "startDate": "2026-08-31T12:00:48Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.43,
+    "bestAsk": 0.44,
+    "lastTradePrice": 0.44,
+    "events": [
+     {
+      "id": "941337",
+      "slug": "nfl-cle-nyj-2026-10-11",
+      "title": "Browns vs. Jets",
+      "ticker": "nfl-cle-nyj-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024667",
+    "question": "Colts vs. Steelers",
+    "conditionId": "0xf7c106f4716d0572c0f38ba02defb9417d6b56be478f668e891d3f0272f507e8",
+    "questionID": "0x1f3e0f428dc81a9f0bbc90495b49137e1642c52a9fe2d953011911243c5f4746",
+    "slug": "nfl-ind-pit-2026-10-11",
+    "outcomes": "[\"Colts\", \"Steelers\"]",
+    "outcomePrices": "[\"0.425\", \"0.575\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T17:00:00Z",
+    "startDate": "2026-08-31T12:00:50Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.42,
+    "bestAsk": 0.43,
+    "lastTradePrice": 0.42,
+    "events": [
+     {
+      "id": "941338",
+      "slug": "nfl-ind-pit-2026-10-11",
+      "title": "Colts vs. Steelers",
+      "ticker": "nfl-ind-pit-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024668",
+    "question": "Texans vs. Titans",
+    "conditionId": "0x84756283070dc84074ea29cb7f3780eb733e49b407a069d0600c12f7b2d75953",
+    "questionID": "0xdc7105369949831e2b876b245bed8f04707c8ed87213bada07165f95b4a15766",
+    "slug": "nfl-hou-ten-2026-10-11",
+    "outcomes": "[\"Texans\", \"Titans\"]",
+    "outcomePrices": "[\"0.755\", \"0.245\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T17:00:00Z",
+    "startDate": "2026-08-31T12:00:50Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.75,
+    "bestAsk": 0.76,
+    "lastTradePrice": 0.76,
+    "events": [
+     {
+      "id": "941339",
+      "slug": "nfl-hou-ten-2026-10-11",
+      "title": "Texans vs. Titans",
+      "ticker": "nfl-hou-ten-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024671",
+    "question": "Giants vs. Commanders",
+    "conditionId": "0x9439c48ded4ed27d043d8f6d027292a2260d7629f538a1caa8267d4f5c43f691",
+    "questionID": "0xad397b99da043affdfb2e51e2d37814220cec5c26baf4b681d25d474c5cc6bb5",
+    "slug": "nfl-nyg-was-2026-10-11",
+    "outcomes": "[\"Giants\", \"Commanders\"]",
+    "outcomePrices": "[\"0.365\", \"0.635\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T17:00:00Z",
+    "startDate": "2026-08-31T12:00:50Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.36,
+    "bestAsk": 0.37,
+    "lastTradePrice": 0.37,
+    "events": [
+     {
+      "id": "941342",
+      "slug": "nfl-nyg-was-2026-10-11",
+      "title": "Giants vs. Commanders",
+      "ticker": "nfl-nyg-was-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024675",
+    "question": "Broncos vs. Chargers",
+    "conditionId": "0x95532ccb25b8f75736a52837bc964b4326f4e27b45eef12d52521890207bbc78",
+    "questionID": "0x8b0aa7fb0bb3a340883bf2fde1e5f64d39d1f5ef3a1dc0d152a3ed286ad8964e",
+    "slug": "nfl-den-lac-2026-10-11",
+    "outcomes": "[\"Broncos\", \"Chargers\"]",
+    "outcomePrices": "[\"0.635\", \"0.365\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T20:05:00Z",
+    "startDate": "2026-08-31T12:00:50Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.63,
+    "bestAsk": 0.64,
+    "lastTradePrice": 0.64,
+    "events": [
+     {
+      "id": "941343",
+      "slug": "nfl-den-lac-2026-10-11",
+      "title": "Broncos vs. Chargers",
+      "ticker": "nfl-den-lac-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024677",
+    "question": "Lions vs. Cardinals",
+    "conditionId": "0x54ab3ea34abb0577de6b341c33c59ec75ee80df89f0135451fe63809a9588392",
+    "questionID": "0x1f089581d14dfbc08dfba8df0ef27ca9a95c0980664c7186272362d2eead3e42",
+    "slug": "nfl-det-ari-2026-10-11",
+    "outcomes": "[\"Lions\", \"Cardinals\"]",
+    "outcomePrices": "[\"0.695\", \"0.305\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T20:25:00Z",
+    "startDate": "2026-08-31T12:00:49Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.69,
+    "bestAsk": 0.7,
+    "lastTradePrice": 0.7,
+    "events": [
+     {
+      "id": "941344",
+      "slug": "nfl-det-ari-2026-10-11",
+      "title": "Lions vs. Cardinals",
+      "ticker": "nfl-det-ari-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024678",
+    "question": "Bears vs. Packers",
+    "conditionId": "0x58251a1a43830e12c81e6f82691c3bdcad6550bfc6e43e0bf7ed479f4a5f8600",
+    "questionID": "0x26ffc40b7b34080c51a6d0490db4219437c46ac905c92d524fffeadc129b0566",
+    "slug": "nfl-chi-gb-2026-10-11",
+    "outcomes": "[\"Bears\", \"Packers\"]",
+    "outcomePrices": "[\"0.525\", \"0.475\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T20:25:00Z",
+    "startDate": "2026-08-31T12:00:53Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.52,
+    "bestAsk": 0.53,
+    "lastTradePrice": 0.52,
+    "events": [
+     {
+      "id": "941345",
+      "slug": "nfl-chi-gb-2026-10-11",
+      "title": "Bears vs. Packers",
+      "ticker": "nfl-chi-gb-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024680",
+    "question": "49ers vs. Seahawks",
+    "conditionId": "0xb8f8ac0fbc08449be5f6d4eff0bfe05d68d4feacce05b94f0318799f5a24186d",
+    "questionID": "0x111a776903418b11c5b7cf113a0292c58acdd34d5beb6b1eaecf0615fa7e47e3",
+    "slug": "nfl-sf-sea-2026-10-11",
+    "outcomes": "[\"49ers\", \"Seahawks\"]",
+    "outcomePrices": "[\"0.385\", \"0.615\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-11T20:25:00Z",
+    "startDate": "2026-08-31T12:00:52Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.38,
+    "bestAsk": 0.39,
+    "lastTradePrice": 0.39,
+    "events": [
+     {
+      "id": "941347",
+      "slug": "nfl-sf-sea-2026-10-11",
+      "title": "49ers vs. Seahawks",
+      "ticker": "nfl-sf-sea-2026-10-11"
+     }
+    ]
+   },
+   {
+    "id": "4024681",
+    "question": "Ravens vs. Falcons",
+    "conditionId": "0x82aa1f82105f9e33964821e1251a48153752a3b1c9b4a3e856fccedc490bbb12",
+    "questionID": "0xc72bc8c0b55eb41209713510107e4c592d3fe052806e27262a831f22ec6246b2",
+    "slug": "nfl-bal-atl-2026-10-12",
+    "outcomes": "[\"Ravens\", \"Falcons\"]",
+    "outcomePrices": "[\"0.385\", \"0.615\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-12T00:20:00Z",
+    "startDate": "2026-08-31T12:00:52Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.38,
+    "bestAsk": 0.39,
+    "lastTradePrice": 0.39,
+    "events": [
+     {
+      "id": "941348",
+      "slug": "nfl-bal-atl-2026-10-12",
+      "title": "Ravens vs. Falcons",
+      "ticker": "nfl-bal-atl-2026-10-12"
+     }
+    ]
+   },
+   {
+    "id": "4058840",
+    "question": "Bills vs. Rams",
+    "conditionId": "0x587a72a6a00a6e395178fcab9bf4398f5f15bb9b87c25c0dc3e1aef342c4f125",
+    "questionID": "0xa22e802d667b93e84e24c4e1118234350b3e6c90763e2af03091248ab52c441e",
+    "slug": "nfl-buf-la-2026-10-13",
+    "outcomes": "[\"Bills\", \"Rams\"]",
+    "outcomePrices": "[\"0.385\", \"0.615\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-13T00:15:00Z",
+    "startDate": "2026-09-01T12:00:47Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.38,
+    "bestAsk": 0.39,
+    "lastTradePrice": 0.39,
+    "events": [
+     {
+      "id": "947407",
+      "slug": "nfl-buf-la-2026-10-13",
+      "title": "Bills vs. Rams",
+      "ticker": "nfl-buf-la-2026-10-13"
+     }
+    ]
+   },
+   {
+    "id": "4212356",
+    "question": "Seahawks vs. Broncos",
+    "conditionId": "0xe0b5bd8eef80fe8976e2c287e0b76a5cda138ddc437acf95f9ba91112dbc983d",
+    "questionID": "0xf4b20a630a7ae3f15535518027e8f101347ff9b49443fa38b074ceaf7d938e1a",
+    "slug": "nfl-sea-den-2026-10-16",
+    "outcomes": "[\"Seahawks\", \"Broncos\"]",
+    "outcomePrices": "[\"0.56\", \"0.44\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-16T00:15:00Z",
+    "startDate": "2026-09-04T12:00:46Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.55,
+    "bestAsk": 0.57,
+    "lastTradePrice": 0.56,
+    "events": [
+     {
+      "id": "963984",
+      "slug": "nfl-sea-den-2026-10-16",
+      "title": "Seahawks vs. Broncos",
+      "ticker": "nfl-sea-den-2026-10-16"
+     }
+    ]
+   },
+   {
+    "id": "4329882",
+    "question": "Texans vs. Jaguars",
+    "conditionId": "0x073b358ca8a2fdcbee75fbe0cc3a93dea55a12ac1ff81cf15fd51257008aa9c8",
+    "questionID": "0x678fc09d4d83b21b5166d7687a3e8384c9d74aa3e7bbeb51d310b1df2ca038ba",
+    "slug": "nfl-hou-jax-2026-10-18",
+    "outcomes": "[\"Texans\", \"Jaguars\"]",
+    "outcomePrices": "[\"0.39\", \"0.61\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T13:30:00Z",
+    "startDate": "2026-09-07T12:00:44Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.37,
+    "bestAsk": 0.41,
+    "lastTradePrice": 0.41,
+    "events": [
+     {
+      "id": "982296",
+      "slug": "nfl-hou-jax-2026-10-18",
+      "title": "Texans vs. Jaguars",
+      "ticker": "nfl-hou-jax-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329883",
+    "question": "Bears vs. Falcons",
+    "conditionId": "0x14909dcf760f6946eaa6ad83984d6b2a43e378fb41a198f2b8f825d1314eb233",
+    "questionID": "0x0e58bd70d71525e767ce07cd69f654f9f907a37fc1198085e232975d47c6a06c",
+    "slug": "nfl-chi-atl-2026-10-18",
+    "outcomes": "[\"Bears\", \"Falcons\"]",
+    "outcomePrices": "[\"0.55\", \"0.45\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T17:00:00Z",
+    "startDate": "2026-09-07T12:00:46Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.53,
+    "bestAsk": 0.57,
+    "lastTradePrice": 0.57,
+    "events": [
+     {
+      "id": "982297",
+      "slug": "nfl-chi-atl-2026-10-18",
+      "title": "Bears vs. Falcons",
+      "ticker": "nfl-chi-atl-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329884",
+    "question": "Ravens vs. Browns",
+    "conditionId": "0x074b42abd259c29c1d0b35d6216713d0af4015ceb19fb35f7b39746e59467a01",
+    "questionID": "0x26a1d50a1afad7ded4b9beb7cdc111b2cd37ccf1f84094b2dba4054dc8197d92",
+    "slug": "nfl-bal-cle-2026-10-18",
+    "outcomes": "[\"Ravens\", \"Browns\"]",
+    "outcomePrices": "[\"0.635\", \"0.365\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T17:00:00Z",
+    "startDate": "2026-09-07T12:00:47Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.61,
+    "bestAsk": 0.66,
+    "lastTradePrice": 0.58,
+    "events": [
+     {
+      "id": "982298",
+      "slug": "nfl-bal-cle-2026-10-18",
+      "title": "Ravens vs. Browns",
+      "ticker": "nfl-bal-cle-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329885",
+    "question": "Titans vs. Colts",
+    "conditionId": "0x3989abdd195a6fcf09f922f6daef6bb51c07a037477359572d8498a867f19453",
+    "questionID": "0x6258d973cba8ef7353c55c43b1dd09cc30891d3023aaf895599899079ac138db",
+    "slug": "nfl-ten-ind-2026-10-18",
+    "outcomes": "[\"Titans\", \"Colts\"]",
+    "outcomePrices": "[\"0.265\", \"0.735\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T17:00:00Z",
+    "startDate": "2026-09-07T12:00:49Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.24,
+    "bestAsk": 0.29,
+    "events": [
+     {
+      "id": "982299",
+      "slug": "nfl-ten-ind-2026-10-18",
+      "title": "Titans vs. Colts",
+      "ticker": "nfl-ten-ind-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329886",
+    "question": "Jets vs. Patriots",
+    "conditionId": "0x65a6cac36d2a4f69c439911a9cd3807dc4801b93646f05bbd67c019942e8bad9",
+    "questionID": "0xf87acf0f93f4c8c3dfaac7726477836cac06e2d05ca7d370c42075ecb9525a52",
+    "slug": "nfl-nyj-ne-2026-10-18",
+    "outcomes": "[\"Jets\", \"Patriots\"]",
+    "outcomePrices": "[\"0.26\", \"0.74\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T17:00:00Z",
+    "startDate": "2026-09-07T12:00:49Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.24,
+    "bestAsk": 0.28,
+    "lastTradePrice": 0.41,
+    "events": [
+     {
+      "id": "982300",
+      "slug": "nfl-nyj-ne-2026-10-18",
+      "title": "Jets vs. Patriots",
+      "ticker": "nfl-nyj-ne-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329887",
+    "question": "Saints vs. Giants",
+    "conditionId": "0xe5699e9eeb4d985d52ced2156482d1f49c3c27806e68e8011f4a4d217799e84c",
+    "questionID": "0xec67eb1aa3257643bf1fdeeab48829f103ac657c731ba6f8be5255e3493d370d",
+    "slug": "nfl-no-nyg-2026-10-18",
+    "outcomes": "[\"Saints\", \"Giants\"]",
+    "outcomePrices": "[\"0.525\", \"0.475\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T17:00:00Z",
+    "startDate": "2026-09-07T12:00:49Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.5,
+    "bestAsk": 0.55,
+    "events": [
+     {
+      "id": "982301",
+      "slug": "nfl-no-nyg-2026-10-18",
+      "title": "Saints vs. Giants",
+      "ticker": "nfl-no-nyg-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329888",
+    "question": "Panthers vs. Eagles",
+    "conditionId": "0x4bf48ea200ba9d253d5445ff5522f2e90ac4970d82da5a9fff6621308b5beeac",
+    "questionID": "0x19f74db709735cb992fd92e31412e39d9d539ec5a3e1291bfcb612ad6ca938d0",
+    "slug": "nfl-car-phi-2026-10-18",
+    "outcomes": "[\"Panthers\", \"Eagles\"]",
+    "outcomePrices": "[\"0.48\", \"0.52\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T17:00:00Z",
+    "startDate": "2026-09-07T12:00:48Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.46,
+    "bestAsk": 0.5,
+    "lastTradePrice": 0.5,
+    "events": [
+     {
+      "id": "982302",
+      "slug": "nfl-car-phi-2026-10-18",
+      "title": "Panthers vs. Eagles",
+      "ticker": "nfl-car-phi-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329889",
+    "question": "Steelers vs. Buccaneers",
+    "conditionId": "0x47e4c09a578051fd4c18f9e2e4d5d8fddab846796bd2edaa3ba25448104b3b79",
+    "questionID": "0xc2cf81641fe831892cfd7954880d9de29179324050ba63f8add358e6294fb792",
+    "slug": "nfl-pit-tb-2026-10-18",
+    "outcomes": "[\"Steelers\", \"Buccaneers\"]",
+    "outcomePrices": "[\"0.56\", \"0.44\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T17:00:00Z",
+    "startDate": "2026-09-07T12:00:48Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.54,
+    "bestAsk": 0.58,
+    "lastTradePrice": 0.88,
+    "events": [
+     {
+      "id": "982303",
+      "slug": "nfl-pit-tb-2026-10-18",
+      "title": "Steelers vs. Buccaneers",
+      "ticker": "nfl-pit-tb-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329890",
+    "question": "Cardinals vs. Rams",
+    "conditionId": "0x4fed9ede15018d3a9b1f9c889716c8ac9a2a0f714b8941e83f7b9075ee9456c0",
+    "questionID": "0x2621e1cdd6a07906ce79f63a4dc9e9ffeb64771c2f734b84aac67caf6a371f97",
+    "slug": "nfl-ari-la-2026-10-18",
+    "outcomes": "[\"Cardinals\", \"Rams\"]",
+    "outcomePrices": "[\"0.155\", \"0.845\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T20:05:00Z",
+    "startDate": "2026-09-07T12:00:51Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.13,
+    "bestAsk": 0.18,
+    "lastTradePrice": 0.17,
+    "events": [
+     {
+      "id": "982304",
+      "slug": "nfl-ari-la-2026-10-18",
+      "title": "Cardinals vs. Rams",
+      "ticker": "nfl-ari-la-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329891",
+    "question": "Chargers vs. Chiefs",
+    "conditionId": "0xa70da744210533416edb26fb4ee19ea7a7acdaef6daabb5077c4dec89494b546",
+    "questionID": "0x796c5bd4165b5087c1eca77f3ec390e58b6700a0afe383da7d6fee6d082e03af",
+    "slug": "nfl-lac-kc-2026-10-18",
+    "outcomes": "[\"Chargers\", \"Chiefs\"]",
+    "outcomePrices": "[\"0.195\", \"0.805\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T20:25:00Z",
+    "startDate": "2026-09-07T12:00:51Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.17,
+    "bestAsk": 0.22,
+    "events": [
+     {
+      "id": "982305",
+      "slug": "nfl-lac-kc-2026-10-18",
+      "title": "Chargers vs. Chiefs",
+      "ticker": "nfl-lac-kc-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329892",
+    "question": "Bills vs. Raiders",
+    "conditionId": "0x6ac016fca71e24bcb0446a91b1d9ca155c728359e377ef422fa0345d92058436",
+    "questionID": "0xe8598e2a580e3cb04b8beec648e15749d16e299ed4ef7f4979db54602d1b9c78",
+    "slug": "nfl-buf-lv-2026-10-18",
+    "outcomes": "[\"Bills\", \"Raiders\"]",
+    "outcomePrices": "[\"0.69\", \"0.31\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-18T20:25:00Z",
+    "startDate": "2026-09-07T12:00:50Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.66,
+    "bestAsk": 0.72,
+    "lastTradePrice": 0.92,
+    "events": [
+     {
+      "id": "982306",
+      "slug": "nfl-buf-lv-2026-10-18",
+      "title": "Bills vs. Raiders",
+      "ticker": "nfl-buf-lv-2026-10-18"
+     }
+    ]
+   },
+   {
+    "id": "4329893",
+    "question": "Cowboys vs. Packers",
+    "conditionId": "0x340c1c3ad87ec9d60450284665ba1a386a213d818a9042fdfcc8e20e0521f624",
+    "questionID": "0x626531446701132ecefc074aba0e994504745fea5fb4e05d479014c2bb9c0931",
+    "slug": "nfl-dal-gb-2026-10-19",
+    "outcomes": "[\"Cowboys\", \"Packers\"]",
+    "outcomePrices": "[\"0.535\", \"0.465\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-19T00:20:00Z",
+    "startDate": "2026-09-07T12:00:50Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.51,
+    "bestAsk": 0.56,
+    "events": [
+     {
+      "id": "982307",
+      "slug": "nfl-dal-gb-2026-10-19",
+      "title": "Cowboys vs. Packers",
+      "ticker": "nfl-dal-gb-2026-10-19"
+     }
+    ]
+   },
+   {
+    "id": "4362230",
+    "question": "Commanders vs. 49ers",
+    "conditionId": "0xe899447d5c12318b14d086ce50f9efe77ae8db953b4e937f155e68ac0de8cc82",
+    "questionID": "0x2dfa4ef1664f32a6fdc8e44f8889f109da2dbd5f6872621d653f253adbdb7169",
+    "slug": "nfl-was-sf-2026-10-20",
+    "outcomes": "[\"Commanders\", \"49ers\"]",
+    "outcomePrices": "[\"0.215\", \"0.785\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-20T00:15:00Z",
+    "startDate": "2026-09-08T12:00:47Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.19,
+    "bestAsk": 0.24,
+    "lastTradePrice": 0.2,
+    "events": [
+     {
+      "id": "987958",
+      "slug": "nfl-was-sf-2026-10-20",
+      "title": "Commanders vs. 49ers",
+      "ticker": "nfl-was-sf-2026-10-20"
+     }
+    ]
+   },
+   {
+    "id": "4465810",
+    "question": "Patriots vs. Bears",
+    "conditionId": "0x3274464d5a09edb00cdb2f4e9243531eb9bb0a7a1003d6190f42f2f6a9f1f6c5",
+    "questionID": "0x974546ae0c111d83196dff20480f0e59b1b351958c699ab176f231cbf7e69d00",
+    "slug": "nfl-ne-chi-2026-10-23",
+    "outcomes": "[\"Patriots\", \"Bears\"]",
+    "outcomePrices": "[\"0.525\", \"0.475\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-23T00:15:00Z",
+    "startDate": "2026-09-11T12:00:51Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.31,
+    "bestAsk": 0.74,
+    "events": [
+     {
+      "id": "1004101",
+      "slug": "nfl-ne-chi-2026-10-23",
+      "title": "Patriots vs. Bears",
+      "ticker": "nfl-ne-chi-2026-10-23"
+     }
+    ]
+   },
+   {
+    "id": "4551269",
+    "question": "Steelers vs. Saints",
+    "conditionId": "0xf21c1426d2f0d964ae4c7bea7b320087ca9685d086202e0a1e62bf1dc4dcbf64",
+    "questionID": "0x68f6031adb1929d3a915c47a14e25ee61b4b80418ed6972d1c4d5d4ff4335626",
+    "slug": "nfl-pit-no-2026-10-25",
+    "outcomes": "[\"Steelers\", \"Saints\"]",
+    "outcomePrices": "[\"0.55\", \"0.45\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T13:30:00Z",
+    "startDate": "2026-09-14T12:00:46Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.48,
+    "bestAsk": 0.62,
+    "events": [
+     {
+      "id": "1022434",
+      "slug": "nfl-pit-no-2026-10-25",
+      "title": "Steelers vs. Saints",
+      "ticker": "nfl-pit-no-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551272",
+    "question": "49ers vs. Falcons",
+    "conditionId": "0x045d47e4eed1d18edd237ce94db4591ad917967da67131c7f2a74f8bd012ccba",
+    "questionID": "0x1e010be4e3fee630ccbeb742b9686be8a40c08a3091f8ae67e3befe4afdca3d4",
+    "slug": "nfl-sf-atl-2026-10-25",
+    "outcomes": "[\"49ers\", \"Falcons\"]",
+    "outcomePrices": "[\"0.69\", \"0.31\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T17:00:00Z",
+    "startDate": "2026-09-14T12:00:50Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.5,
+    "bestAsk": 0.88,
+    "events": [
+     {
+      "id": "1022435",
+      "slug": "nfl-sf-atl-2026-10-25",
+      "title": "49ers vs. Falcons",
+      "ticker": "nfl-sf-atl-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551273",
+    "question": "Bengals vs. Ravens",
+    "conditionId": "0xc5f590356b401a3d7b259437fcc9257889534b2846a8179b74cb0ab253f3ac2b",
+    "questionID": "0x2f254566c433bd246cc402e7206207abd6e6690a45575207e7501cb22885b03a",
+    "slug": "nfl-cin-bal-2026-10-25",
+    "outcomes": "[\"Bengals\", \"Ravens\"]",
+    "outcomePrices": "[\"0.455\", \"0.545\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T17:00:00Z",
+    "startDate": "2026-09-14T12:00:48Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.26,
+    "bestAsk": 0.65,
+    "events": [
+     {
+      "id": "1022436",
+      "slug": "nfl-cin-bal-2026-10-25",
+      "title": "Bengals vs. Ravens",
+      "ticker": "nfl-cin-bal-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551275",
+    "question": "Buccaneers vs. Panthers",
+    "conditionId": "0xc4ed37df67763741b43c67e51b011504365724339298faa7b4ff4041eb81065c",
+    "questionID": "0x679a43597735ed36ce91ed7d75f65cf10eba95b88fc67192a7c0a90f790405e5",
+    "slug": "nfl-tb-car-2026-10-25",
+    "outcomes": "[\"Buccaneers\", \"Panthers\"]",
+    "outcomePrices": "[\"0.36\", \"0.64\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T17:00:00Z",
+    "startDate": "2026-09-14T12:00:51Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.2,
+    "bestAsk": 0.52,
+    "events": [
+     {
+      "id": "1022438",
+      "slug": "nfl-tb-car-2026-10-25",
+      "title": "Buccaneers vs. Panthers",
+      "ticker": "nfl-tb-car-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551277",
+    "question": "Giants vs. Texans",
+    "conditionId": "0xeada9270789da2e8358f7d00c276a42f0551eb3a6be09f08cbe710c75f793e98",
+    "questionID": "0x137f1ab3dfeb26e1eae21289dbaf0aff80333789a7e5ebc9cc1efb79dff91b91",
+    "slug": "nfl-nyg-hou-2026-10-25",
+    "outcomes": "[\"Giants\", \"Texans\"]",
+    "outcomePrices": "[\"0.315\", \"0.685\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T17:00:00Z",
+    "startDate": "2026-09-14T12:00:55Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.03,
+    "bestAsk": 0.6,
+    "lastTradePrice": 0.7,
+    "events": [
+     {
+      "id": "1022440",
+      "slug": "nfl-nyg-hou-2026-10-25",
+      "title": "Giants vs. Texans",
+      "ticker": "nfl-nyg-hou-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551282",
+    "question": "Colts vs. Vikings",
+    "conditionId": "0xd354cde0a6ad3ce336aec61bace74559910ff3bfc4ea89236528b2fb365df870",
+    "questionID": "0x9a933e644f12af17184e16c5def12c6012b3b53e92f2db0457e1b657a550659b",
+    "slug": "nfl-ind-min-2026-10-25",
+    "outcomes": "[\"Colts\", \"Vikings\"]",
+    "outcomePrices": "[\"0.525\", \"0.475\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T17:00:00Z",
+    "startDate": "2026-09-14T12:00:53Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.08,
+    "bestAsk": 0.97,
+    "lastTradePrice": 0.44,
+    "events": [
+     {
+      "id": "1022441",
+      "slug": "nfl-ind-min-2026-10-25",
+      "title": "Colts vs. Vikings",
+      "ticker": "nfl-ind-min-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551284",
+    "question": "Dolphins vs. Jets",
+    "conditionId": "0x7375d74f6b9d318b9f0cdef5920ecc6163ac6cb58d741c2ef5cae590f0653b26",
+    "questionID": "0x32dc11c5dd0d02131b0131cf65ab4e4fef6200f3974560b197f99740a2d033b9",
+    "slug": "nfl-mia-nyj-2026-10-25",
+    "outcomes": "[\"Dolphins\", \"Jets\"]",
+    "outcomePrices": "[\"0.47\", \"0.53\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T17:00:00Z",
+    "startDate": "2026-09-14T12:00:50Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.22,
+    "bestAsk": 0.72,
+    "events": [
+     {
+      "id": "1022443",
+      "slug": "nfl-mia-nyj-2026-10-25",
+      "title": "Dolphins vs. Jets",
+      "ticker": "nfl-mia-nyj-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551285",
+    "question": "Browns vs. Titans",
+    "conditionId": "0x5d3ed1888dabb8a627ac61dcef595dcdf47eae1651796730f860de681a186abd",
+    "questionID": "0x29a0cb66a32429c004e35a7259774571ee6e97f05f8b7c48336593baa27ff566",
+    "slug": "nfl-cle-ten-2026-10-25",
+    "outcomes": "[\"Browns\", \"Titans\"]",
+    "outcomePrices": "[\"0.655\", \"0.345\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T17:00:00Z",
+    "startDate": "2026-09-14T12:00:56Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.4,
+    "bestAsk": 0.91,
+    "events": [
+     {
+      "id": "1022444",
+      "slug": "nfl-cle-ten-2026-10-25",
+      "title": "Browns vs. Titans",
+      "ticker": "nfl-cle-ten-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551290",
+    "question": "Broncos vs. Cardinals",
+    "conditionId": "0x776e643bfc12ad924f07eca0f9b288aa3f4b334e5f8fcc37101d63b821aef988",
+    "questionID": "0xcc3af18f158adfa3710ec3c325412497557982939d6fd0bcd0b13898eeb0a3d9",
+    "slug": "nfl-den-ari-2026-10-25",
+    "outcomes": "[\"Broncos\", \"Cardinals\"]",
+    "outcomePrices": "[\"0.675\", \"0.325\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T20:05:00Z",
+    "startDate": "2026-09-14T12:01:01Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.44,
+    "bestAsk": 0.91,
+    "events": [
+     {
+      "id": "1022447",
+      "slug": "nfl-den-ari-2026-10-25",
+      "title": "Broncos vs. Cardinals",
+      "ticker": "nfl-den-ari-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551293",
+    "question": "Packers vs. Lions",
+    "conditionId": "0x2345fcf9acc0308ed06ce53dfe765176643720d74b1f4a3f6d2f638d99a65e0b",
+    "questionID": "0xbf3c5f7dcb496ff4b0e44e020f758f9f0cda6bb5389e56032852b947346b509e",
+    "slug": "nfl-gb-det-2026-10-25",
+    "outcomes": "[\"Packers\", \"Lions\"]",
+    "outcomePrices": "[\"0.355\", \"0.645\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T20:25:00Z",
+    "startDate": "2026-09-14T12:01:01Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.15,
+    "bestAsk": 0.56,
+    "lastTradePrice": 0.56,
+    "events": [
+     {
+      "id": "1022448",
+      "slug": "nfl-gb-det-2026-10-25",
+      "title": "Packers vs. Lions",
+      "ticker": "nfl-gb-det-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551294",
+    "question": "Rams vs. Raiders",
+    "conditionId": "0xc8c3c2b216d26a649da337893e368ca02053d5f3122c569ac03febedf99978dc",
+    "questionID": "0x683bbe4b86afbbfa79932337f806966acaca8f4fa6b0abe8542d65e04ca427d6",
+    "slug": "nfl-la-lv-2026-10-25",
+    "outcomes": "[\"Rams\", \"Raiders\"]",
+    "outcomePrices": "[\"0.9\", \"0.1\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-25T20:25:00Z",
+    "startDate": "2026-09-14T12:00:56Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.81,
+    "bestAsk": 0.99,
+    "lastTradePrice": 0.9,
+    "events": [
+     {
+      "id": "1022449",
+      "slug": "nfl-la-lv-2026-10-25",
+      "title": "Rams vs. Raiders",
+      "ticker": "nfl-la-lv-2026-10-25"
+     }
+    ]
+   },
+   {
+    "id": "4551296",
+    "question": "Chiefs vs. Seahawks",
+    "conditionId": "0x4c0d60ebe6cdb84659ef5fd13955f9d87b6ef2da4d9447f7a46c4e57c988d5b4",
+    "questionID": "0x58bc86da3db63793ecc4b491c0c0b1c89674636b5b6e30198d696d3c1d669c61",
+    "slug": "nfl-kc-sea-2026-10-26",
+    "outcomes": "[\"Chiefs\", \"Seahawks\"]",
+    "outcomePrices": "[\"0.32\", \"0.68\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-26T00:20:00Z",
+    "startDate": "2026-09-14T12:00:57Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.1,
+    "bestAsk": 0.54,
+    "lastTradePrice": 0.54,
+    "events": [
+     {
+      "id": "1022451",
+      "slug": "nfl-kc-sea-2026-10-26",
+      "title": "Chiefs vs. Seahawks",
+      "ticker": "nfl-kc-sea-2026-10-26"
+     }
+    ]
+   },
+   {
+    "id": "4584357",
+    "question": "Cowboys vs. Eagles",
+    "conditionId": "0xcabe86f531002c79e680777d7570a668a4dc27c26ac05a26649b998605995684",
+    "questionID": "0x2ccd950c3bf0fa0cf1ec6f683be4aa62babac611e7ad2ee04946ef3488b88f1c",
+    "slug": "nfl-dal-phi-2026-10-27",
+    "outcomes": "[\"Cowboys\", \"Eagles\"]",
+    "outcomePrices": "[\"0.325\", \"0.675\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-27T00:15:00Z",
+    "startDate": "2026-09-15T12:00:51Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.11,
+    "bestAsk": 0.54,
+    "lastTradePrice": 0.1,
+    "events": [
+     {
+      "id": "1027875",
+      "slug": "nfl-dal-phi-2026-10-27",
+      "title": "Cowboys vs. Eagles",
+      "ticker": "nfl-dal-phi-2026-10-27"
+     }
+    ]
+   },
+   {
+    "id": "5455706",
+    "question": "Panthers vs. Packers",
+    "conditionId": "0x3e5dab364ce5d5be651c1e9afac62577be5d7680497606e401afd06f5ea068af",
+    "questionID": "0x75cc49bdb5423d4897d095a8c2002d07f32951388a50846617c467dbc0965f05",
+    "slug": "nfl-car-gb-2026-10-30",
+    "outcomes": "[\"Panthers\", \"Packers\"]",
+    "outcomePrices": "[\"0.435\", \"0.565\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-10-30T00:15:00Z",
+    "startDate": "2026-10-09T12:00:46Z",
+    "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+    "resolutionSource": "https://www.nfl.com/scores",
+    "negRisk": false,
+    "sportsMarketType": "moneyline",
+    "bestBid": 0.18,
+    "bestAsk": 0.69,
+    "events": [
+     {
+      "id": "1158894",
+      "slug": "nfl-car-gb-2026-10-30",
+      "title": "Panthers vs. Packers",
+      "ticker": "nfl-car-gb-2026-10-30"
+     }
+    ]
+   },
+   {
+    "id": "3026003",
+    "question": "Will the Seahawks win the season series against the Cardinals during the 2026-27 NFL regular season?",
+    "conditionId": "0x810eabcd02791caa839f280e82224399e47a0785cecadb00ae71fd3348f8479b",
+    "questionID": "0x52a6c0be13ec3d1ee0173a46a93feeb091eb60175e4d8e460b847c0d45c04501",
+    "slug": "will-the-seahawks-win-the-season-series-against-the-cardinals-during-the-2026-27-nfl-regular-season-20260717194043477",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.74\", \"0.26\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2027-01-12T23:59:00Z",
+    "startDate": "2026-07-22T05:33:06.232139Z",
+    "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+    "resolutionSource": "",
+    "negRisk": true,
+    "sportsMarketType": "moneyline",
+    "groupItemTitle": "Seahawks",
+    "bestBid": 0.72,
+    "bestAsk": 0.76,
+    "lastTradePrice": 0.69,
+    "events": [
+     {
+      "id": "731766",
+      "slug": "pro-football-cardinals-vspt-seahawks-season-series-winner",
+      "title": "Pro Football: Cardinals vs. Seahawks Season Series Winner",
+      "ticker": "pro-football-cardinals-vspt-seahawks-season-series-winner"
+     }
+    ]
+   },
+   {
+    "id": "3026004",
+    "question": "Will the season series between the Cardinals and Seahawks end in a tie during the 2026-27 NFL regular season?",
+    "conditionId": "0xc5a9c248a721daf4388601614c1ea888a2fdba613153538658ec33becd2d4dce",
+    "questionID": "0x52a6c0be13ec3d1ee0173a46a93feeb091eb60175e4d8e460b847c0d45c04502",
+    "slug": "will-the-season-series-between-the-cardinals-and-seahawks-end-in-a-tie-during-the-2026-27-nfl-regular-season-20260717194043478",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.5225\", \"0.4775\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2027-01-12T23:59:00Z",
+    "startDate": "2026-07-22T05:33:03.131935Z",
+    "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+    "resolutionSource": "",
+    "negRisk": true,
+    "sportsMarketType": "moneyline",
+    "groupItemTitle": "Tie",
+    "bestBid": 0.25,
+    "bestAsk": 0.795,
+    "lastTradePrice": 0.287,
+    "events": [
+     {
+      "id": "731766",
+      "slug": "pro-football-cardinals-vspt-seahawks-season-series-winner",
+      "title": "Pro Football: Cardinals vs. Seahawks Season Series Winner",
+      "ticker": "pro-football-cardinals-vspt-seahawks-season-series-winner"
+     }
+    ]
+   },
+   {
+    "id": "3026077",
+    "question": "Will the Vikings win the season series against the Packers during the 2026-27 NFL regular season?",
+    "conditionId": "0x1881dcb0d1021160d21b3a56de49f2d38d49ea7decaa294fcfbce69b0893b9de",
+    "questionID": "0xec19ca91d47b948e169be29d59b072c4378bd13b64d30886b2d463dedf111f01",
+    "slug": "will-the-vikings-win-the-season-series-against-the-packers-during-the-2026-27-nfl-regular-season-20260717194040133",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.59\", \"0.41\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2027-01-12T23:59:00Z",
+    "startDate": "2026-07-22T05:40:16.663143Z",
+    "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+    "resolutionSource": "",
+    "negRisk": true,
+    "sportsMarketType": "moneyline",
+    "groupItemTitle": "Vikings",
+    "bestBid": 0.31,
+    "bestAsk": 0.87,
+    "lastTradePrice": 0.37,
+    "events": [
+     {
+      "id": "731797",
+      "slug": "pro-football-packers-vspt-vikings-season-series-winner",
+      "title": "Pro Football: Packers vs. Vikings Season Series Winner",
+      "ticker": "pro-football-packers-vspt-vikings-season-series-winner"
+     }
+    ]
+   },
+   {
+    "id": "3026078",
+    "question": "Will the season series between the Packers and Vikings end in a tie during the 2026-27 NFL regular season?",
+    "conditionId": "0xc67fba441fe8dcc234e2149366f33cc90223c1a87059ecd4dedec8e92c0bcb5c",
+    "questionID": "0xec19ca91d47b948e169be29d59b072c4378bd13b64d30886b2d463dedf111f02",
+    "slug": "will-the-season-series-between-the-packers-and-vikings-end-in-a-tie-during-the-2026-27-nfl-regular-season-20260717194040134",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.385\", \"0.615\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2027-01-12T23:59:00Z",
+    "startDate": "2026-07-22T05:40:21.581711Z",
+    "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+    "resolutionSource": "",
+    "negRisk": true,
+    "sportsMarketType": "moneyline",
+    "groupItemTitle": "Tie",
+    "bestBid": 0.13,
+    "bestAsk": 0.64,
+    "lastTradePrice": 0.13,
+    "events": [
+     {
+      "id": "731797",
+      "slug": "pro-football-packers-vspt-vikings-season-series-winner",
+      "title": "Pro Football: Packers vs. Vikings Season Series Winner",
+      "ticker": "pro-football-packers-vspt-vikings-season-series-winner"
+     }
+    ]
+   },
+   {
+    "id": "3026086",
+    "question": "Will the Vikings win the season series against the Bears during the 2026-27 NFL regular season?",
+    "conditionId": "0x649fbfbd8aae08a18608e38522c6c6e624cb39e5dac944b3764634612fd6fbec",
+    "questionID": "0xa788e5c08df26cae8c77383d684b036dc0aee10ef4a26f3903fecc1c3667c101",
+    "slug": "will-the-vikings-win-the-season-series-against-the-bears-during-the-2026-27-nfl-regular-season-20260717194038913",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.54\", \"0.46\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2027-01-12T23:59:00Z",
+    "startDate": "2026-07-22T05:40:31.494858Z",
+    "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+    "resolutionSource": "",
+    "negRisk": true,
+    "sportsMarketType": "moneyline",
+    "groupItemTitle": "Vikings",
+    "bestBid": 0.44,
+    "bestAsk": 0.64,
+    "lastTradePrice": 0.24,
+    "events": [
+     {
+      "id": "731800",
+      "slug": "pro-football-bears-vspt-vikings-season-series-winner",
+      "title": "Pro Football: Bears vs. Vikings Season Series Winner",
+      "ticker": "pro-football-bears-vspt-vikings-season-series-winner"
+     }
+    ]
+   },
+   {
+    "id": "3026087",
+    "question": "Will the season series between the Bears and Vikings end in a tie during the 2026-27 NFL regular season?",
+    "conditionId": "0xd26b77ef190c1a08187b735632b79b9a290f0562e784f4dd756080349badc303",
+    "questionID": "0xa788e5c08df26cae8c77383d684b036dc0aee10ef4a26f3903fecc1c3667c102",
+    "slug": "will-the-season-series-between-the-bears-and-vikings-end-in-a-tie-during-the-2026-27-nfl-regular-season-20260717194038914",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.32\", \"0.68\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2027-01-12T23:59:00Z",
+    "startDate": "2026-07-22T05:40:34.587156Z",
+    "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+    "resolutionSource": "",
+    "negRisk": true,
+    "sportsMarketType": "moneyline",
+    "groupItemTitle": "Tie",
+    "bestBid": 0.03,
+    "bestAsk": 0.61,
+    "lastTradePrice": 0.38,
+    "events": [
+     {
+      "id": "731800",
+      "slug": "pro-football-bears-vspt-vikings-season-series-winner",
+      "title": "Pro Football: Bears vs. Vikings Season Series Winner",
+      "ticker": "pro-football-bears-vspt-vikings-season-series-winner"
+     }
+    ]
+   },
+   {
+    "id": "3026116",
+    "question": "Will the Giants win the season series against the Cowboys during the 2026-27 NFL regular season?",
+    "conditionId": "0x930e7f33ac34d6fa17b3c9ad409ae4562fd4e76caa39e1a2a07d33ec0d8b95e8",
+    "questionID": "0x139143e992327a9d5e89e20929de3db26244a5888669743d551e9de4c61d3901",
+    "slug": "will-the-giants-win-the-season-series-against-the-cowboys-during-the-2026-27-nfl-regular-season-20260717194035201",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.28\", \"0.72\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2027-01-12T23:59:00Z",
+    "startDate": "2026-07-22T05:43:23.033971Z",
+    "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+    "resolutionSource": "",
+    "negRisk": true,
+    "sportsMarketType": "moneyline",
+    "groupItemTitle": "Giants",
+    "bestBid": 0.19,
+    "bestAsk": 0.37,
+    "lastTradePrice": 0.18,
+    "events": [
+     {
+      "id": "731810",
+      "slug": "pro-football-cowboys-vspt-giants-season-series-winner",
+      "title": "Pro Football: Cowboys vs. Giants Season Series Winner",
+      "ticker": "pro-football-cowboys-vspt-giants-season-series-winner"
+     }
+    ]
+   }
+  ]
+ }
+}

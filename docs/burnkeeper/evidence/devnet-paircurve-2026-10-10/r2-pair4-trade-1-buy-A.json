@@ -1,0 +1,107 @@
+{
+  "command": "buy",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": false,
+  "pair": "8XGyJ9b3C5pjMQdXEKa7fJKzQWKwNu4GEm5LEtHPcZe3",
+  "side": "A",
+  "quote": {
+    "tokensOut": "66439631007163",
+    "cost": "19801981",
+    "fees": {
+      "fee": "198019",
+      "dev": "49504",
+      "burn": "148515"
+    },
+    "total": "20000000",
+    "soldAfter": "66439631007163",
+    "solAfter": "19801981"
+  },
+  "result": {
+    "ok": true,
+    "signature": "Gnz2VHW2MmLBcLkjF9MmN3wEuhXMoKGT3MjYbhhYmfpd2bGwEcDiWaoV3n1WyYo7X13xdte3atBxjN99HUcPfPz",
+    "error": null,
+    "unitsConsumed": 55130,
+    "txBytes": 566
+  },
+  "after": {
+    "pair": "8XGyJ9b3C5pjMQdXEKa7fJKzQWKwNu4GEm5LEtHPcZe3",
+    "exists": true,
+    "status": "open",
+    "phase": "open",
+    "deadline": "2026-10-11T00:49:00.000Z",
+    "vault": "9aeTyFg37NSYzdNn9vSmmatjmkRZcSw9L9emQBL3t7zc",
+    "vaultLamports": 20650240,
+    "devWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+    "devAccrued": "49504",
+    "devWalletLamports": 3341853,
+    "sides": [
+      {
+        "side": "A",
+        "mint": "7CYyuk8aeEqdufxckbbbBwTCQSN7MK3JBZ3fcrcfNkHf",
+        "supplyRaw": "1000000000000000",
+        "sold": "66439631007163",
+        "sol": "19801981",
+        "burnPool": "J4iXXX4RgFggVs64KBY1sBBH7sxWDXNp7TMxaAsdSPsH",
+        "burnPoolLamports": 20000000,
+        "burnFees": "148515",
+        "devFees": "49504",
+        "burnEscrow": "148515",
+        "refunding": false,
+        "redeemPool": "0",
+        "redeemSupply": "0",
+        "trades": 1,
+        "pool": "11111111111111111111111111111111",
+        "poolSol": "0",
+        "poolTokens": "0",
+        "lpSupplyAtCreation": "0",
+        "lpBurned": "0",
+        "tokensBurned": "0",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "11111111111111111111111111111111",
+          "poolVerified": false,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      },
+      {
+        "side": "B",
+        "mint": "HebAhpCXy62qNRfSxz8RDkjmJa2pxKq9wWPSHdftwqpf",
+        "supplyRaw": "1000000000000000",
+        "sold": "0",
+        "sol": "0",
+        "burnPool": "5NMXH2ssFWYgFWAUer4CErJhG4bgD1AWT8b9bZjUXzbt",
+        "burnPoolLamports": 20000000,
+        "burnFees": "0",
+        "devFees": "0",
+        "burnEscrow": "0",
+        "refunding": false,
+        "redeemPool": "0",
+        "redeemSupply": "0",
+        "trades": 0,
+        "pool": "11111111111111111111111111111111",
+        "poolSol": "0",
+        "poolTokens": "0",
+        "lpSupplyAtCreation": "0",
+        "lpBurned": "0",
+        "tokensBurned": "0",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "11111111111111111111111111111111",
+          "poolVerified": false,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      }
+    ],
+    "params": {
+      "virtualSol": "300000000",
+      "virtualToken": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "reserve": "206900000000000",
+      "targetRaise": "500000000",
+      "minSideShareBps": 4000
+    }
+  }
+}

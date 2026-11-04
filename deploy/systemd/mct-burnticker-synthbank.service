@@ -1,0 +1,20 @@
+[Unit]
+Description=Burnticker synthetic creator's DEVNET mint bank: tops data/devnet-synth/bank.db up to its size on one worker, then exits — fired nightly by mct-burnticker-synthbank.timer, hours before the synthetic creator
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/meme-coin-trader
+# scripts/service/run-burnticker-synth.sh --fill-bank: devnet-synth.env only (BURNTICKER_SYNTH_BANK_KEY seals this bank; never the live
+# bank's key or file), one grinding worker at nice 19 (the live bank, mct-burnticker-mintbank, has three of the box's four cores). About
+# four minutes a key on the box, so a night's draw (about 14 keys) takes about an hour. Not enabled until the key is in devnet-synth.env
+# (docs/burnticker/SYNTHETIC-CREATOR.md); without it the script exits 2.
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/service/run-burnticker-synth.sh --fill-bank
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=TZ=America/Denver
+# two hours at most, so it is done well before the 09:30 UTC run (which tops up again and holds the bank at size while it runs)
+TimeoutStartSec=7200
+MemoryMax=256M
+Nice=19
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-synth.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-synth.log

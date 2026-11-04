@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B2 avatar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500&family=Barlow+Condensed:wght@500;600&display=block" rel="stylesheet">
+<link rel="stylesheet" href="flap.css">
+<style>
+  html,body{margin:0;width:800px;height:800px;overflow:hidden;background:#131312}
+  body{position:relative}
+  /* the board: painted steel with a faint brushed texture and a recessed panel */
+  .board{position:absolute;inset:0;background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 4px),
+    linear-gradient(160deg,#1a1a19 0%,#111110 100%);}
+  .panel{position:absolute;left:96px;top:96px;right:96px;bottom:96px;background:#0d0d0c;border-radius:6px;
+    box-shadow:inset 0 2px 0 rgba(0,0,0,.9), inset 0 0 0 1px #050505, 0 1px 0 rgba(255,255,255,.05)}
+  .big{position:absolute;left:150px;top:120px;--w:300px;--h:420px;--fs:330px}
+  .big .tile{font-weight:500}
+  .small{position:absolute;left:150px;top:566px;--w:44px;--h:62px;--fs:50px}
+  .side{position:absolute;left:484px;top:120px;width:170px;font-family:'Barlow Condensed',sans-serif;color:#8e8a80;font-size:22px;letter-spacing:2px;line-height:30px;text-transform:uppercase}
+  .side b{display:block;color:#ece8dc;font-weight:600;font-size:40px;line-height:44px;margin:4px 0 18px;letter-spacing:1px}
+  .side .amber{color:#f2a60f}
+</style></head>
+<body>
+<div class="board"></div><div class="panel"></div>
+<div class="big" id="big"></div>
+<div class="side">
+  Feed<b>Treasury<br>.debt</b>
+  Reading<b>+21.28B</b>
+  Burned<b class="amber">2,100,000</b>
+</div>
+<div class="small" id="small"></div>
+<script src="flap.js"></script>
+<script>
+  flapRow(document.getElementById('big'),'B');
+  flapRow(document.getElementById('small'),'BURNTICKER',{flipAt:8,flipFrom:'L'});
+</script>
+</body></html>

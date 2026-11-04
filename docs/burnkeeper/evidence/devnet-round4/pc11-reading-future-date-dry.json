@@ -1,0 +1,101 @@
+{
+  "command": "submit-reading",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": true,
+  "message": "BURNRECEIPTS-v3|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|CMzLptRtzEjgPD4HX18BVaZwE2FuVGswWoBk1ujoU2z7|treasury.debt_to_penny|prev=2026-10-12|2026-10-13|38306000000000.00|src=fe4bc2a10397d787dfc40ff12a9a381ffba19142f4ac34f6b33faba03897b9a4|proof=0000000000000000000000000000000000000000000000000000000000000000",
+  "instructions": [
+    {
+      "program": "Ed25519SigVerify111111111111111111111111111",
+      "accounts": [],
+      "dataHex": "01003000ffff1000ffff70006601ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a518d5f672e18ef4ed96fedb3f783f4bb099c042ad6fa0e838f73b3396d99bde0cfc9b7614fa76e58ba940805d0e78b5862491b33213f9cac2ae3f8e6ae622f3094255524e52454345495054532d76337c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c434d7a4c707452747a456a67504434485831384256615a774532467556477377576f426b31756a6f55327a377c74726561737572792e646562745f746f5f70656e6e797c707265763d323032362d31302d31327c323032362d31302d31337c33383330363030303030303030302e30307c7372633d666534626332613130333937643738376466633430666631326139613338316666626131393134326634616333346636623333666162613033383937623961347c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+    },
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "submit_reading",
+      "accounts": [
+        {
+          "name": "payer",
+          "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "name": "config",
+          "pubkey": "6kbP58VTHWmgFwsZQQhAP5NFc6TjBnbnZokontTRdMX5",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "reading",
+          "pubkey": "DRt2JYXC27sA7p5RFUPaZWqWJY48e9Lvouj53WkfZ1fW",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "instructions",
+          "pubkey": "Sysvar1nstructions1111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {
+        "record_date": 20261013,
+        "value": "3830600000000000",
+        "source_url_hash": "fe4bc2a10397d787dfc40ff12a9a381ffba19142f4ac34f6b33faba03897b9a4",
+        "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ],
+  "simulation": {
+    "err": "{\"InstructionError\":[2,{\"Custom\":6007}]}",
+    "unitsConsumed": 31218,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: SubmitReading",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/submit_reading.rs:45. Error Code: FutureDate. Error Number: 6007. Error Message: record_date is in the future.",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 31068 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x1777"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "6kbP58VTHWmgFwsZQQhAP5NFc6TjBnbnZokontTRdMX5",
+      "kind": "TokenConfig",
+      "state": null
+    },
+    {
+      "address": "BMmeV5eTwBiyx8rJ8nsxPdvUj7x5NCkwkFJQfQP9vBHG",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "DRt2JYXC27sA7p5RFUPaZWqWJY48e9Lvouj53WkfZ1fW",
+      "kind": "lamports",
+      "state": null
+    }
+  ]
+}

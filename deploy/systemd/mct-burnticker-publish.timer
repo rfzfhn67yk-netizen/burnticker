@@ -1,0 +1,11 @@
+[Unit]
+Description=Every minute: sync the Burnticker and $DEFICIT publish dirs into /var/www (what Caddy serves)
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=60
+AccuracySec=5s
+Unit=mct-burnticker-publish.service
+
+[Install]
+WantedBy=timers.target

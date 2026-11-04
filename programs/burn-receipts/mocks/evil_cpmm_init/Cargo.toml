@@ -1,0 +1,21 @@
+# TEST-ONLY hostile callee for pair_curve (2026-10-10). Loaded by the pair_curve LiteSVM suite at Raydium CPMM's program id to play a
+# malicious / compromised CPMM upgrade during `graduate`: it receives the pair's SOL vault as signer + writable (the CPMM `creator`)
+# and abuses that signature (system Assign, an extra lamport transfer, SPL Approve / close authority on the vault's token accounts) or
+# creates no pool at all. pair_curve must revert every such transaction (VaultTampered / PoolMismatch). Never deployed.
+[package]
+name = "evil_cpmm_init"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+anchor-lang = "=1.2.1"
+anchor-spl = "=1.2.1"
+
+[workspace]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("custom-heap", "custom-panic"))'] }

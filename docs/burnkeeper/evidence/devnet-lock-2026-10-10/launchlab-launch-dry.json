@@ -1,0 +1,675 @@
+{
+  "mode": "launch",
+  "cluster": "devnet",
+  "dryRun": true,
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+  "platformId": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+  "platformName": "Burnticker",
+  "configId": "7ZR4zD7PYfY2XxoG1Gxcy2EgEeGYrpxrwzPuwdUBssEt",
+  "mint": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+  "poolId": "5etpCRsffWAaVaPxoqzZHN4XUZDLYFar8EnGFbECDiqT",
+  "creator": "5vchyCzCe8HtxfHE49UfuysNgAqTbtfv8eckoRvxzrND",
+  "payer": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+  "payerSol": 10.443441857,
+  "burnPool": {
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "programIdIsLocalnetPlaceholder": false,
+    "feePda": "5vchyCzCe8HtxfHE49UfuysNgAqTbtfv8eckoRvxzrND",
+    "feeWsolAta": "GV4zwHvTCSmaZFa4HE91E17MUhfX6cefyXFb8qNxkVDi",
+    "feeTokenAta": "Cc9a3q57SoWXG8ff9XvpCkReQvaWYzpLQAdUQL7qdMSq",
+    "configPda": "7ZjCmiGzZMCKf4wuwzgQFmJWMhrQ1s9NHP1uwnL1DAso",
+    "creatorIsFeePda": true,
+    "note": "the fee PDA is the LaunchLab creator: curve creator fees accrue in LaunchLab's [feePda, WSOL] vault and are moved into feeWsolAta by the program's permissionless claim_launchlab_creator_fee; after graduation pool_creator = feePda and Raydium's collect_creator_fee_permissionless pays feeWsolAta / feeTokenAta; register_pool then accepts the pool"
+  },
+  "curve": {
+    "supplyRaw": "1000000000000000",
+    "totalSellRaw": "793100000000000",
+    "totalLockedRaw": "0",
+    "migrateReserveRaw": "206900000000000",
+    "raiseLamports": "1000000000",
+    "decimals": 6,
+    "migrateType": "cpmm",
+    "cliffSeconds": "0",
+    "unlockSeconds": "0"
+  },
+  "creatorFeeVault": {
+    "address": "EtJQbbukHUYxKmU9Tn2bC5nsozqT9gTJrHxKXBnxd89Q",
+    "note": "bonding-curve creator fees (SOL, wrapped) accrue here; only the creator can claim (LaunchLab claim_creator_fee); created by the first trade"
+  },
+  "creatorFeeVaultAuthority": null,
+  "platformFeeVault": "AzXYBNjojqRJfPnwASTTrikTWYWcuBW2UYszXFW1QptE",
+  "baseVault": "FYvvWfs4pNU7AQmcsHJtdvu142SV7DSgM3Q3vW36cEUJ",
+  "quoteVault": "9HmPAAE7PvKFWo8Rni8tX1a5CAPPnbJzBSJcYg4icsH6",
+  "metadata": "8oBZrsF2sqt4VBZ1sdJhsVyq6dXo2MEiSydX6BztqFHK",
+  "vestingRecord": null,
+  "cpmmAfterGraduation": {
+    "programId": "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb",
+    "ammConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "expectedPoolId": "AKRxMfAjMjP4ZFPKtUw6R13Gi8KczYWiKua6t5acEsoQ",
+    "token0": "So11111111111111111111111111111111111111112",
+    "token1": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+    "expectedPoolCreator": "5vchyCzCe8HtxfHE49UfuysNgAqTbtfv8eckoRvxzrND",
+    "note": "creator fees after graduation accrue in this pool's creator_fees_token_0/1 counters; pool_creator collects them (CPMM collect_creator_fee); the pool id assumes token0 < token1 as the CPMM program requires — the keeper checks both orders"
+  },
+  "rules": {
+    "file": "config/burnkeeper/lplock-devnet.rules.json",
+    "sha256": "6d4d859ef91b078b3266608218a467449cab0435938bd72a21a3b16c5ac0998d",
+    "memoField": "rules=sha256:6d4d859ef91b",
+    "mint": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+    "mode": "buyback",
+    "fractionPerUnit": "0.01",
+    "publish": "publish rules.json and its sha256 beside the token metadata"
+  },
+  "firstBuy": {
+    "lamports": "100000000",
+    "quotedTokensRaw": "235046466018768",
+    "minTokensRaw": "227995072038204",
+    "feeLamports": {
+      "protocol": "250000",
+      "platform": "250000",
+      "creatorToBurnPool": "500000"
+    }
+  },
+  "feeSplitPer1SolVolume": {
+    "preGraduation": {
+      "totalBps": 100,
+      "legs": [
+        {
+          "bps": 25,
+          "lamportsPer1Sol": "2500000",
+          "to": "Raydium protocol (GlobalConfig.protocolFeeOwner)",
+          "dial": "GlobalConfig.tradeFeeRate — fixed by Raydium"
+        },
+        {
+          "bps": 25,
+          "lamportsPer1Sol": "2500000",
+          "to": "platform claim wallet 3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+          "dial": "PlatformConfig.feeRate — 0..50,000 ppm (0..500 bps)"
+        },
+        {
+          "bps": 50,
+          "lamportsPer1Sol": "5000000",
+          "to": "burn pool (the burn program's fee PDA = launch creator; the program's permissionless claim_launchlab_creator_fee)",
+          "dial": "PlatformConfig.creatorFeeRate — 0..5,000 ppm (0..50 bps)"
+        }
+      ],
+      "note": "bonding-curve trades; quote-token (SOL) fees; platform and creator fees accrue in vaults and must be claimed"
+    },
+    "postGraduation": {
+      "totalBps": 50,
+      "legs": [
+        {
+          "bps": 21,
+          "lamportsPer1Sol": "2100000",
+          "to": "platform Fee Key holder Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3 (LP-Lock harvest, not the keeper)",
+          "dial": "AmmConfig.tradeFeeRate × (1 − protocol − fund) × (platformScale + creatorScale)/1e6 — cpConfigId + migrateCpLockNftScale"
+        },
+        {
+          "bps": 0,
+          "lamportsPer1Sol": "0",
+          "to": "nobody (burned LP's share of LP fees stays in the pool, unclaimable)",
+          "dial": "burnScale/1e6 of the LP share"
+        },
+        {
+          "bps": 4,
+          "lamportsPer1Sol": "400000",
+          "to": "Raydium (protocol + fund shares of the trade fee)",
+          "dial": "AmmConfig.protocolFeeRate + fundFeeRate of the trade fee — fixed per tier"
+        },
+        {
+          "bps": 25,
+          "lamportsPer1Sol": "2500000",
+          "to": "burn pool (pool_creator = the launch creator = the fee PDA; CPMM collect_creator_fee_permissionless)",
+          "dial": "AmmConfig.creatorFeeRate × (1 − creatorFeeShareRate) — fixed per tier (5 bps − 5% on mainnet tier 0); the platform cannot raise it"
+        },
+        {
+          "bps": 0,
+          "lamportsPer1Sol": "0",
+          "to": "Raydium (protocol share of the creator fee, at collection)",
+          "dial": "AmmConfig.creatorFeeShareRate (or a CreatorFeeShare PDA)"
+        }
+      ],
+      "note": "CPMM pool on AmmConfig index 0 (trade 25 bps + creator 25 bps); creator fee taken on the SOL side when creatorFeeOn = OnlyTokenB"
+    }
+  },
+  "warnings": [
+    "--uri https://burnticker.com/lockt-devnet.json is not an Arweave URL: pin the metadata JSON first (src/lib/burnticker/pin.ts) — BURNTICKER_ALLOW_HOSTED_METADATA is on, so a hosted URI is allowed for this devnet script"
+  ],
+  "problems": [],
+  "transactions": [
+    {
+      "label": "create + first buy",
+      "signers": [
+        "payer",
+        "mint keypair"
+      ],
+      "instructions": [
+        {
+          "name": "LaunchLab initialize_v2",
+          "program": "LaunchLab (devnet)",
+          "args": {
+            "decimals": 6,
+            "name": "LOCKT",
+            "symbol": "LOCKT",
+            "uri": "https://burnticker.com/lockt-devnet.json",
+            "curve": "ConstantCurve",
+            "migrateType": "cpmm",
+            "supply": "1000000000000000",
+            "totalSellA": "793100000000000",
+            "totalFundRaisingB": "1000000000",
+            "totalLockedAmount": "0",
+            "cliffPeriod": "0",
+            "unlockPeriod": "0",
+            "cpmmCreatorFeeOn": "OnlyTokenB (0): creator fee always on the SOL side"
+          },
+          "accounts": [
+            {
+              "role": "payer",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": true,
+              "writable": true
+            },
+            {
+              "role": "creator (recorded, not a signer)",
+              "pubkey": "5vchyCzCe8HtxfHE49UfuysNgAqTbtfv8eckoRvxzrND",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "global_config",
+              "pubkey": "7ZR4zD7PYfY2XxoG1Gxcy2EgEeGYrpxrwzPuwdUBssEt",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "platform_config",
+              "pubkey": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "authority PDA",
+              "pubkey": "5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "pool_state",
+              "pubkey": "5etpCRsffWAaVaPxoqzZHN4XUZDLYFar8EnGFbECDiqT",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "base_mint (the pre-generated mint)",
+              "pubkey": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+              "signer": true,
+              "writable": true
+            },
+            {
+              "role": "quote_mint (WSOL)",
+              "pubkey": "So11111111111111111111111111111111111111112",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "base_vault",
+              "pubkey": "FYvvWfs4pNU7AQmcsHJtdvu142SV7DSgM3Q3vW36cEUJ",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "quote_vault",
+              "pubkey": "9HmPAAE7PvKFWo8Rni8tX1a5CAPPnbJzBSJcYg4icsH6",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "metadata (Metaplex)",
+              "pubkey": "8oBZrsF2sqt4VBZ1sdJhsVyq6dXo2MEiSydX6BztqFHK",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "base token program",
+              "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "quote token program",
+              "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "Metaplex metadata program",
+              "pubkey": "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "system program",
+              "pubkey": "11111111111111111111111111111111",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "rent sysvar",
+              "pubkey": "SysvarRent111111111111111111111111111111111",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "event authority",
+              "pubkey": "4uAB7seenFJKPUXqYewAdfra2u6baBgjiXU8x1SC7Ycz",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "LaunchLab program",
+              "pubkey": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+              "signer": false,
+              "writable": false
+            }
+          ],
+          "dataHex": "4399af27da10262006050000004c4f434b54050000004c4f434b542800000068747470733a2f2f6275726e7469636b65722e636f6d2f6c6f636b742d6465766e65742e6a736f6e000080c6a47e8d03000078c5fb51d1020000ca9a3b000000000100000000000000000000000000000000000000000000000000"
+        },
+        {
+          "name": "create payer WSOL account (idempotent)",
+          "program": "Associated Token",
+          "args": {},
+          "accounts": [
+            {
+              "role": "payer",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": true,
+              "writable": true
+            },
+            {
+              "role": "WSOL ATA",
+              "pubkey": "ECUk8UPEHhaWnyfuEsRUVB5ShUBJJ537vtFYSZuP8dRf",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "owner",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "WSOL mint",
+              "pubkey": "So11111111111111111111111111111111111111112",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "system program",
+              "pubkey": "11111111111111111111111111111111",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "token program",
+              "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "signer": false,
+              "writable": false
+            }
+          ],
+          "dataHex": "01"
+        },
+        {
+          "name": "wrap SOL: transfer",
+          "program": "System",
+          "args": {
+            "lamports": "100000000"
+          },
+          "accounts": [
+            {
+              "role": "payer",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": true,
+              "writable": true
+            },
+            {
+              "role": "WSOL ATA",
+              "pubkey": "ECUk8UPEHhaWnyfuEsRUVB5ShUBJJ537vtFYSZuP8dRf",
+              "signer": false,
+              "writable": true
+            }
+          ],
+          "dataHex": "0200000000e1f50500000000"
+        },
+        {
+          "name": "wrap SOL: sync_native",
+          "program": "SPL Token",
+          "args": {},
+          "accounts": [
+            {
+              "role": "WSOL ATA",
+              "pubkey": "ECUk8UPEHhaWnyfuEsRUVB5ShUBJJ537vtFYSZuP8dRf",
+              "signer": false,
+              "writable": true
+            }
+          ],
+          "dataHex": "11"
+        },
+        {
+          "name": "create payer token account (idempotent)",
+          "program": "Associated Token",
+          "args": {},
+          "accounts": [
+            {
+              "role": "payer",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": true,
+              "writable": true
+            },
+            {
+              "role": "token ATA",
+              "pubkey": "2i9t5maMQA8sykMA8Dh4RsJ8D2yub7TtXgQeFCLAJ7sM",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "owner",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "mint",
+              "pubkey": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "system program",
+              "pubkey": "11111111111111111111111111111111",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "token program",
+              "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "signer": false,
+              "writable": false
+            }
+          ],
+          "dataHex": "01"
+        },
+        {
+          "name": "LaunchLab buy_exact_in (the first buy)",
+          "program": "LaunchLab (devnet)",
+          "args": {
+            "amountB": "100000000",
+            "minAmountA": "227995072038204",
+            "shareFeeRate": 0,
+            "quotedTokensRaw": "235046466018768"
+          },
+          "accounts": [
+            {
+              "role": "payer",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": true,
+              "writable": true
+            },
+            {
+              "role": "authority PDA",
+              "pubkey": "5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "global_config",
+              "pubkey": "7ZR4zD7PYfY2XxoG1Gxcy2EgEeGYrpxrwzPuwdUBssEt",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "platform_config",
+              "pubkey": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "pool_state",
+              "pubkey": "5etpCRsffWAaVaPxoqzZHN4XUZDLYFar8EnGFbECDiqT",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "payer token account (base)",
+              "pubkey": "2i9t5maMQA8sykMA8Dh4RsJ8D2yub7TtXgQeFCLAJ7sM",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "payer WSOL account",
+              "pubkey": "ECUk8UPEHhaWnyfuEsRUVB5ShUBJJ537vtFYSZuP8dRf",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "base_vault",
+              "pubkey": "FYvvWfs4pNU7AQmcsHJtdvu142SV7DSgM3Q3vW36cEUJ",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "quote_vault",
+              "pubkey": "9HmPAAE7PvKFWo8Rni8tX1a5CAPPnbJzBSJcYg4icsH6",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "base_mint",
+              "pubkey": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "quote_mint",
+              "pubkey": "So11111111111111111111111111111111111111112",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "base token program",
+              "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "quote token program",
+              "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "event authority",
+              "pubkey": "4uAB7seenFJKPUXqYewAdfra2u6baBgjiXU8x1SC7Ycz",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "LaunchLab program",
+              "pubkey": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "system program",
+              "pubkey": "11111111111111111111111111111111",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "platform fee vault",
+              "pubkey": "AzXYBNjojqRJfPnwASTTrikTWYWcuBW2UYszXFW1QptE",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "creator fee vault",
+              "pubkey": "EtJQbbukHUYxKmU9Tn2bC5nsozqT9gTJrHxKXBnxd89Q",
+              "signer": false,
+              "writable": true
+            }
+          ],
+          "dataHex": "faea0d7bd59c13ec00e1f505000000003c85473d5ccf00000000000000000000"
+        },
+        {
+          "name": "unwrap: close WSOL account",
+          "program": "SPL Token",
+          "args": {},
+          "accounts": [
+            {
+              "role": "WSOL ATA",
+              "pubkey": "ECUk8UPEHhaWnyfuEsRUVB5ShUBJJ537vtFYSZuP8dRf",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "destination (payer)",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "owner (payer)",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": true,
+              "writable": false
+            }
+          ],
+          "dataHex": "09"
+        }
+      ]
+    }
+  ],
+  "simulation": {
+    "create": {
+      "err": null,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 invoke [1]",
+        "Program log: Instruction: InitializeV2",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 202 of 378123 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 233 of 371204 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 229 of 355123 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 invoke [2]",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 consumed 626 of 348555 compute units",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 success",
+        "Program data: l9fiCXahc65FI9LZLE8PvbX85RQzIdZIoQltVuwhIdmDYoDSt0ds7kkq52YB12S9PVdvQOAJHtvn4lI9N5MO4OG8SpkNZhIqYXPsC2Fbv85DLyjlLwIHiWRM57T8QJhRfPGpwQwcBn0GBQAAAExPQ0tUBQAAAExPQ0tUKAAAAGh0dHBzOi8vYnVybnRpY2tlci5jb20vbG9ja3QtZGV2bmV0Lmpzb24AAIDGpH6NAwAAeMX7UdECAADKmjsAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "Program metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s invoke [2]",
+        "Program log: IX: Create Metadata Accounts v3",
+        "Program 11111111111111111111111111111111 invoke [3]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: Allocate space for the account",
+        "Program 11111111111111111111111111111111 invoke [3]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: Assign the account to the owning program",
+        "Program 11111111111111111111111111111111 invoke [3]",
+        "Program 11111111111111111111111111111111 success",
+        "Program metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s consumed 37117 of 331910 compute units",
+        "Program metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 120 of 292862 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 115 of 291070 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 consumed 111237 of 399850 compute units",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+        "Program log: CreateIdempotent",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 179 of 280262 compute units",
+        "Program return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: Initialize the associated token account",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 275173 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 229 of 272712 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 16413 of 288613 compute units",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+        "Program 11111111111111111111111111111111 invoke [1]",
+        "Program 11111111111111111111111111111111 success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 201 of 272050 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+        "Program log: CreateIdempotent",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 179 of 266502 compute units",
+        "Program return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: Initialize the associated token account",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 261413 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 233 of 258954 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 13411 of 271849 compute units",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 invoke [1]",
+        "Program log: Instruction: BuyExactIn",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 invoke [2]",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 consumed 626 of 238190 compute units",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 success",
+        "Program data: vdt/007mYe5FI9LZLE8PvbX85RQzIdZIoQltVuwhIdmDYoDSt0ds7gB4xftR0QIA6iIPPunPAwCrmwkVAAAAAAAAAAAAAAAAAAAAAAAAAADQ3RwFxtUAAMCe5gUAAAAAAOH1BQAAAADQ3RwFxtUAAJDQAwAAAAAAkNADAAAAAAAgoQcAAAAAAAAAAAAAAAAAAAAB",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 112 of 235021 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 105 of 232847 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 229 of 222692 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 120 of 219169 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 112 of 216957 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 112 of 214784 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 consumed 46164 of 258438 compute units",
+        "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 118 of 212274 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success"
+      ],
+      "unitsConsumed": 187844
+    }
+  }
+}

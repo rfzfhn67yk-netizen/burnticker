@@ -1,0 +1,20 @@
+{
+ "fetchedAt": "2026-10-12T19:27:00Z",
+ "note": "Real response, captured read-only; trimmed to the fields the adapter reads.",
+ "url": "https://ll.thespacedevs.com/2.3.0/launches/bf2c3027-a314-403e-a416-2bfd5d165ad1/?mode=list",
+ "body": {
+  "id": "bf2c3027-a314-403e-a416-2bfd5d165ad1",
+  "name": "Falcon 9 Block 5 | Dragon CRS-2 SpX-35",
+  "net": "2026-10-13T10:33:44Z",
+  "status": {
+   "id": 1,
+   "name": "Go for Launch",
+   "abbrev": "Go",
+   "description": "Current T-0 confirmed by official or reliable sources."
+  },
+  "launch_service_provider": {
+   "id": 121,
+   "name": "SpaceX"
+  }
+ }
+}

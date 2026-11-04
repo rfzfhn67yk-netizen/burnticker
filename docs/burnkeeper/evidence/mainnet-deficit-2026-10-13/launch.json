@@ -1,0 +1,15 @@
+{
+  "coin": "$DEFICIT",
+  "cluster": "mainnet",
+  "date": "2026-10-13",
+  "note": "The operator's first coin, created through the Burnticker LaunchLab platform (94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9). Order: initialize_token (locks the rules hash, the attester and the admin), the LaunchLab create (creator = the program fee PDA), a 3 SOL seed into the burn pool (a disclosed gift the program cannot pay out), then the keeper's first cycle. Times are UTC; the launch was the evening of Oct 13 in Denver.",
+  "mint": "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj",
+  "rules": { "file": "config/burnkeeper/deficit.rules.json", "sha256": "8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9", "memoField": "rules=sha256:8e3e8b66748a" },
+  "metadataUri": "https://gateway.irys.xyz/4dfxjEwmnfLjKaUbdpn2SGffS6jk9r1eKbnqRSxKXk6T",
+  "steps": [
+    { "step": "initialize_token", "signature": "5hzrto9UL5RH4DbiNHGCnQ6q4JCkCJpNoBqQ1QWqz3GH4zTD5WghCVo1wMFEtrjx9TaWsuEufGv4XXCgAZ3D3JyY", "payer": "EPTYFR8RhxP6ZA3o2JiaP1zEieQuzo2jZras8H3N1uSE", "creatorOfRecord": "EPTYFR8RhxP6ZA3o2JiaP1zEieQuzo2jZras8H3N1uSE", "admin": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", "attester": "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6", "quorum": 1, "launchlabPlatform": "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9", "cpConfig": "LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC", "floorLamports": 9363295, "fractionPerUnitBps": 200, "config": "381XXZHdFYgR8kQPZPSj6NQ4GsnQALBJjLFGgaKyAj9h", "feePda": "3DbCrAdmqkKN9odAWHSv9Ln48G2c1HTkvtda4ChXpd2u", "createdAtUnix": 1791937067 },
+    { "step": "launchlab create", "signature": "2YyZVB96XZgQPL1wg7yUZjWbuWmweFzGEjXUJkfHittaKPX6Tz26diECxRzvwpZYfJGjGxLFCLypr3zf6RDjzSqc", "slot": 456636761, "poolId": "9t2bzymysRxV2iYHmoDKPRRAb9KozSwEAuKva9bziUZq", "creator": "3DbCrAdmqkKN9odAWHSv9Ln48G2c1HTkvtda4ChXpd2u", "creatorIsFeePda": true, "creatorFeeVault": "7ZLrnkznCJGnM8WU88tTE7CTMLHqHoAWsW2B6bh5r6xG", "platformFeeVault": "EcXnhWsJmc6vcart32M5ZXMmmCzXE3fiUz9qxqrWQKSn", "raiseSol": 85, "firstBuy": null, "launchGate": "is_mutable false; mint and freeze authority null; metadata pinned", "cpmmAfterGraduation": { "ammConfig": "LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC", "expectedPoolId": "Cd3RcQRSDKcupcZtmb3hqcGZxY63xGYyLePGSVFZXiTj", "expectedPoolCreator": "3DbCrAdmqkKN9odAWHSv9Ln48G2c1HTkvtda4ChXpd2u" } },
+    { "step": "seed 3 SOL into the fee PDA", "signature": "Dm5kBqjiYzvpAFtqu6f1aKa1tA1A1E6D5YXaaDKo4Tg5hNT6trax7G5ngHSGdjogNQhngvVSM5erMSgkSCBAhb9", "from": "EPTYFR8RhxP6ZA3o2JiaP1zEieQuzo2jZras8H3N1uSE", "to": "3DbCrAdmqkKN9odAWHSv9Ln48G2c1HTkvtda4ChXpd2u", "sol": 3 },
+    { "step": "keeper first cycle", "at": "2026-10-14T00:20:32Z", "reading": { "recordDate": "2026-10-09", "value": "40301480531899.65", "units": 0, "note": "baseline; nothing burns on the first reading" }, "signature": "4RRDyd6D7LmKxab8xTV2z8uhtK6KKCde4pr3juAe8v8PLGFaqHW3LUER8tCQAqvMk4HxarAPR2UEdn4qFxT6qego", "secondSigner": "not yet serving this mint (quorum 1; the signer host co-signs only coins on its list)" }
+  ]
+}

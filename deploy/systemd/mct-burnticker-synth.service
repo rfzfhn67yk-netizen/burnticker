@@ -1,0 +1,28 @@
+[Unit]
+Description=Burnticker synthetic creator (a second next start on 127.0.0.1:3100 serving DEVNET from the shipped build, driven by Chrome like a creator, then stopped), run nightly by its timer (mct-burnticker-synth.timer), or by hand
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/meme-coin-trader
+# scripts/service/run-burnticker-synth.sh: starts the devnet instance with devnet-synth.env (devnet program ids, its own registry under
+# data/devnet-synth/), waits for it, runs scripts/burnticker-synthetic-creator.mts against it, stops it. `next start` also reads the live
+# host's env file by itself, so the script sets EVERY name in that file EMPTY first (names only; plus a floor of the uploader payer, bank
+# keys, push, alert and PIN names): no Arweave uploader (hosted metadata; the pin budget is not exercised), no live signer, bank, push,
+# RPC or API key. Inherited on purpose, and nothing else: the read-only sports data keys (BURNTICKER_THESPORTSDB_KEY,
+# BURNTICKER_APISPORTS_KEY). The synthetic creator process itself still reads the live push channel to send its alert. The live web unit (127.0.0.1:3000, mainnet) is never touched. Failed scenarios push bt-synthetic-failed (push.ts);
+# the run exits 0 when that push was delivered (or nothing failed), 3 when failures reached nobody, 1 when it could not run.
+# 2026-10-15: with BURNTICKER_SYNTH_BANK_KEY in devnet-synth.env it first tops up its own devnet mint bank (data/devnet-synth/bank.db, one
+# worker at nice 19, at most 300 s), serves 127.0.0.1:3100 from it, starts a second instance on 127.0.0.1:3101 with no bank for
+# d-mint-source, and holds the bank at size on that one worker during the run.
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/service/run-burnticker-synth.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+Environment=TZ=America/Denver
+# Chrome, two devnet Next servers and one grinding worker: keep the run inside an hour and below 2 GB so the box keeps the live site
+# responsive (each Launch may wait up to 900 s for the browser's address search when the devnet bank is dry)
+TimeoutStartSec=3600
+MemoryMax=2048M
+Nice=10
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-synth.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-synth.log

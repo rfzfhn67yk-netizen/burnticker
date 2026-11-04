@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B3 og</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Courier+Prime:wght@400;700&display=block" rel="stylesheet">
+<style>
+  :root{--paper:#e8e7e1;--ink:#141414;--red:#d9301c}
+  html,body{margin:0;width:1200px;height:630px;overflow:hidden;background:var(--paper)}
+  body{position:relative;color:var(--ink);font-family:'Courier Prime',monospace}
+  .grain{position:absolute;inset:0;opacity:.11;mix-blend-mode:multiply;pointer-events:none}
+  .tape{position:absolute;left:0;top:0;width:1200px;height:64px;background:#dedcd3;box-shadow:0 1px 0 rgba(0,0,0,.25)}
+  .tape svg{position:absolute;inset:0}
+  .rule{position:absolute;left:0;width:1200px;background:var(--ink)}
+  .mast{position:absolute;left:72px;top:110px;font-family:'Archivo Black',sans-serif;font-size:118px;line-height:.92;letter-spacing:-3px;filter:url(#typo)}
+  .mast i{font-style:normal;color:var(--red)}
+  .dateline{position:absolute;left:74px;top:352px;font-size:21px;letter-spacing:4px;white-space:nowrap;filter:url(#typo)}
+  .dateline b{display:inline-block;background:var(--red);color:var(--paper);font-weight:700;padding:1px 10px 0;margin-left:16px;letter-spacing:5px}
+  .body{position:absolute;left:74px;top:404px;font-size:22px;letter-spacing:3px;line-height:36px;filter:url(#typo);width:1060px}
+  .body s{text-decoration:none;position:relative;color:#5a5955}
+  .body s:after{content:"";position:absolute;left:-2px;right:-2px;top:52%;height:3px;background:var(--red)}
+  .disc{position:absolute;left:74px;top:574px;font-size:15px;letter-spacing:1.5px;color:#6a6964}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="typo" x="-2%" y="-2%" width="104%" height="104%"><feTurbulence type="fractalNoise" baseFrequency=".95" numOctaves="2" seed="5" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.5"/></filter>
+  <filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".75" numOctaves="3" stitchTiles="stitch"/></filter>
+</svg>
+<svg class="grain" width="1200" height="630"><rect width="1200" height="630" filter="url(#g)"/></svg>
+<div class="tape"><svg id="tape" viewBox="0 0 1200 64" width="1200" height="64"></svg></div>
+<div class="rule" style="top:70px;height:6px"></div>
+<div class="rule" style="top:80px;height:1px"></div>
+<div class="mast">BURNTICKER<br><i>WIRE</i></div>
+<div class="dateline">SOLANA — A MEMECOIN LAUNCHPAD<b>FLASH</b></div>
+<div class="body">COINS WHOSE SUPPLY BURNS ON VERIFIABLE REAL-WORLD EVENTS. FEEDS: TREASURY DEBT, SOLAR FLARES, ORBITAL LAUNCHES, ASTEROID PASSES. RULES LOCKED AT LAUNCH. EVERY BURN CARRIES AN ON-CHAIN RECEIPT.</div>
+<div class="disc">memecoins — the rule says what supply does, not what price does</div>
+<script src="wire.js"></script>
+<script>punchTape(document.getElementById('tape'),'BURNTICKER WIRE ',{pitch:22,r:5,sprocket:2,height:64});</script>
+</body></html>

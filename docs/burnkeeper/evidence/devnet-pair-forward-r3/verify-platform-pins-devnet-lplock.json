@@ -1,0 +1,53 @@
+{
+  "command": "verify-platform-pins",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "mint": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+  "ok": true,
+  "mismatches": [],
+  "pinned": {
+    "platform": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+    "cpConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "lockScalePpm": "1000000",
+    "platformCpCreatorAllowed": [
+      "11111111111111111111111111111111",
+      "5vchyCzCe8HtxfHE49UfuysNgAqTbtfv8eckoRvxzrND"
+    ],
+    "lockNftWallet": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3"
+  },
+  "current": {
+    "owner": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+    "cpConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "platformCpCreator": "11111111111111111111111111111111",
+    "scalesPpm": [
+      "1000000",
+      "0",
+      "0"
+    ],
+    "lockScalePpm": "1000000",
+    "lockNftWallet": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3"
+  },
+  "lpLock": {
+    "ok": true,
+    "problems": [],
+    "current": {
+      "lockNftWallet": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+      "scalesPpm": [
+        "1000000",
+        "0",
+        "0"
+      ]
+    },
+    "pinned": {
+      "lockNftWallet": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+      "scalesPpm": [
+        "1000000",
+        "0",
+        "0"
+      ],
+      "operatorTreasury": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+      "platform": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf"
+    }
+  }
+}

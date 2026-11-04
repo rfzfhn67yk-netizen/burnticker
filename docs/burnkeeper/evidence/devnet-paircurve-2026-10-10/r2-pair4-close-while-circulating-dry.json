@@ -1,0 +1,23 @@
+{
+  "command": "close",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "8XGyJ9b3C5pjMQdXEKa7fJKzQWKwNu4GEm5LEtHPcZe3",
+  "result": {
+    "ok": false,
+    "signature": null,
+    "error": "NotClosable",
+    "unitsConsumed": 19290,
+    "txBytes": 648,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN invoke [1]",
+      "Program log: Instruction: ClosePair",
+      "Program log: AnchorError thrown in programs/pair_curve/src/instructions/void_pair.rs:161. Error Code: NotClosable. Error Number: 6022. Error Message: close_pair: something is still owed (tokens in circulation, unburned vault tokens or SOL).",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN consumed 19140 of 599850 compute units",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN failed: custom program error: 0x1786"
+    ]
+  }
+}

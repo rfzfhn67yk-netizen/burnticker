@@ -1,0 +1,32 @@
+Creating token ES1HxjArAP6e789g11qWESDrpeYPJWUwR7XCBEx2UHZe under program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+Address:  ES1HxjArAP6e789g11qWESDrpeYPJWUwR7XCBEx2UHZe
+Decimals:  6
+
+Signature: 3rT5JGBX5j13CfX2RxbsPQURzYrJiuyrtxKwneadmKn8RU8fgRzCYpQEWhYzoGhnEmmFEV7iLi8MTVPKQQfrQthi
+
+Creating account B7AwgWtrN3LVuSLuii5md2uGPN6kPhyKpzQYb7QQnLK2
+
+Signature: 5rjdU7LdJXeef2wUPLuncKhZxMk365txQVrbfRpRJXTmWRGttni6T1xP2LWKV5kMxUNJFdDhKibDrnGpRxYooJ2z
+
+Minting 1000000000 tokens
+  Token: ES1HxjArAP6e789g11qWESDrpeYPJWUwR7XCBEx2UHZe
+  Recipient: B7AwgWtrN3LVuSLuii5md2uGPN6kPhyKpzQYb7QQnLK2
+
+Signature: 5TV71UNLmR4PDgyeypXDZmNecrTiNBAJjMtCdDH7JxJ2T19foCD9Ts6DzaubTL97Uvi38qE7WNYVrshbq5GnN22t
+
+Updating ES1HxjArAP6e789g11qWESDrpeYPJWUwR7XCBEx2UHZe
+  Current mint: HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb
+  New mint: disabled
+
+Signature: 29gJKQvWLva25BP1eAWXXG5k1jMMkkDAXY282KiXcAZQ5tQpUGSCSnUdsS4zQozmVvfNfS3NwFdRB3HE3VEBJH76
+
+
+SPL Token Mint
+  Address: ES1HxjArAP6e789g11qWESDrpeYPJWUwR7XCBEx2UHZe
+  Program: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+  Supply: 1000000000000000
+  Decimals: 6
+  Mint authority: (not set)
+  Freeze authority: (not set)
+

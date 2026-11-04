@@ -1,0 +1,57 @@
+{
+  "name": "burnticker",
+  "version": "0.1.0",
+  "private": false,
+  "license": "MIT",
+  "description": "Burnticker: an open launchpad for memecoins whose supply burns when a settled real-world event says so — the on-chain program, the keeper, the platform and the trust page. Carved out of a private monorepo by an explicit allowlist; see README.md.",
+  "scripts": {
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs --test --test-concurrency=1 \"test/**/*.test.ts\"",
+    "typecheck": "next typegen && tsc --noEmit",
+    "check": "npm run typecheck && npm test",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "keeper": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-keeper.mts",
+    "keeper:deficit": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burn-keeper.mts",
+    "audit": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-audit.mts",
+    "platform-config": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-platform-config.mts",
+    "powers-register": "node programs/burn-receipts/scripts/powers-register.mjs --check",
+    "keygen": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/burnkeeper-keygen.mjs --new"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "dependencies": {
+    "@raydium-io/raydium-sdk-v2": "0.2.74-alpha",
+    "@solana/compat": "^8.5.0",
+    "@solana/kit": "^8.5.0",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-adapter-wallets": "^0.19.38",
+    "@solana/wallet-standard-features": "^1.5.0",
+    "@solana/web3.js": "^1.99.0",
+    "@switchboard-xyz/common": "5.8.5",
+    "@switchboard-xyz/on-demand": "3.10.6",
+    "bn.js": "5.2.5",
+    "next": "16.4.2",
+    "react": "19.2.8",
+    "server-only": "^0.0.1",
+    "sharp": "^0.35.5",
+    "viem": "^2.55.19",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@irys/upload": "^0.0.15",
+    "@irys/upload-solana": "^0.1.8",
+    "bs58": "^6.0.0",
+    "react-dom": "19.2.8",
+    "tweetnacl": "^1.0.3",
+    "typescript": "^5",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4",
+    "@tailwindcss/postcss": "^4",
+    "@types/bn.js": "5.2.0"
+  }
+}

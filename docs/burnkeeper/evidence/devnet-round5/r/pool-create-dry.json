@@ -1,0 +1,26 @@
+{
+  "command": "cpmm-create",
+  "dryRun": true,
+  "payer": "E8S7PcdnKWbMwsaWoqhD35MR1KWC5RdJhsddV958DDi",
+  "pool": "A6DHbbUMcGLWhZC7QCKH26FQN8fP36MGHQu4k4CYD6e5",
+  "ammConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+  "lpMint": "HVqFLCCVDNnmLRgc6S6Qr8kr6vxqxr6w551u8R8av5Ek",
+  "vaultA": "H2EjMcL3HC5rBZLxMgAwaqDvzrDPJiEViQfTtjGJuyAf",
+  "vaultB": "Gs4m97V5nvCgn7PCNYDAAg8qcNE8Ljw7Ys4kBWNiCy3k",
+  "observation": "GDBpW1S93KUc4Fm38dvvc3wXFjFbqgBfSZsMwkkskW7Z",
+  "mintA": "So11111111111111111111111111111111111111112",
+  "mintB": "89EZ3MuiKjCekm8baXT9iTLot3SLrSygsj22LKwo2AiT",
+  "amountA": "2200000000",
+  "amountB": "1150700000",
+  "note": "the pool opens one second after creation; seed TWAP history with cpmm-swap before the first crank",
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 102249,
+    "tail": [
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 201 of 199440 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb consumed 86685 of 284436 compute units",
+      "Program DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb success"
+    ]
+  }
+}

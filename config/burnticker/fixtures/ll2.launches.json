@@ -1,0 +1,1009 @@
+{
+ "fetchedAt": "2026-10-10T02:00:00Z",
+ "url": "https://ll.thespacedevs.com/2.3.0/launches/previous/?limit=25&mode=list",
+ "count": 7646,
+ "next": "https://ll.thespacedevs.com/2.3.0/launches/previous/?limit=25&mode=list&offset=25",
+ "previous": null,
+ "results": [
+  {
+   "id": "a1bb0984-19d4-4b47-9bba-706d225573e2",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/a1bb0984-19d4-4b47-9bba-706d225573e2/",
+   "name": "Long March 12 | SatNet LEO Group 27",
+   "response_mode": "list",
+   "slug": "long-march-12-satnet-leo-group-27",
+   "launch_designator": null,
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-10-09T21:14:37Z",
+   "net": "2026-10-09T19:27:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-10-09T19:49:00Z",
+   "window_start": "2026-10-09T19:20:00Z",
+   "image": {
+    "id": 2282,
+    "name": "CZ-12 on its launch pad.",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/cz-12_on_its_la_image_20241128132937.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/cz-12_on_its_la_image_thumbnail_20241128132937.jpeg",
+    "credit": "Unknown",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "e0741415-6c63-4236-9736-24a6c04485bc",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/e0741415-6c63-4236-9736-24a6c04485bc/",
+   "name": "Nuri | NeonSat-2 to 6",
+   "response_mode": "list",
+   "slug": "nuri-neonsat-2-to-6",
+   "launch_designator": "2026-229",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-10-09T01:02:13Z",
+   "net": "2026-10-07T03:25:00Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-10-07T04:23:00Z",
+   "window_start": "2026-10-07T03:23:00Z",
+   "image": {
+    "id": 1283,
+    "name": "Nuri liftoff from LC-2 (NEXTSat-2 & SNIPE)",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/nuri_liftoff_2_image_20240820080542.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/nuri_liftoff_2_image_thumbnail_20240820080542.jpeg",
+    "credit": "KARI/VNA/CVN",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "4651fd8a-43de-4166-bf8f-c168b3bd1d2c",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/4651fd8a-43de-4166-bf8f-c168b3bd1d2c/",
+   "name": "Falcon Heavy | NROL-97",
+   "response_mode": "list",
+   "slug": "falcon-heavy-nrol-97",
+   "launch_designator": "2026-228",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-10-02T14:51:48Z",
+   "net": "2026-10-02T03:54:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-10-02T04:42:00Z",
+   "window_start": "2026-10-02T03:53:00Z",
+   "image": {
+    "id": 1739,
+    "name": "[AUTO] Falcon Heavy - image",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon_heavy_image_20220129192819.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193632.jpeg",
+    "credit": null,
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "67213393-7983-4c06-8b44-b8c785a5ed79",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/67213393-7983-4c06-8b44-b8c785a5ed79/",
+   "name": "Falcon 9 Block 5 | Transporter 18 (Dedicated SSO Rideshare)",
+   "response_mode": "list",
+   "slug": "falcon-9-block-5-transporter-18-dedicated-sso-ride",
+   "launch_designator": "2026-227",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-10-01T23:19:46Z",
+   "net": "2026-10-01T18:32:00Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-10-01T19:16:00Z",
+   "window_start": "2026-10-01T18:18:00Z",
+   "image": {
+    "id": 1736,
+    "name": "Falcon 9 liftoff from LC-39A",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon_9_image_20230807133459.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193628.jpeg",
+    "credit": "SpaceX",
+    "license": {
+     "id": 5,
+     "name": "CC BY-NC 2.0",
+     "priority": 1,
+     "link": "https://creativecommons.org/licenses/by-nc/2.0/"
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "18441371-8b2e-457c-afb5-1ec1b11ab630",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/18441371-8b2e-457c-afb5-1ec1b11ab630/",
+   "name": "Falcon 9 Block 5 | Crew-13",
+   "response_mode": "list",
+   "slug": "falcon-9-block-5-crew-13",
+   "launch_designator": "2026-226",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-10-01T23:09:46Z",
+   "net": "2026-10-01T15:10:06Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-10-01T15:10:06Z",
+   "window_start": "2026-10-01T15:10:06Z",
+   "image": {
+    "id": 1385,
+    "name": "Crew Dragon at sunset",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon2520925_image_20220301072106.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305192609.jpeg",
+    "credit": "SpaceX",
+    "license": {
+     "id": 5,
+     "name": "CC BY-NC 2.0",
+     "priority": 1,
+     "link": "https://creativecommons.org/licenses/by-nc/2.0/"
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "7d1afb26-6f9c-429b-9ccf-29012fd1e519",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/7d1afb26-6f9c-429b-9ccf-29012fd1e519/",
+   "name": "Starship | Starlink Group 31-1 (Starship Flight 14)",
+   "response_mode": "list",
+   "slug": "starship-starlink-group-31-1-starship-flight-14",
+   "launch_designator": "2026-225",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-29T15:33:32Z",
+   "net": "2026-09-28T12:48:59Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-09-28T13:30:00Z",
+   "window_start": "2026-09-28T12:15:00Z",
+   "image": {
+    "id": 2807,
+    "name": "Starship liftoff from Pad 2 (Flight 14)",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/starship_liftof_image_20260929153327.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/starship_liftof_image_thumbnail_20260929153328.jpeg",
+    "credit": "SpaceX",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "7330d83b-c478-426c-8859-f9e3a335876d",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/7330d83b-c478-426c-8859-f9e3a335876d/",
+   "name": "Falcon 9 Block 5 | USSF-385",
+   "response_mode": "list",
+   "slug": "falcon-9-block-5-ussf-385",
+   "launch_designator": "2026-224",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-28T23:50:09Z",
+   "net": "2026-09-26T14:00:54Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-09-26T14:56:00Z",
+   "window_start": "2026-09-26T11:56:00Z",
+   "image": {
+    "id": 2797,
+    "name": "Falcon 9 liftoff from SLC-4E (USSF-366)",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon_9_liftof_image_20260816171423.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon_9_liftof_image_thumbnail_20260816171423.jpeg",
+    "credit": "SpaceX",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "9e24bef7-c44b-4fdc-ba52-68545ce9457e",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/9e24bef7-c44b-4fdc-ba52-68545ce9457e/",
+   "name": "Electron | Owlright, Owlright, Owlright (StriX Launch 13)",
+   "response_mode": "list",
+   "slug": "electron-owlright-owlright-owlright-strix-launch-1",
+   "launch_designator": "2026-223",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-28T23:36:52Z",
+   "net": "2026-09-26T00:39:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-26T00:39:00Z",
+   "window_start": "2026-09-26T00:39:00Z",
+   "image": {
+    "id": 1727,
+    "name": "[AUTO] Electron - image",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/electron_image_20190705175640.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193613.jpeg",
+    "credit": null,
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "aed67837-b567-43e0-8071-c3ccc24aa496",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/aed67837-b567-43e0-8071-c3ccc24aa496/",
+   "name": "Long March 6A | Yaogan 40 Group 04",
+   "response_mode": "list",
+   "slug": "long-march-6a-yaogan-40-group-04",
+   "launch_designator": "2026-222",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-24T22:43:36Z",
+   "net": "2026-09-24T08:46:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-24T09:04:00Z",
+   "window_start": "2026-09-24T08:38:00Z",
+   "image": {
+    "id": 2450,
+    "name": "Long March 6A | SatNet LEO Group 05 launch",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/long_march_6a__image_20251209050223.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/long_march_6a__image_thumbnail_20251209050224.jpeg",
+    "credit": "CCTV",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "63063b9d-ade9-4448-8717-6f910aa81188",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/63063b9d-ade9-4448-8717-6f910aa81188/",
+   "name": "Long March 8A | SatNet LEO Group 26",
+   "response_mode": "list",
+   "slug": "long-march-8a-satnet-leo-group-26",
+   "launch_designator": "2026-221",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-27T17:31:55Z",
+   "net": "2026-09-23T13:32:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-23T13:49:00Z",
+   "window_start": "2026-09-23T13:24:00Z",
+   "image": {
+    "id": 2616,
+    "name": "CZ-8A Launch (SatNet LEO Group 14)",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/cz-8a_launch_2_image_20251206093107.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/cz-8a_launch_2_image_thumbnail_20251206093108.jpeg",
+    "credit": "CASC",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "5af31461-bce5-4cfb-a0ee-b527cf285d90",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/5af31461-bce5-4cfb-a0ee-b527cf285d90/",
+   "name": "Kinetica 1 | 9 satellites",
+   "response_mode": "list",
+   "slug": "kinetica-1-9-satellites-2",
+   "launch_designator": "2026-220",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-21T00:10:16Z",
+   "net": "2026-09-20T04:03:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-20T04:15:00Z",
+   "window_start": "2026-09-20T03:54:00Z",
+   "image": {
+    "id": 1755,
+    "name": "[AUTO] Kinetica 1 - image",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/zhongke-1a_image_20220912002218.png",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193659.png",
+    "credit": null,
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "d1471f9d-e9d0-4146-8e97-90863e48bfc8",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/d1471f9d-e9d0-4146-8e97-90863e48bfc8/",
+   "name": "Falcon 9 Block 5 | Starlink Group 15-27",
+   "response_mode": "list",
+   "slug": "falcon-9-block-5-starlink-group-15-27",
+   "launch_designator": "2026-219",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-20T23:59:42Z",
+   "net": "2026-09-20T01:47:00Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-09-20T05:47:00Z",
+   "window_start": "2026-09-20T01:47:00Z",
+   "image": {
+    "id": 1296,
+    "name": "Starlink night fairing",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon2520925_image_20221009234147.png",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305192320.png",
+    "credit": "SpaceX",
+    "license": {
+     "id": 5,
+     "name": "CC BY-NC 2.0",
+     "priority": 1,
+     "link": "https://creativecommons.org/licenses/by-nc/2.0/"
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "a527b585-f01f-4ecc-9230-711dcef72ef1",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/a527b585-f01f-4ecc-9230-711dcef72ef1/",
+   "name": "Long March 2D | PIESAT-2 13-16",
+   "response_mode": "list",
+   "slug": "long-march-2d-piesat-2-13-16",
+   "launch_designator": "2026-218",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-20T23:46:44Z",
+   "net": "2026-09-19T10:50:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-19T11:06:00Z",
+   "window_start": "2026-09-19T10:43:00Z",
+   "image": {
+    "id": 1768,
+    "name": "[AUTO] Long March 2D - image",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/long2520march25202d_image_20190222031211.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193719.jpeg",
+    "credit": null,
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "f4c720ce-0cfd-43e6-b8dd-00273073bc01",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/f4c720ce-0cfd-43e6-b8dd-00273073bc01/",
+   "name": "Electron | Owl By The Dozen (StriX Launch 12)",
+   "response_mode": "list",
+   "slug": "electron-owl-by-the-dozen-strix-launch-12",
+   "launch_designator": "2026-217",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-20T23:35:11Z",
+   "net": "2026-09-19T03:22:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-19T03:22:00Z",
+   "window_start": "2026-09-19T03:22:00Z",
+   "image": {
+    "id": 1727,
+    "name": "[AUTO] Electron - image",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/electron_image_20190705175640.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193613.jpeg",
+    "credit": null,
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "ab3c1e6c-03fe-48a7-b6ce-30c79569bdfb",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/ab3c1e6c-03fe-48a7-b6ce-30c79569bdfb/",
+   "name": "Soyuz 2.1b/Fregat | Glonass-K1 No. 20 (?)",
+   "response_mode": "list",
+   "slug": "soyuz-21bfregat-glonass-k1-no-20",
+   "launch_designator": "2026-216",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-18T13:37:26Z",
+   "net": "2026-09-17T16:50:00Z",
+   "net_precision": {
+    "id": 2,
+    "name": "Hour",
+    "abbrev": "HR",
+    "description": "The T-0 is accurate to the hour."
+   },
+   "window_end": "2026-09-17T16:50:00Z",
+   "window_start": "2026-09-17T16:50:00Z",
+   "image": {
+    "id": 1830,
+    "name": "Soyuz 2.1b on the pad",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/soyuz_2.1b_image_20230802085331.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193901.jpeg",
+    "credit": "Roscosmos",
+    "license": {
+     "id": 14,
+     "name": "Roscosmos Image Use Policy",
+     "priority": 3,
+     "link": "https://www.roscosmos.ru/22650/"
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "71aa4d56-0ce9-4c7d-a808-cc22f2ac5a84",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/71aa4d56-0ce9-4c7d-a808-cc22f2ac5a84/",
+   "name": "Kuaizhou 11 | SpaceTY-51 & 52",
+   "response_mode": "list",
+   "slug": "kuaizhou-11-spacety-51-52",
+   "launch_designator": "2026-215",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-18T00:39:49Z",
+   "net": "2026-09-17T02:40:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-17T03:12:00Z",
+   "window_start": "2026-09-17T02:31:00Z",
+   "image": {
+    "id": 2099,
+    "name": "Kuaizhou 11 liftoff (Xingyun VDES)",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/kuaizhou_11_lif_image_20240520155835.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/kuaizhou_11_lif_image_thumbnail_20240520155835.jpeg",
+    "credit": "中国航天科工",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "17c71937-dd80-406f-bb47-0c9ee9a24276",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/17c71937-dd80-406f-bb47-0c9ee9a24276/",
+   "name": "Falcon 9 Block 5 | USSF-259",
+   "response_mode": "list",
+   "slug": "falcon-9-block-5-ussf-259",
+   "launch_designator": "2026-214",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-18T00:33:50Z",
+   "net": "2026-09-17T01:07:56Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-09-17T05:00:00Z",
+   "window_start": "2026-09-17T01:00:00Z",
+   "image": {
+    "id": 2797,
+    "name": "Falcon 9 liftoff from SLC-4E (USSF-366)",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon_9_liftof_image_20260816171423.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon_9_liftof_image_thumbnail_20260816171423.jpeg",
+    "credit": "SpaceX",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "898f7df0-b6ce-4a5c-80b4-67e81842124e",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/898f7df0-b6ce-4a5c-80b4-67e81842124e/",
+   "name": "Long March 12 | SatNet LEO Group 25",
+   "response_mode": "list",
+   "slug": "long-march-12-satnet-leo-group-25",
+   "launch_designator": "2026-213",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-18T00:17:31Z",
+   "net": "2026-09-17T00:32:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-17T00:54:00Z",
+   "window_start": "2026-09-17T00:25:00Z",
+   "image": {
+    "id": 2282,
+    "name": "CZ-12 on its launch pad.",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/cz-12_on_its_la_image_20241128132937.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/cz-12_on_its_la_image_thumbnail_20241128132937.jpeg",
+    "credit": "Unknown",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "d793ba47-faf5-4bab-a386-39a9ccc49c90",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/d793ba47-faf5-4bab-a386-39a9ccc49c90/",
+   "name": "Soyuz 2.1b | Progress MS-35 (96P)",
+   "response_mode": "list",
+   "slug": "soyuz-21b-progress-ms-35-96p",
+   "launch_designator": "2026-212",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-16T18:11:26Z",
+   "net": "2026-09-16T13:33:54Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-09-16T13:33:54Z",
+   "window_start": "2026-09-16T13:33:54Z",
+   "image": {
+    "id": 1830,
+    "name": "Soyuz 2.1b on the pad",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/soyuz_2.1b_image_20230802085331.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193901.jpeg",
+    "credit": "Roscosmos",
+    "license": {
+     "id": 14,
+     "name": "Roscosmos Image Use Policy",
+     "priority": 3,
+     "link": "https://www.roscosmos.ru/22650/"
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "767f7827-53d8-4621-803b-f456a1e6b512",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/767f7827-53d8-4621-803b-f456a1e6b512/",
+   "name": "Gravity-1 | SpaceSail Polar Group #16",
+   "response_mode": "list",
+   "slug": "gravity-1-spacesail-polar-group-16",
+   "launch_designator": "2026-211",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-27T18:39:52Z",
+   "net": "2026-09-15T22:00:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-15T22:11:00Z",
+   "window_start": "2026-09-15T21:50:00Z",
+   "image": {
+    "id": 1742,
+    "name": "[AUTO] Gravity-1 - image",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/gravity-1_image_20240108105446.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193637.jpeg",
+    "credit": null,
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "de446468-057f-4c9d-a6a1-af99c93b541e",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/de446468-057f-4c9d-a6a1-af99c93b541e/",
+   "name": "Zhuque-2E Block 2 | SpaceSail Polar Group #15",
+   "response_mode": "list",
+   "slug": "zhuque-2e-block-2-spacesail-polar-group-15",
+   "launch_designator": "2026-210",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-15T11:58:09Z",
+   "net": "2026-09-15T06:26:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-15T06:40:00Z",
+   "window_start": "2026-09-15T06:18:00Z",
+   "image": {
+    "id": 2770,
+    "name": "Zhuque-2E Y6 launch",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/zhuque-2e_y6_la_image_20260609122825.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/zhuque-2e_y6_la_image_thumbnail_20260609122826.jpeg",
+    "credit": "LandSpace",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "8effc13a-c658-4d2e-9f15-8dba4d7fe2dd",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/8effc13a-c658-4d2e-9f15-8dba4d7fe2dd/",
+   "name": "Vega-C | Sentinel-3C & FLEX",
+   "response_mode": "list",
+   "slug": "vega-c-sentinel-3c-flex",
+   "launch_designator": "2026-209",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-15T11:48:24Z",
+   "net": "2026-09-15T01:21:07Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-09-15T01:21:07Z",
+   "window_start": "2026-09-15T01:21:07Z",
+   "image": {
+    "id": 1861,
+    "name": "Vega-C liftoff on its maiden flight (LARES-2)",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/vega-c_image_20220713154437.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193950.jpeg",
+    "credit": "ESA/CNES/Arianespace/Optique vidéo du CSG–S. Martin",
+    "license": {
+     "id": 2,
+     "name": "ESA Standard Licence",
+     "priority": 2,
+     "link": "https://www.esa.int/ESA_Multimedia/Terms_and_conditions_of_use_of_images_and_videos_available_on_the_esa_website"
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/infographic_images/vega-c2520257_infographic_20260910124303.png"
+  },
+  {
+   "id": "ad358a4d-c541-409b-9366-9c2f2da4aeb9",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/ad358a4d-c541-409b-9366-9c2f2da4aeb9/",
+   "name": "Falcon 9 Block 5 | O3b mPower 11-13",
+   "response_mode": "list",
+   "slug": "falcon-9-block-5-o3b-mpower-11-13",
+   "launch_designator": "2026-208",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-14T00:37:56Z",
+   "net": "2026-09-13T18:49:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-13T20:16:00Z",
+   "window_start": "2026-09-13T18:49:00Z",
+   "image": {
+    "id": 1736,
+    "name": "Falcon 9 liftoff from LC-39A",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon_9_image_20230807133459.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193628.jpeg",
+    "credit": "SpaceX",
+    "license": {
+     "id": 5,
+     "name": "CC BY-NC 2.0",
+     "priority": 1,
+     "link": "https://creativecommons.org/licenses/by-nc/2.0/"
+    },
+    "single_use": false,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "b81156da-c0b8-46c8-aebd-8af8d2be83cd",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/b81156da-c0b8-46c8-aebd-8af8d2be83cd/",
+   "name": "Electron | Happily Ever Faster (BlackSky Gen-3 5)",
+   "response_mode": "list",
+   "slug": "electron-happily-ever-faster-blacksky-gen-3-5",
+   "launch_designator": "2026-207",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-14T00:28:53Z",
+   "net": "2026-09-11T03:28:00Z",
+   "net_precision": {
+    "id": 1,
+    "name": "Minute",
+    "abbrev": "MIN",
+    "description": "The T-0 is accurate to the minute."
+   },
+   "window_end": "2026-09-11T03:28:00Z",
+   "window_start": "2026-09-11T01:00:00Z",
+   "image": {
+    "id": 1727,
+    "name": "[AUTO] Electron - image",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/electron_image_20190705175640.jpeg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/255bauto255d__image_thumbnail_20240305193613.jpeg",
+    "credit": null,
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  },
+  {
+   "id": "3e0456da-14b1-4ac3-b59e-35fefb1d1530",
+   "url": "https://ll.thespacedevs.com/2.3.0/launches/3e0456da-14b1-4ac3-b59e-35fefb1d1530/",
+   "name": "Falcon 9 Block 5 | USSF-153",
+   "response_mode": "list",
+   "slug": "falcon-9-block-5-ussf-153",
+   "launch_designator": "2026-206",
+   "status": {
+    "id": 3,
+    "name": "Launch Successful",
+    "abbrev": "Success",
+    "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+   },
+   "last_updated": "2026-09-13T04:39:48Z",
+   "net": "2026-09-10T15:42:30Z",
+   "net_precision": {
+    "id": 0,
+    "name": "Second",
+    "abbrev": "SEC",
+    "description": "The T-0 is accurate to the second."
+   },
+   "window_end": "2026-09-10T18:37:00Z",
+   "window_start": "2026-09-10T15:37:00Z",
+   "image": {
+    "id": 2797,
+    "name": "Falcon 9 liftoff from SLC-4E (USSF-366)",
+    "image_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon_9_liftof_image_20260816171423.jpg",
+    "thumbnail_url": "https://thespacedevs-prod.nyc3.digitaloceanspaces.com/media/images/falcon_9_liftof_image_thumbnail_20260816171423.jpeg",
+    "credit": "SpaceX",
+    "license": {
+     "id": 1,
+     "name": "Unknown",
+     "priority": 9,
+     "link": null
+    },
+    "single_use": true,
+    "variants": []
+   },
+   "infographic": null
+  }
+ ]
+}

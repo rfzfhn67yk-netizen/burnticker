@@ -1,0 +1,313 @@
+{
+  "command": "crank",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": true,
+  "kind": "buyback",
+  "recordDate": 20261010,
+  "instructions": [
+    {
+      "program": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+      "accounts": [
+        {
+          "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "pubkey": "DprXKW1XF9N2Q4x6p5J7Uh8vpAwEURnsR6NTUHX7m8nG",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "pubkey": "EzWnvfMsDr8My3QgwAK6xQAqLv9HPmYjreCejaXtfFbB",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "pubkey": "So11111111111111111111111111111111111111112",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "dataHex": "01"
+    },
+    {
+      "program": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+      "accounts": [
+        {
+          "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "pubkey": "HPsUWASysWDnfESBCvqR5Bm85HAQFaXBqcj5bhPxXV4y",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "pubkey": "EzWnvfMsDr8My3QgwAK6xQAqLv9HPmYjreCejaXtfFbB",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "pubkey": "6jxEWF78rtBsMCA44FYaCG4nFUjk4S15e4wAKKjgMzmN",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "dataHex": "01"
+    },
+    {
+      "program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "accounts": [
+        {
+          "pubkey": "DprXKW1XF9N2Q4x6p5J7Uh8vpAwEURnsR6NTUHX7m8nG",
+          "signer": false,
+          "writable": true
+        }
+      ],
+      "dataHex": "11"
+    },
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "crank_buyback",
+      "accounts": [
+        {
+          "name": "cranker",
+          "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+          "signer": true,
+          "writable": false
+        },
+        {
+          "name": "config",
+          "pubkey": "5eY5PVP1p5eMPjrvSK9bVz4ueaqW5AvQqckZS5WGkrHz",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "reading",
+          "pubkey": "25CJpojggtkjZiaX6DAdGQAGoSHZTPsmcXpD5UMsMMpc",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "platform",
+          "pubkey": "EXz6enAb7mSUfC1bWJstF96uLZiCSdFcLLSQ9cwhhxx6",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "mint",
+          "pubkey": "6jxEWF78rtBsMCA44FYaCG4nFUjk4S15e4wAKKjgMzmN",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_vault",
+          "pubkey": "EzWnvfMsDr8My3QgwAK6xQAqLv9HPmYjreCejaXtfFbB",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_wsol",
+          "pubkey": "DprXKW1XF9N2Q4x6p5J7Uh8vpAwEURnsR6NTUHX7m8nG",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_tokens",
+          "pubkey": "HPsUWASysWDnfESBCvqR5Bm85HAQFaXBqcj5bhPxXV4y",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "wsol_mint",
+          "pubkey": "So11111111111111111111111111111111111111112",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "pool_state",
+          "pubkey": "FhX8md6YWDf39k3Wg4jG2zk4ZkXYqDmtnzfYtrfVjj73",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "amm_config",
+          "pubkey": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "cpmm_authority",
+          "pubkey": "CXniRufdq5xL8t8jZAPxsPZDpuudwuJSPWnbcD5Y5Nxq",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "wsol_vault",
+          "pubkey": "Gaf1eeWmC4PuUiJJRUMY8MkcwrRr7eqofyoNdePExqu3",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "token_vault",
+          "pubkey": "He4wL2XDHV98XB35H1LQoTKpiJWoMkx76gPcmYAAHqPa",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "observation_state",
+          "pubkey": "2C5UhYVeFjnME54gGCdSEWXZ4UFeuShTH92m1qU563TX",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "cpmm_program",
+          "pubkey": "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "token_program",
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "memo_program",
+          "pubkey": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "pair_link",
+          "pubkey": "CKu8V6wezZbe8g13DGWDRjs4Vn4cwD4hjw8a7EEeDcFm",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "pair_result",
+          "pubkey": "9z9C3kWf9R1562bFyLEBSxMaxDHrLwhcVdZ9a1gkkYWF",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {
+        "record_date": 20261010
+      }
+    }
+  ],
+  "simulation": {
+    "err": "{\"InstructionError\":[4,{\"Custom\":6086}]}",
+    "unitsConsumed": 75448,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+      "Program log: CreateIdempotent",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 179 of 394422 compute units",
+      "Program return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: Initialize the associated token account",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 389333 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 229 of 386871 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 13512 of 399850 compute units",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+      "Program log: CreateIdempotent",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 179 of 380912 compute units",
+      "Program return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: Initialize the associated token account",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 375823 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 233 of 373362 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 13513 of 386338 compute units",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 201 of 372825 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: CrankBuyback",
+      "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/pair.rs:335. Error Code: PairResultPending. Error Number: 6086. Error Message: a paired coin's crank waits for the period's pair result (or PAIR_RESULT_GRACE_SECS after the reading); retry later.",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 48072 of 372624 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17c6"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "5eY5PVP1p5eMPjrvSK9bVz4ueaqW5AvQqckZS5WGkrHz",
+      "kind": "TokenConfig",
+      "state": null
+    },
+    {
+      "address": "EzWnvfMsDr8My3QgwAK6xQAqLv9HPmYjreCejaXtfFbB",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "EzWnvfMsDr8My3QgwAK6xQAqLv9HPmYjreCejaXtfFbB",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "HXEXbwJFENsRFv65XQqBKGuXbYK3jTAb9Am7YxW8S8cm",
+      "kind": "lamports",
+      "state": null
+    }
+  ]
+}

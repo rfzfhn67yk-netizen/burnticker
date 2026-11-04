@@ -1,0 +1,180 @@
+{
+  "mode": "platform",
+  "cluster": "devnet",
+  "dryRun": true,
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+  "platformId": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+  "admin": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+  "feeWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+  "dials": {
+    "platformFeePpm": "2500",
+    "platformFeeBps": 25,
+    "burnPoolFeePpm": "5000",
+    "burnPoolFeeBps": 50,
+    "lpToPlatformPpm": "0",
+    "cpConfigId": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "cpConfig": {
+      "index": 0,
+      "tradeFeeBps": 25,
+      "creatorFeeBps": 25,
+      "creatorFeeShareToProtocolPct": 0
+    }
+  },
+  "feeSplit": {
+    "preGraduation": {
+      "totalBps": 100,
+      "legs": [
+        {
+          "bps": 25,
+          "lamportsPer1Sol": "2500000",
+          "to": "Raydium protocol (GlobalConfig.protocolFeeOwner)",
+          "dial": "GlobalConfig.tradeFeeRate — fixed by Raydium"
+        },
+        {
+          "bps": 25,
+          "lamportsPer1Sol": "2500000",
+          "to": "platform claim wallet 3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+          "dial": "PlatformConfig.feeRate — 0..50,000 ppm (0..500 bps)"
+        },
+        {
+          "bps": 50,
+          "lamportsPer1Sol": "5000000",
+          "to": "burn pool (the burn program's fee PDA = launch creator; the program's permissionless claim_launchlab_creator_fee)",
+          "dial": "PlatformConfig.creatorFeeRate — 0..5,000 ppm (0..50 bps)"
+        }
+      ],
+      "note": "bonding-curve trades; quote-token (SOL) fees; platform and creator fees accrue in vaults and must be claimed"
+    },
+    "postGraduation": {
+      "totalBps": 50,
+      "legs": [
+        {
+          "bps": 0,
+          "lamportsPer1Sol": "0",
+          "to": "platform Fee Key holder 3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp (LP-Lock harvest, not the keeper)",
+          "dial": "AmmConfig.tradeFeeRate × (1 − protocol − fund) × (platformScale + creatorScale)/1e6 — cpConfigId + migrateCpLockNftScale"
+        },
+        {
+          "bps": 21,
+          "lamportsPer1Sol": "2100000",
+          "to": "nobody (burned LP's share of LP fees stays in the pool, unclaimable)",
+          "dial": "burnScale/1e6 of the LP share"
+        },
+        {
+          "bps": 4,
+          "lamportsPer1Sol": "400000",
+          "to": "Raydium (protocol + fund shares of the trade fee)",
+          "dial": "AmmConfig.protocolFeeRate + fundFeeRate of the trade fee — fixed per tier"
+        },
+        {
+          "bps": 25,
+          "lamportsPer1Sol": "2500000",
+          "to": "burn pool (pool_creator = the launch creator = the fee PDA; CPMM collect_creator_fee_permissionless)",
+          "dial": "AmmConfig.creatorFeeRate × (1 − creatorFeeShareRate) — fixed per tier (5 bps − 5% on mainnet tier 0); the platform cannot raise it"
+        },
+        {
+          "bps": 0,
+          "lamportsPer1Sol": "0",
+          "to": "Raydium (protocol share of the creator fee, at collection)",
+          "dial": "AmmConfig.creatorFeeShareRate (or a CreatorFeeShare PDA)"
+        }
+      ],
+      "note": "CPMM pool on AmmConfig index 0 (trade 25 bps + creator 25 bps); creator fee taken on the SOL side when creatorFeeOn = OnlyTokenB"
+    }
+  },
+  "warnings": [],
+  "problems": [],
+  "transactions": [
+    {
+      "label": "create the Burnticker platform config",
+      "signers": [
+        "platform admin"
+      ],
+      "instructions": [
+        {
+          "name": "LaunchLab create_platform_config",
+          "program": "LaunchLab (devnet)",
+          "args": {
+            "feeRate": "2500",
+            "creatorFeeRate": "5000",
+            "platformScale": "0",
+            "creatorScale": 0,
+            "burnScale": "1000000",
+            "platformVestingScale": 0,
+            "name": "Burnticker",
+            "web": "https://burnticker.com",
+            "img": "https://burnticker.com/brand/avatar.png",
+            "platformCpCreator": "default (left unset → the launch creator is the CPMM pool creator)"
+          },
+          "accounts": [
+            {
+              "role": "platform admin (signer)",
+              "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+              "signer": true,
+              "writable": true
+            },
+            {
+              "role": "platform claim-fee wallet (BURNTICKER_FEE_WALLET)",
+              "pubkey": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "platform lock-NFT wallet",
+              "pubkey": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "platform_config PDA",
+              "pubkey": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "cpmm AmmConfig (cpConfigId)",
+              "pubkey": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+              "signer": false,
+              "writable": true
+            },
+            {
+              "role": "system program",
+              "pubkey": "11111111111111111111111111111111",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "transfer-fee extension authority (unused: default)",
+              "pubkey": "11111111111111111111111111111111",
+              "signer": false,
+              "writable": false
+            },
+            {
+              "role": "platform vesting wallet",
+              "pubkey": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+              "signer": false,
+              "writable": false
+            }
+          ],
+          "dataHex": "b05ac4affd71dc140000000000000000000000000000000040420f0000000000c4090000000000000a0000004275726e7469636b65721600000068747470733a2f2f6275726e7469636b65722e636f6d2700000068747470733a2f2f6275726e7469636b65722e636f6d2f6272616e642f6176617461722e706e6788130000000000000000000000000000"
+        }
+      ]
+    }
+  ],
+  "simulation": {
+    "err": null,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 invoke [1]",
+      "Program log: Instruction: CreatePlatformConfig",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: PlatformParams {\n    migrate_nft_info: MigrateNftInfo {\n        platform_scale: 0,\n        creator_scale: 0,\n        burn_scale: 1000000,\n    },\n    fee_rate: 2500,\n    name: \"Burnticker\",\n    web: \"https://burnticker.com\",\n    img: \"https://burnticker.com/brand/avatar.png\",\n    creator_fee_rate: 5000,\n    platform_vesting_scale: 0,\n}",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 consumed 26370 of 399850 compute units",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 success"
+    ],
+    "unitsConsumed": 26520
+  }
+}

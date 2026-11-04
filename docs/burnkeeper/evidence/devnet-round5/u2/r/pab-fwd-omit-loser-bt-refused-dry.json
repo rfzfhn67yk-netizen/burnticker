@@ -1,0 +1,20 @@
+{
+  "command": "fwd-winner",
+  "dryRun": true,
+  "omitted": "HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG",
+  "step": "fwd-winner without HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG's BurnTarget",
+  "bytes": 688,
+  "simulation": {
+    "err": "{\"InstructionError\":[1,{\"Custom\":6143}]}",
+    "unitsConsumed": 51502,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: ForwardToWinner",
+      "Program log: AnchorError occurred. Error Code: BurnTargetAccountMissing. Error Number: 6143. Error Message: a target coin's BurnTarget account is required.",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 51352 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17ff"
+    ]
+  }
+}

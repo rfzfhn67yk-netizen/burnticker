@@ -1,0 +1,117 @@
+import { KeyedSwr, SWR_BUILD_TIMEOUT_MS, type SwrState } from "@/lib/burnticker/keyedSwr";
+import { COIN_MAX_STALE_MS, trustStaleLine } from "@/lib/burnticker/coinFreshness";
+import { LruMap } from "@/lib/burnticker/lru";
+import type { LamportsDelta } from "@/lib/burnticker/trust";
+
+/**
+ * THE TRUST PAGE'S MEMO (2026-10-15 prelaunch audit C2). /api/burnticker/trust and /v1/trust rebuilt the page on every request: the
+ * live platform config, the effective cap and (for the page) the developer fee ledger, which read up to 200 transactions one by one, with
+ * no cache and no rate limit. Now each answer is kept and served at once, refreshed in the background once older than TRUST_FRESH_MS
+ * (one refresh in flight; stale while revalidate, like home/route.ts), and the ledger's per-transaction reads are kept in
+ * TRUST_DELTA_CACHE (a landed transaction never changes), so a refresh reads only the signature list and the transactions it has not
+ * seen. The routes are rate limited as well.
+ */
+export const TRUST_FRESH_MS = 120_000, TRUST_COLD_WAIT_MS = 15_000;
+/**
+ * Audit 7 F06 (2026-10-19): the memo had no maximum age and no rebuild timeout, so a hung rebuild kept serving the old trust payload as a
+ * cache hit indefinitely. It now takes the coin route's bounds (10-18 audit F02): an answer older than TRUST_MAX_STALE_MS (the coin
+ * page's COIN_MAX_STALE_MS, 15 minutes) is no longer a hit, and a rebuild in flight past SWR_BUILD_TIMEOUT_MS (2 minutes) counts as
+ * failed so the next read starts another. A late landing of an abandoned rebuild never replaces a newer answer (keyedSwr.ts). Past the
+ * bound the route serves the last verified copy marked degraded (`freshness.stale`, `lastVerifiedAt`), never as a hit, and the edge
+ * does not keep it.
+ */
+export const TRUST_MAX_STALE_MS = COIN_MAX_STALE_MS;
+export const TRUST_CACHE_CONTROL = "public, max-age=30, s-maxage=60, stale-while-revalidate=120";
+export const makeTrustSwr = (o: { clock?: () => number; coldWaitMs?: number } = {}): KeyedSwr<unknown> =>
+  new KeyedSwr<unknown>({ freshMs: TRUST_FRESH_MS, coldWaitMs: o.coldWaitMs ?? TRUST_COLD_WAIT_MS, maxStaleMs: TRUST_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS, maxKeys: 4, log: (k, e) => console.error(`[burnticker/trust] ${k} build failed:`, e) }, o.clock ?? Date.now);
+export const trustSwr = makeTrustSwr();
+
+/**
+ * HB-155 (hourly run 14): /v1/trust shared the page's memo (refreshed after TRUST_FRESH_MS, 2 minutes, with a 15-minute bound) but went
+ * out under the API's own 60 s header (`max-age=60, s-maxage=60, stale-while-revalidate=60`), so a body 238 s old was served where the
+ * header promised at most 120 s. The API answer now has its own memo with the pair route's bounds (HB-99): refreshed after
+ * V1_TRUST_FRESH_MS, no longer a hit past V1_TRUST_MAX_STALE_MS (the header's max-age plus its stale-while-revalidate window), a hung
+ * refresh dropped after SWR_BUILD_TIMEOUT_MS. The header counts the body's age (v1TrustHeaders): the edge keeps it only for what is left
+ * of the 60 s, and a body past that goes out with no-store and its real age.
+ */
+export const V1_TRUST_CACHE_SEC = 60, V1_TRUST_FRESH_MS = 30_000, V1_TRUST_MAX_STALE_MS = 2 * V1_TRUST_CACHE_SEC * 1000;
+/**
+ * HB-211 / HS-98 (ninth pre-launch audit, OP9-1): in the publish-111 deploy window a visitor's /v1/trust waited 20 s on the first build
+ * and got the proxy's 503 page. A read now waits at most V1_TRUST_DEADLINE_MS for a build (under the proxy's 20 s). Past it, the last
+ * good copy is served marked stale (x-trust-memo: stale, no-store, its real age); that copy is kept in the registry too, so a copy from
+ * before a restart answers while the first build after it runs. Only with no copy at all is the answer a short 503 with retry-after.
+ * The web's start-up warm call (scripts/service/web-warm.cjs) starts that first build before any visitor.
+ */
+export const V1_TRUST_DEADLINE_MS = 12_000;
+export const V1_TRUST_LAST_GOOD_KEY = "trust.v1.lastGood";
+export interface TrustLastGoodStore { load(): { at: number; value: unknown } | null; save(copy: { at: number; value: unknown }): void }
+/** A last-good store kept in memory and, when given, in the registry's status table (a read or write that fails is ignored). */
+export function trustLastGoodStore(reg?: { getStatus(key: string): string | null; setStatus(key: string, value: unknown, now?: number): void } | null): TrustLastGoodStore {
+  let mem: { at: number; value: unknown } | null = null;
+  return {
+    load() {
+      if (mem) return mem;
+      try { const raw = reg?.getStatus(V1_TRUST_LAST_GOOD_KEY); if (raw) { const j = JSON.parse(raw) as { at?: unknown; value?: unknown }; if (typeof j.at === "number" && j.value && typeof j.value === "object") mem = { at: j.at, value: j.value }; } } catch { /* unreadable: no copy */ }
+      return mem;
+    },
+    save(copy) {
+      if (mem && mem.at >= copy.at) return;
+      mem = copy;
+      try { reg?.setStatus(V1_TRUST_LAST_GOOD_KEY, JSON.stringify(copy, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), copy.at); } catch { /* the memory copy still serves */ }
+    },
+  };
+}
+/**
+ * HB-211: the /v1/trust answer from the memo within the deadline: the memo's answer (kept as the last good copy when it is not stale),
+ * else the last good copy marked stale, else null (the route answers 503 with retry-after). A first build that fails is the same as one
+ * still running. Never throws.
+ */
+export async function serveV1Trust(swr: KeyedSwr<unknown>, build: () => Promise<unknown>, store: TrustLastGoodStore, now: () => number = Date.now): Promise<{ value: unknown; headers: Record<string, string>; state: SwrState | "last-good" } | null> {
+  let r: Awaited<ReturnType<KeyedSwr<unknown>["get"]>> = null;
+  try { r = await swr.get("v1", "1", build); } catch { r = null; }
+  if (r) {
+    if (r.state !== "stale") store.save({ at: now() - r.ageMs, value: r.value });
+    return { value: r.value, headers: v1TrustHeaders(r), state: r.state };
+  }
+  const last = store.load();
+  if (!last) return null;
+  return { value: last.value, headers: v1TrustHeaders({ state: "stale", ageMs: now() - last.at }), state: "last-good" };
+}
+export const makeV1TrustSwr = (o: { clock?: () => number; coldWaitMs?: number } = {}): KeyedSwr<unknown> =>
+  new KeyedSwr<unknown>({ freshMs: V1_TRUST_FRESH_MS, coldWaitMs: o.coldWaitMs ?? V1_TRUST_DEADLINE_MS, maxStaleMs: V1_TRUST_MAX_STALE_MS, buildTimeoutMs: SWR_BUILD_TIMEOUT_MS, maxKeys: 2, log: (k, e) => console.error(`[burnticker/v1-trust] ${k} build failed:`, e) }, o.clock ?? Date.now);
+export const v1TrustSwr = makeV1TrustSwr();
+/** HB-155: the /v1/trust headers for a body `ageMs` old in memo state `state` (they replace the API's fixed 60 s header). */
+export function v1TrustHeaders(r: { state: SwrState; ageMs: number }): Record<string, string> {
+  const ageSec = Math.max(0, Math.floor(r.ageMs / 1000)), left = V1_TRUST_CACHE_SEC - ageSec;
+  const stale = r.state === "stale" || r.state === "stale-version" || left <= 0;
+  return {
+    "cache-control": stale ? "no-store" : `public, max-age=${left}, s-maxage=${left}, stale-while-revalidate=${V1_TRUST_CACHE_SEC}`,
+    // the standard Age header only beside no-store: next to a shortened max-age a cache would count the age twice
+    ...(stale ? { age: String(ageSec) } : {}), "x-trust-age-sec": String(ageSec), "x-trust-memo": stale ? "stale" : r.state,
+  };
+}
+
+/** How old the served trust copy is, and whether it is past the bound (degraded: the last verified copy, a fresh read has not landed). */
+export interface TrustFreshness { state: SwrState | "stale"; ageMs: number; stale: boolean; lastVerifiedAt: string; note: string | null }
+export function trustFreshness(r: { state: SwrState; ageMs: number }, now: number = Date.now()): TrustFreshness {
+  const ageMs = Math.max(0, r.ageMs);
+  const stale = r.state === "stale" || ageMs >= TRUST_MAX_STALE_MS;
+  return { state: stale ? "stale" : r.state, ageMs, stale, lastVerifiedAt: new Date(now - ageMs).toISOString(), note: stale ? trustStaleLine(ageMs) : null };
+}
+
+export type TrustServed = { status: number; body: unknown; headers: Record<string, string> };
+/**
+ * The trust route's answer from the memo: 503 while nothing has been read yet; otherwise the payload with its `freshness`. A fresh copy
+ * is kept at the edge (TRUST_CACHE_CONTROL); a degraded one is not (no-store), so the next visitor asks again. `x-trust-memo` is the
+ * memo's state, "stale" past the bound.
+ */
+export async function serveTrust(swr: KeyedSwr<unknown>, key: string, build: () => Promise<unknown>, now: () => number = Date.now): Promise<TrustServed> {
+  let r: Awaited<ReturnType<KeyedSwr<unknown>["get"]>>;
+  // a first build that fails with nothing kept: a 503 the page retries, not a thrown 500
+  try { r = await swr.get(key, "1", build); } catch { return { status: 503, body: { loading: false, error: "the trust page could not be read just now; try again in a few seconds", code: "trust-unavailable", retryAfterSec: 15 }, headers: { "cache-control": "no-store", "retry-after": "15" } }; }
+  if (!r) return { status: 503, body: { loading: true, error: "the trust page is being read; try again in a few seconds", code: "trust-loading", retryAfterSec: 5 }, headers: { "cache-control": "no-store", "retry-after": "5" } };
+  const freshness = trustFreshness(r, now());
+  const body = r.value && typeof r.value === "object" && !Array.isArray(r.value) ? { ...(r.value as Record<string, unknown>), freshness } : r.value;
+  return { status: 200, body, headers: { "cache-control": freshness.stale ? "no-store" : TRUST_CACHE_CONTROL, "x-trust-memo": freshness.state } };
+}
+export const TRUST_DELTA_CACHE = new LruMap<string, LamportsDelta>(2_000);

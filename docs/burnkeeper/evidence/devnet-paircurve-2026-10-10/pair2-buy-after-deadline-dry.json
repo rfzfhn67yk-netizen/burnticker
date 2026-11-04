@@ -1,0 +1,36 @@
+{
+  "command": "buy",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "3WzEhdXaWZVA8K21rywXzgwK3RktQzPmxsWfZvcDb9fh",
+  "side": "B",
+  "quote": {
+    "tokensOut": "28464531063753",
+    "cost": "9900991",
+    "fees": {
+      "fee": "99009",
+      "dev": "24752",
+      "burn": "74257"
+    },
+    "total": "10000000",
+    "soldAfter": "125131199812091",
+    "solAfter": "39603962"
+  },
+  "result": {
+    "ok": false,
+    "signature": null,
+    "error": "DeadlinePassed",
+    "unitsConsumed": 22886,
+    "txBytes": 599,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN invoke [1]",
+      "Program log: Instruction: Buy",
+      "Program log: AnchorError thrown in programs/pair_curve/src/instructions/trade.rs:93. Error Code: DeadlinePassed. Error Number: 6011. Error Message: buys close at the deadline.",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN consumed 22736 of 599850 compute units",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN failed: custom program error: 0x177b"
+    ]
+  }
+}

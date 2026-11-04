@@ -1,0 +1,9 @@
+# round 2 — 1. the verified-build table of the previous release (35b5b3e1… for devnet) does not match the buffer
+refusing: buffer executable hash 91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9 ≠ the verified-build table's devnet hash 35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1
+exit 2
+# round 2 — 2. a plain-file sha256 is no longer accepted
+refusing: --expect-sha256 is gone: the script reads the executable hash from config/burnticker/verified-build.json
+exit 2
+# round 2 — 3. --expect-file is the mainnet (default-feature) build: its executable hash is not the table's devnet hash
+refusing: --expect-file executable hash 9ef38e0d8954f6c8242d8157dccdc8a2b169dbd987b13f588c5096ee280ec006 ≠ the table's devnet hash 91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9 (pair_curve)
+exit 2

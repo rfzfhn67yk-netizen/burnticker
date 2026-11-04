@@ -1,0 +1,115 @@
+{
+  "case": "x28-reading-dated-at-end-after-resolved",
+  "expected": "StaleReading|ConflictingReading",
+  "observed": "ConflictingReading",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR submit-reading --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX --date 20261009 --value 3800300000000001 --attester ~/.config/meme-coin-trader/devnet/keeper.json",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6009}]}",
+  "errorLogLines": [
+    "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/submit_reading.rs:53. Error Code: ConflictingReading. Error Number: 6009. Error Message: a reading for this date already exists with a different value.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x1779"
+  ],
+  "stderr": [
+    "Server responded with 429 .  Retrying after 500ms delay..."
+  ],
+  "output": {
+    "command": "submit-reading",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "message": "BURNRECEIPTS-v3|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX|treasury.debt_to_penny|prev=2026-10-09|2026-10-09|38003000000000.01|src=244ad694e9a22c570fae2394f5997a696aa5348dbcb888773283b249ebb93938|proof=0000000000000000000000000000000000000000000000000000000000000000",
+    "instructions": [
+      {
+        "program": "Ed25519SigVerify111111111111111111111111111",
+        "accounts": [],
+        "dataHex": "01003000ffff1000ffff70006601ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a539db2114ccd4d77d439fb665d65e7346e10d3928f257fd372191b9fb8c50a30376c6e7cd7a9292f700f683bd0c7c9910b42285110348a41635e4719be666e6014255524e52454345495054532d76337c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c4569704376586f5550474c67337241445a4362325871354b486f314535357a78586b63316e5a7534375254587c74726561737572792e646562745f746f5f70656e6e797c707265763d323032362d31302d30397c323032362d31302d30397c33383030333030303030303030302e30317c7372633d323434616436393465396132326335373066616532333934663539393761363936616135333438646263623838383737333238336232343965626239333933387c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+      },
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "submit_reading",
+        "accounts": [
+          {
+            "name": "payer",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "name": "config",
+            "pubkey": "76Fv5V7zpXRVApXBUvEHjMJ2zQFDtmbAFzmU2c2vNpCB",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "reading",
+            "pubkey": "FtaqZ5NySKkmPs2moEsr5UjWP4VYzGs3BraPf3k5SHB4",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "instructions",
+            "pubkey": "Sysvar1nstructions1111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "event_authority",
+            "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "program",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {
+          "record_date": 20261009,
+          "value": "3800300000000001",
+          "source_url_hash": "244ad694e9a22c570fae2394f5997a696aa5348dbcb888773283b249ebb93938",
+          "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":6009}]}",
+      "unitsConsumed": 29004,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: SubmitReading",
+        "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/submit_reading.rs:53. Error Code: ConflictingReading. Error Number: 6009. Error Message: a reading for this date already exists with a different value.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 28854 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x1779"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "76Fv5V7zpXRVApXBUvEHjMJ2zQFDtmbAFzmU2c2vNpCB",
+        "kind": "TokenConfig",
+        "state": null
+      },
+      {
+        "address": "2SvevzMCmDnoBvQkkzR7iRpkzD4MKdZjhLhkgg2x7eGy",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "FtaqZ5NySKkmPs2moEsr5UjWP4VYzGs3BraPf3k5SHB4",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

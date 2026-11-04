@@ -1,0 +1,20 @@
+# LOG ROTATION for the Burnticker host's logs (2026-10-18 prelaunch audit A-32: none existed; the publish log reached 9.9 MB in a week).
+# A template: scripts/ops/install-burnticker-units.sh fills in the repository directory, the service user and its group
+# (scripts/ops/render-logrotate.mjs), checks the result with `logrotate -d` and writes it to ~/.config/burnticker/logrotate.conf, which
+# mct-burnticker-logrotate.service runs daily as the service user (the units are user units, so the system logrotate never sees these
+# files) with its own state file.
+#
+# su: logrotate skips, with only a warning, a directory that is group- or world-writable unless it is told whose files these are; naming
+# the service user and group keeps rotation working whatever the mode of logs/.
+# copytruncate: the units append to these files through systemd (StandardOutput=append:), which holds them open and cannot be told to
+# reopen; the file is copied, then truncated in place, and the next append lands at its start. A line written in that instant can be lost.
+@REPO@/logs/*.log {
+    su @USER@ @GROUP@
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

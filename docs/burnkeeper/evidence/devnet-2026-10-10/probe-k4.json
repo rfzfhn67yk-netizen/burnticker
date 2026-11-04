@@ -1,0 +1,87 @@
+{
+  "cluster": "devnet",
+  "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+  "feePda": "3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a",
+  "mintAccount": {
+    "mintAuthority": null,
+    "freezeAuthority": null,
+    "decimals": 6,
+    "supply": "1000000000000000"
+  },
+  "feePdaSol": 0.52,
+  "feeWsol": "0.0005",
+  "launchlab": {
+    "pool": "8etFJShXbrpNmQm16z7ctCQXzyffiB5rJc2yUb8PssR5",
+    "creator": "3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a",
+    "creatorIsFeePda": true,
+    "status": 2,
+    "platformId": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+    "realB_lamports": "1000000001",
+    "totalFundRaisingB": "1000000000"
+  },
+  "tokenConfig": {
+    "address": "FqfwxFKaiLRaK1HAsBsRRkXAq3nzbEt92fX9qWQTZYPh",
+    "feedId": "treasury.debt_to_penny",
+    "memoPrefix": "DEBT",
+    "memoSource": "fiscaldata.treasury.gov debt_to_penny",
+    "rulesSha256": "b9ad29b48ef13548e18674dca770a554b0f96e1924fcf70fdd378225689d8884",
+    "attesters": [
+      {
+        "kind": 0,
+        "key": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn"
+      }
+    ],
+    "quorum": 1,
+    "admin": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+    "clusterGenesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+    "hasBaseline": false,
+    "lastRecordDate": 0,
+    "crankCursor": 0,
+    "readings": 0,
+    "burns": 0,
+    "totalBurnedRaw": "0",
+    "totalSpentLamports": "0",
+    "carriedSpendLamports": "0",
+    "poolRegistered": false,
+    "cpmmPool": "11111111111111111111111111111111",
+    "poolUntradeableSince": "0",
+    "rule": {
+      "mode": 0,
+      "carry_rule": 0,
+      "pool_policy": 0,
+      "value_decimals": 2,
+      "unit_value": "100000000000",
+      "max_abs_delta": "200000000000000",
+      "fraction_per_unit_bps": 100,
+      "slippage_bps": 300,
+      "max_twap_deviation_bps": 300,
+      "twap_window_secs": 1200,
+      "floor_lamports": "1000000",
+      "reserve_lamports": "20000000",
+      "tokens_per_unit": "0",
+      "vault_allocation": "0"
+    }
+  },
+  "cpmmCandidates": [
+    {
+      "pool": "8V2Ae1vCbBTQWLk9Mzr2bMVekmAgozZZabiVJoNbFnfd",
+      "exists": false
+    },
+    {
+      "pool": "5RoGVSCTBmcTSXdUgoktteBAi5sXTrax7QiJ6rh8hNyR",
+      "exists": true
+    }
+  ],
+  "cpmm": {
+    "pool": "5RoGVSCTBmcTSXdUgoktteBAi5sXTrax7QiJ6rh8hNyR",
+    "poolCreator": "3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a",
+    "creatorIsFeePda": true,
+    "ammConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "status": 0,
+    "enableCreatorFee": true,
+    "lpSupply": "454862616849",
+    "lpBurnedPct": 100,
+    "lpLockedPct": 0,
+    "observation": "7dpon8QijsduTh9uhMhv7znTrUoWLVsxfnPGUDBUVrRc"
+  }
+}

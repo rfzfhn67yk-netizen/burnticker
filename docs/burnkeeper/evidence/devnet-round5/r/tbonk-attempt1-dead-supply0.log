@@ -1,0 +1,27 @@
+Creating token 5GMdtxtGbNt5DAURLW9sqiKfyxM9DWw9J6kTwYGVUTqP under program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+Address:  5GMdtxtGbNt5DAURLW9sqiKfyxM9DWw9J6kTwYGVUTqP
+Decimals:  6
+
+Signature: 4i6gemD3hpXCPjBcS6LFMGrjjGRw1cpk4u7uHr3GNF1vAD21MXZUvpVrHHedSgnstMiSQgvHrkjX4gGPsrCK4hMm
+
+Creating account FTM2uqob4f1XWYCaNuKaf6qePAcEopFTUMTteYXzLDRG
+
+Signature: 2mdmnQ9Ah5F8DqFYdgsXsTs9J8j1ZF4Hb5z9wyaiJiTA32U3RAMT37VbLVCHLJwJ3Wh9HZi5o7TPRG6wvF3YXFAZ
+
+Error: "default signer is required, please specify a valid default signer by identifying a valid configuration file using the --config argument, or by creating a valid config at the default location of ~/.config/solana/cli/config.yml using the solana config command"
+Updating 5GMdtxtGbNt5DAURLW9sqiKfyxM9DWw9J6kTwYGVUTqP
+  Current mint: E8S7PcdnKWbMwsaWoqhD35MR1KWC5RdJhsddV958DDi
+  New mint: disabled
+
+Signature: 5zo2yeHKFuY1j7ToG18U35Q3on3YnjUgd3DQ4sbcWvMNGaQZg7WC6w4V7auhaFut9iwjbSeZhjqyjHGhTYxm4VHc
+
+
+SPL Token Mint
+  Address: 5GMdtxtGbNt5DAURLW9sqiKfyxM9DWw9J6kTwYGVUTqP
+  Program: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+  Supply: 0
+  Decimals: 6
+  Mint authority: (not set)
+  Freeze authority: (not set)
+

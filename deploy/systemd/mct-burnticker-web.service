@@ -1,0 +1,41 @@
+[Unit]
+Description=Burnticker web (the Next app on 127.0.0.1:3000 behind Caddy — wizard, in-app token pages, trust page, /api/burnticker/*)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/meme-coin-trader
+# The PUBLIC Burnticker tree (scripts/ops/publish-public-repo.sh; docs/burnticker/deploy.md "The host runs the public tree"), started by
+# its own run-burnticker-web.sh on loopback:3000 in production mode. Caddy proxies ONLY /burnticker, /burnticker/*, /api/burnticker/*
+# and /_next/* to it and passes the public Host header through; the tree carries no other app, so there is no other route to reach.
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/service/run-burnticker-web.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PORT=3000
+Environment=MCT_BIND_HOST=127.0.0.1
+Environment=APP_MODE=production
+Environment=NODE_ENV=production
+Environment=TZ=America/Denver
+Environment=BURNTICKER_DB=%h/meme-coin-trader/data/burnticker.db
+Environment=BURNTICKER_PUBLISH_DIR=%h/meme-coin-trader/data/burnticker-site
+# HB-1 (continuous audit 2026-10-19): the web ran out of V8's default heap (about 2 GB here) twice that day, from response caches
+# bounded by entry count only, and spent its last minutes in back-to-back full collections (14 s home builds) before it aborted.
+# The heap is now set on purpose: 1,536 MB is twice the healthy peak seen that day (690 MB) and leaves the box's other units their
+# room. MemoryMax is the heap plus room for code, buffers and the young generation, so a leak that gets past the heap limit is stopped
+# by the kernel and restarted cleanly by Restart=always instead of swapping. run-burnticker-web.sh adds its --require to this value.
+Environment=NODE_OPTIONS=--max-old-space-size=1536
+MemoryMax=2304M
+# BURNTICKER_CLUSTER, BURNTICKER_FEE_WALLET, BURNTICKER_KEEPER_PUBKEY, BURNTICKER_PLATFORM_ID, BURNTICKER_RPC_URL,
+# NEXT_PUBLIC_BURNTICKER_RPC_URL live in .env.local on the host (read by run-burnticker-web.sh) — never in this file.
+# The production build (.next) is shipped prebuilt from the Mac by scripts/ops/deploy-burnticker-host.sh; a 4 GB box does not build Next.
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+# L-5 (audit 2026-10-19): the web drains for 8 s on SIGTERM and exits by 11 s (scripts/service/web-graceful.cjs); 90 s kept the site on
+# the static fallback for a minute and a half on every deploy.
+TimeoutStopSec=15
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-web.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-web.log
+
+[Install]
+WantedBy=default.target

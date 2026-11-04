@@ -1,0 +1,14 @@
+[2026-10-10 23:28:52Z] burn keeper starting — $PCB (rule PCB, sha256:345afddd0b4b) · execution program · devnet · ledger data/burnkeeper-paircurve-1b.db · site data/burnkeeper-paircurve-1b-site
+[2026-10-10 23:28:52Z] cluster devnet · EXECUTION program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM · mode buyback · mint 5R5DZ4QCzkikXv1e8qUMti68bbHZMHTkSBKPbTLdMoPB · fee PDA 7BntzppqSMGHhrY3aH5Q3W4eXXQT6fCHf2aB85qq2hG9 · attesters 1 (quorum 1) · pool 6QAri6SSuup5EgtBDAXy958VKi8CgxhdQNZobKWS1xaH · keeper D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn (pays fees, signs readings) · rules sha256:345afddd0b4b
+[2026-10-10 23:28:53Z]   [fees] curve: no LaunchLab creator-fee vault for the fee PDA (6QvprjRj…) — nothing accrued, or not launched on this cluster
+[2026-10-10 23:28:53Z]   [fees] cpmm: LaunchLab pool 5ynwhSAW8W9LGEHBF48KKuB88MhwiM2VBkQzNTQcytL8 not found
+[2026-10-10 23:28:55Z]   [pool] check_pool_health: pool tradeable · 4b27nCg86GjySqxe4KPF8wLs3YfsAUGmigyiCoKU5KS7E8pvgHumZtyANG8m1fDXWLgDxFuir9Z6ZprB8JpP5yA4
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
+[2026-10-10 23:28:58Z]   [program] 2026-10-06: CRANKED · burned · spent 1074156 lamports, got 931998.637437, burned 931998.637437 · 4W2njhurhPWRgkg13HFGGKpnYVwMFJRJYAbb2JNFfTz1rj4TuX8tnzu6fA1rR5dz486zwPE91LQbtHtwd5ijj7ZT · PCB|2026-10-06|src=fiscaldata.treasury.gov debt_to_penny|prev=40249104431078.48|now=40273024579219.17|delta=23920148140.69|units=23|pool=5204602|spent=1074156|got=931998.637437|burn=931998.637437|swap=6QAri6SSuup5|rules=sha256:345afddd0b4b|v2
+Server responded with 429 .  Retrying after 500ms delay...
+[2026-10-10 23:29:01Z]   [program] 2026-10-07: CRANKED · below-floor · spent 0 lamports, got 0, burned 0 · 43W5U2Hs12zZfPTcGJEf9oDB2jecMFXbS1Fo4Vk7XtGCRBS1iCBFUsgHT8UyZUUXq1qFaB7jSEy86UeefLCtQNS7 · PCB|2026-10-07|src=fiscaldata.treasury.gov debt_to_penny|prev=40273024579219.17|now=40284036147367.19|delta=11011568148.02|units=11|pool=4130446|spent=0|got=0|burn=0|swap=none|rules=sha256:345afddd0b4b|v2
+Server responded with 429 .  Retrying after 500ms delay...
+[2026-10-10 23:29:04Z]   [program] 2026-10-08: CRANKED · below-floor · spent 0 lamports, got 0, burned 0 · 55Vu12CwBEk2fby4dbvHRv2ku6GmKR8hVFg99ZmmVwp2ebCTsWHUTiQCKaNhNHBPT3nVa8j4WPzXd1VCbPBpx9Rh · PCB|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=22|pool=4130446|spent=0|got=0|burn=0|swap=none|rules=sha256:345afddd0b4b|v2
+[2026-10-10 23:29:04Z]   [burn] 2026-10-06: 931998.637437 burned by the program · https://explorer.solana.com/tx/4W2njhurhPWRgkg13HFGGKpnYVwMFJRJYAbb2JNFfTz1rj4TuX8tnzu6fA1rR5dz486zwPE91LQbtHtwd5ijj7ZT?cluster=devnet
+[2026-10-10 23:29:04Z] burn keeper stopped

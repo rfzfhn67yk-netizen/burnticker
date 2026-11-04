@@ -1,0 +1,32 @@
+Creating token 89EZ3MuiKjCekm8baXT9iTLot3SLrSygsj22LKwo2AiT under program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+Address:  89EZ3MuiKjCekm8baXT9iTLot3SLrSygsj22LKwo2AiT
+Decimals:  6
+
+Signature: 3XtADL3N6SZZh65x4JxigysWNr67KPsB7rN6sPAwij71F5aYSaVVKvbg2H98BQcgiRenENo5fqmbqWGxgYiS5u8H
+
+Creating account By7HbTAXrXvUiZSvyyuZexaVQGUKant4VmZpWX5zAQ8Y
+
+Signature: 5RaBjui1mEatpB1p8AT2ds11HzMcsPFPadsRHb8brNnwnD5G8om522WerWZHC4N9LwsMTiQMykAyUd3JwsVstRes
+
+Minting 1000000000 tokens
+  Token: 89EZ3MuiKjCekm8baXT9iTLot3SLrSygsj22LKwo2AiT
+  Recipient: By7HbTAXrXvUiZSvyyuZexaVQGUKant4VmZpWX5zAQ8Y
+
+Signature: 3rie4Qzb2irWsVne9Qked4FZ3svdpTE8PttGknZ3zGR6Uc7Q3gBkuTELQx5MaisGnqQZuZthNfrjndHsczsWpmS6
+
+Updating 89EZ3MuiKjCekm8baXT9iTLot3SLrSygsj22LKwo2AiT
+  Current mint: E8S7PcdnKWbMwsaWoqhD35MR1KWC5RdJhsddV958DDi
+  New mint: disabled
+
+Signature: 4fxHGZYdhjTKRfGTfznxS1VCnEmvPqqxj6UhbMeXDWCNNP3YYqGraekEt7avpQHqxqWEjwo4rY2K4tHreP8JYXoZ
+
+
+SPL Token Mint
+  Address: 89EZ3MuiKjCekm8baXT9iTLot3SLrSygsj22LKwo2AiT
+  Program: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+  Supply: 1000000000000000
+  Decimals: 6
+  Mint authority: (not set)
+  Freeze authority: (not set)
+

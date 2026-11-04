@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 600 120">
+  <title>Burnticker wordmark (dark version, for dark backgrounds)</title>
+  <g transform="translate(10 12) scale(1.5)">
+    <path d="M14 6h36v46l-4.5 5-4.5-5-4.5 5-4.5-5-4.5 5-4.5-5-4.5 5-4.5-5z" fill="#f2eee4"/>
+    <path d="M21 16h22M21 26h14M21 33h22" stroke="#1b1916" stroke-width="3" stroke-linecap="round"/>
+    <path d="M21 42h22" stroke="#1b1916" stroke-width="3" stroke-linecap="round" stroke-dasharray="3 4"/>
+  </g>
+  <text x="118" y="78" font-family="'Courier Prime', 'Courier New', Courier, monospace" font-size="58" font-weight="700" letter-spacing="6" fill="#f2eee4">BURNTICKER</text>
+</svg>

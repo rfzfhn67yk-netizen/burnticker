@@ -1,0 +1,109 @@
+{
+  "schema": "burnticker.verified-build/v1",
+  "updatedAt": "2026-10-25",
+  "note": "Written by `sh scripts/ops/verified-build.sh --local --write` (or --docker --write on a Linux host with Docker). The hash is solana-verify's executable hash: sha256 of the program bytes with trailing zero bytes removed — the same number `solana-verify get-program-hash` prints for the deployed program and `solana-verify get-executable-hash` prints for a .so. docs/burnticker/VERIFIED-BUILD.md renders this table; test/burntickerVerifiedBuild.test.ts holds the two together and compares any built .so on the host.",
+  "kind": "interim-local",
+  "kindNote": "INTERIM: built with cargo build-sbf on the operator's Mac (no Docker on that host), not inside solana-verify's Docker image. These hashes are reproducible on that toolchain (a clean build in a fresh checkout gave the same bytes) and the devnet ones equal the bytes deployed on devnet, read back from chain. A Docker build on Linux may give different numbers; when it runs, it replaces this table (kind: docker) and the Docker numbers become the ones to check.",
+  "sourceCommit": "116ff5ad054e25cd169a8ceeb3eebb16832a33e0",
+  "sourceCommitNote": "The monorepo commit of burn_receipts' newest build: the B-17 / HB-167 change (register_fee_key registers a LaunchLab migration pool on the fee tier LaunchLab actually used, commits 62485aae and f28abba2). Two independent clean builds on the operator's Mac (2026-10-21, same toolchain as round 5) gave the same bytes. Mainnet runs this build since 2026-10-21 17:57 Denver (B-17 upgrade, Squads vault transaction 4, slot 459823169, execute signature 4PndF8edj8431dULAK4u8p5PpSio8P3KNXbqENguW6wkBhrc67cxxymW8RtbuUQxWSgc798HAt9dc9984PrCdrYp; bytes read back 2026-10-21 and equal to it, so deployed.mainnet.matchesBuild is true). Before that mainnet ran round 5, built from 089024ff6ab0cc92ae37899dee1509d52cb5e203 (152929ce…0821, upgraded in vault transaction 3, 2026-10-15 ~19:57 Denver). Devnet was not upgraded: it still runs round 5 from 089024ff (74659afd…785c, vault transaction 22), so deployed.devnet.matchesBuild is false with pendingUpgrade set until a devnet upgrade lands and is read back. pair_curve is not being upgraded: its deployed bytes are still round 4's, built from 29f6f5de19f1916945992fae711cefc36927d856 (its own sourceCommit below). Rebuilt from 116ff5ad it gives other bytes (mainnet 0059f9ff…396d, devnet 6fd69c3b…e500) only because it links the burn_receipts crate (its constants, the CPMM pool reader and the TokenConfig type). Public commit 7e7bab5804f9e3dee070ebbc2bd3ba1de1c6b999 carries exactly 29f6f5de's program tree; scripts/ops/reproducible-build-host.sh builds pair_curve there.",
+  "toolchain": {
+    "solanaCli": "4.3.0",
+    "cargoBuildSbf": "4.4.0",
+    "platformTools": "v1.57",
+    "rustc": "1.95.0-sbpf-solana-v1.57",
+    "anchor": "1.2.1",
+    "host": "macOS (arm64)",
+    "sbpf": "v3 (cargo-build-sbf 4.4.0 default --arch v3; ELF e_flags 0x3 on all four builds)"
+  },
+  "workspace": "programs/burn-receipts",
+  "programs": [
+    {
+      "library": "burn_receipts",
+      "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "round": 5,
+      "sourceCommit": "116ff5ad054e25cd169a8ceeb3eebb16832a33e0",
+      "builds": {
+        "mainnet": {
+          "features": [],
+          "bytes": 1011440,
+          "hash": "1aff5fbfe243ea8233c360bfae6809b0dd411e2298600831d10be5ea97c99e17",
+          "sha256": "c753fc2763f794df665b60a23591397e6526567b0c81c86d76533394d30bb4d7",
+          "status": "round 5 program, built 2026-10-25 from 94241647 (both burn caps removed, owner decision 2026-10-25), twice from clean target directories with the same bytes (1,011,440 bytes). Deployed on mainnet 2026-10-25 16:10 Denver (Squads vault transaction 5, slot 461421913); on-chain bytes read back and equal to this build. Before it: B-17 (116ff5ad, slot 459823169) and round 5 (089024ff, slot 457461970). sha256 is the .so file's"
+        },
+        "devnet": {
+          "features": [
+            "devnet"
+          ],
+          "bytes": 1011416,
+          "hash": "e52d27fcfa14f75148bfc00a298f061d3e522321370e6cb99f0f41dcdf8e13d1",
+          "sha256": "cc12b887cee232f4aca3e7558e13aedd7b90dba1b05b4c086a8cd8b62da377ef",
+          "status": "round 5 program, built 2026-10-25 from 94241647 (both burn caps removed), devnet feature set, twice with the same bytes (1,011,416 bytes). Deployed on devnet 2026-10-25 14:56 Denver (devnet Squads vault transaction 24, slot 515097580); on-chain bytes read back and equal to this build. Before it: B-17 (slot 513708808) and round 5 (slot 511540317). sha256 is the .so file's"
+        }
+      },
+      "deployed": {
+        "devnet": {
+          "hash": "e52d27fcfa14f75148bfc00a298f061d3e522321370e6cb99f0f41dcdf8e13d1",
+          "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
+          "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+          "readAt": "2026-10-25T20:57:02Z",
+          "matchesBuild": true,
+          "slot": 515097580,
+          "evidence": "docs/burnkeeper/evidence/devnet-caps/README-execution.md"
+        },
+        "mainnet": {
+          "hash": "1aff5fbfe243ea8233c360bfae6809b0dd411e2298600831d10be5ea97c99e17",
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+          "readAt": "2026-10-25T22:11:49Z",
+          "matchesBuild": true,
+          "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
+          "slot": 461421913,
+          "evidence": "docs/burnkeeper/evidence/mainnet-caps/onchain-verify-after.log"
+        }
+      }
+    },
+    {
+      "library": "pair_curve",
+      "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
+      "round": 4,
+      "sourceCommit": "29f6f5de19f1916945992fae711cefc36927d856",
+      "builds": {
+        "mainnet": {
+          "features": [],
+          "bytes": 419304,
+          "hash": "8d21ff603670000ac7e1f492aea842fc37891c26197df88b5b7135656373f1e3",
+          "sha256": "9205de80b377a3fc3c4c8b3de93b66c8a49e8120a78b082e3e5ed850d142088d",
+          "status": "round 4 program, relinked 2026-10-25 against the caps-removed burn_receipts library (its own source unchanged, commit 94241647); deployed on mainnet 2026-10-25 16:15 Denver (Squads vault transaction 6, slot 461423192); on-chain bytes read back and equal to this build. Before it: round 4 (slot 456201604)"
+        },
+        "devnet": {
+          "features": [
+            "devnet"
+          ],
+          "bytes": 419304,
+          "hash": "c2c8d16808824645ef5d938482e57f666decb2fff070a9b7700ebece6237a62a",
+          "sha256": "f987ea1927e08f75d46d2b7b1a58e8de5a357737dddc2e9d1d60db7663cc1311",
+          "status": "round 4 program, relinked 2026-10-25 against the caps-removed burn_receipts library; deployed on devnet 2026-10-25 16:20 Denver (devnet Squads vault transaction 25, slot 515118532); on-chain bytes read back and equal to this build. Before it: round 4 (slot 510391786)"
+        }
+      },
+      "deployed": {
+        "devnet": {
+          "hash": "c2c8d16808824645ef5d938482e57f666decb2fff070a9b7700ebece6237a62a",
+          "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG",
+          "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+          "readAt": "2026-10-25T22:20:37Z",
+          "matchesBuild": true,
+          "slot": 515118532,
+          "evidence": "docs/burnkeeper/evidence/devnet-caps/README-execution.md"
+        },
+        "mainnet": {
+          "hash": "8d21ff603670000ac7e1f492aea842fc37891c26197df88b5b7135656373f1e3",
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+          "readAt": "2026-10-25T22:16:11Z",
+          "matchesBuild": true,
+          "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG",
+          "slot": 461423192,
+          "evidence": "docs/burnkeeper/evidence/mainnet-caps/onchain-verify-after.log"
+        }
+      }
+    }
+  ]
+}

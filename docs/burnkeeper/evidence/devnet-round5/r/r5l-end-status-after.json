@@ -1,0 +1,40 @@
+{
+  "command": "end-status",
+  "cluster": "devnet",
+  "mint": "GkLVz1vcJT3zYcFDH1PL95Qb358EMigJs2Z5MWTSq9Bn",
+  "end_state": 1,
+  "end_date": 20261015,
+  "crank_cursor": 20261015,
+  "last_record_date": 20261015,
+  "endSink": {
+    "version": 1,
+    "bump": 254,
+    "mint": "GkLVz1vcJT3zYcFDH1PL95Qb358EMigJs2Z5MWTSq9Bn",
+    "sink_kind": 4,
+    "sink_mint": "1nc1nerator11111111111111111111111111111111",
+    "min_forward_lamports": "50000000",
+    "created_at": "1792107491",
+    "reserved": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "ruleEnd": {
+    "version": 1,
+    "bump": 251,
+    "mint": "GkLVz1vcJT3zYcFDH1PL95Qb358EMigJs2Z5MWTSq9Bn",
+    "record_date": 20261015,
+    "outcome": 1,
+    "signers_mask": 1,
+    "source_url_hash": "dbd3f7fb4f143baa82c69423ffc4944bdc742fd645b5c7acdb27a98f4b01bf0e",
+    "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "submitted_at": "1792107547",
+    "forwarded_lamports": "60250000",
+    "forwards": 1,
+    "last_forward_at": "1792107559",
+    "reserved": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "forwardOnEnd": {
+    "status": "ready",
+    "target": "1nc1nerator11111111111111111111111111111111",
+    "intended": "1nc1nerator11111111111111111111111111111111",
+    "sinkKind": 4
+  }
+}

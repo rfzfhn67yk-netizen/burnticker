@@ -1,0 +1,122 @@
+{
+  "case": "x62-pair-result-after-unlink",
+  "expected": "AccountNotInitialized|NotPaired",
+  "observed": "AccountNotInitialized",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR submit-pair-result --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint-a AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L --mint-b ExNU8xg4vVNEr9G9aX7VDpFoHUQjQyjRibvohyRtBHqi --date 20261012 --winner AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L --attester ~/.config/meme-coin-trader/devnet/keeper.json",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":3012}]}",
+  "errorLogLines": [
+    "Program log: AnchorError caused by account: link_lo. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0xbc4"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "submit-pair-result",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "pairResult": "31eF6C9oNH1rAsW3KHT3D4XR9BVxSdtPLZk7Q42AFQF7",
+    "message": "BURNRECEIPTS-PAIR-v1|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L|ExNU8xg4vVNEr9G9aX7VDpFoHUQjQyjRibvohyRtBHqi|2026-10-12|winner=AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L|src=b40f80009fa63dd3aa348b1755ff2d6e882c743f590f8208dcae1e9a6f0294c6|proof=0000000000000000000000000000000000000000000000000000000000000000",
+    "instructions": [
+      {
+        "program": "Ed25519SigVerify111111111111111111111111111",
+        "accounts": [],
+        "dataHex": "01003000ffff1000ffff70009301ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a52ce6d6765f609cfa41e666557ba0c281df5bd2f86bf86e073ba67c991d576ff3b6c95ed741797f74a6dc0301d4935304b2e4982d9ce30fd9ebbcd7d84acf70064255524e52454345495054532d504149522d76317c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c4142363766436d3550554b71694c72327a46364470385a596354556753414d5737725556397635565874394c7c45784e553878673476564e4572394739615837564470466f4855516a51796a526962766f68795274424871697c323032362d31302d31327c77696e6e65723d4142363766436d3550554b71694c72327a46364470385a596354556753414d5737725556397635565874394c7c7372633d623430663830303039666136336464336161333438623137353566663264366538383263373433663539306638323038646361653165396136663032393463367c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+      },
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "submit_pair_result",
+        "accounts": [
+          {
+            "name": "payer",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "name": "config_lo",
+            "pubkey": "9TxKcKw2XZUFFw8nHrR8VXkETegeFKkYYdg6AuPbqHot",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "config_hi",
+            "pubkey": "BgbS1LmX4VM1rJfboFwtdvEDc8SFzPyUPSX4FSJ7PJra",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "link_lo",
+            "pubkey": "7w645yWibhrACcsY1HWPZTvH5nhnVnVCSTsEqfYv2nmm",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "link_hi",
+            "pubkey": "DBQ74FJCPxK7MpcQDbuN4BpCKuKrEvnUgCJvAVuifraK",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "pair_result",
+            "pubkey": "31eF6C9oNH1rAsW3KHT3D4XR9BVxSdtPLZk7Q42AFQF7",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "instructions",
+            "pubkey": "Sysvar1nstructions1111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "reading_lo",
+            "pubkey": "5THW5ZMSHHVmN3Sb7SoyezSE4uXHptsFJEPM8aP3w5yo",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "reading_hi",
+            "pubkey": "5f1cMuweqVsgaj473DdsDCA6vBP2t9m4RP2EZETwYjYH",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {
+          "record_date": 20261012,
+          "winner": "AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L",
+          "source_url_hash": "b40f80009fa63dd3aa348b1755ff2d6e882c743f590f8208dcae1e9a6f0294c6",
+          "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":3012}]}",
+      "unitsConsumed": 23179,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: SubmitPairResult",
+        "Program log: AnchorError caused by account: link_lo. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 23029 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0xbc4"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "31eF6C9oNH1rAsW3KHT3D4XR9BVxSdtPLZk7Q42AFQF7",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

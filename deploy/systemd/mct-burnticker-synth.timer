@@ -1,0 +1,13 @@
+[Unit]
+Description=Nightly Burnticker synthetic creator (03:30 Denver = 09:30 UTC in MDT; launches like a creator on the devnet copy of the site)
+
+[Timer]
+# The box keeps UTC; the owner's 03:30 Denver is 09:30 UTC during daylight time and 10:30 UTC in winter. Pinned to 09:30 UTC (03:30 MDT,
+# 02:30 MST) so the run never moves with the clocks.
+OnCalendar=*-*-* 09:30:00 UTC
+RandomizedDelaySec=120
+Persistent=true
+Unit=mct-burnticker-synth.service
+
+[Install]
+WantedBy=timers.target

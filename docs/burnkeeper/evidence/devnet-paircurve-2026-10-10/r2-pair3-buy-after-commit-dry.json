@@ -1,0 +1,36 @@
+{
+  "command": "buy",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "5LUZ63F62Wwq6Ma2pPiMqiEftFaRFYuckU9xsiaQJpiZ",
+  "side": "A",
+  "quote": {
+    "tokensOut": "9680170722297",
+    "cost": "9900991",
+    "fees": {
+      "fee": "99009",
+      "dev": "24752",
+      "burn": "74257"
+    },
+    "total": "10000000",
+    "soldAfter": "516819474230367",
+    "solAfter": "278768916"
+  },
+  "result": {
+    "ok": false,
+    "signature": null,
+    "error": "NotOpen",
+    "unitsConsumed": 21807,
+    "txBytes": 566,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN invoke [1]",
+      "Program log: Instruction: Buy",
+      "Program log: AnchorError thrown in programs/pair_curve/src/instructions/trade.rs:82. Error Code: NotOpen. Error Number: 6010. Error Message: the pair is not open.",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN consumed 21657 of 599850 compute units",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN failed: custom program error: 0x177a"
+    ]
+  }
+}

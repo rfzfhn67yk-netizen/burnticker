@@ -1,0 +1,11 @@
+{
+ "fetchedAt": "2026-10-12T19:27:42Z",
+ "note": "Real response, captured read-only; trimmed to the fields the adapter reads.",
+ "url": "https://api.github.com/repos/anza-xyz/agave",
+ "body": {
+  "id": 750164628,
+  "full_name": "anza-xyz/agave",
+  "stargazers_count": 1944,
+  "html_url": "https://github.com/anza-xyz/agave"
+ }
+}

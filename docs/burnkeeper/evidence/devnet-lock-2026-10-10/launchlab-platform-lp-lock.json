@@ -1,0 +1,51 @@
+{
+  "cluster": "devnet",
+  "platform": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+  "feeKeys": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+  "before": {
+    "owner": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+    "lockNftWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+    "scalesPpm": [
+      "0",
+      "0",
+      "1000000"
+    ],
+    "claimFeeWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp"
+  },
+  "instructions": [
+    {
+      "program": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+      "dataHex": "c33c4c81922d438f0240420f000000000000000000000000000000000000000000"
+    },
+    {
+      "program": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+      "dataHex": "c33c4c81922d438f019f5b3e73eafded72f5f33f2698d7ba45359a2633eb561107807c6c1218b4efa4"
+    }
+  ],
+  "simulation": {
+    "err": null,
+    "logs": [
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 invoke [1]",
+      "Program log: Instruction: UpdatePlatformConfig",
+      "Program log: MigrateNftInfo(\n    MigrateNftInfo {\n        platform_scale: 1000000,\n        creator_scale: 0,\n        burn_scale: 0,\n    },\n)",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 consumed 10883 of 400000 compute units",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 success",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 invoke [1]",
+      "Program log: Instruction: UpdatePlatformConfig",
+      "Program log: NFTWallet(\n    Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3,\n)",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 consumed 8046 of 389117 compute units",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 success"
+    ]
+  },
+  "signature": "2TFCZGnnKpjdJcFQos51uDEwZWkq6Q1gHYDdLMCtDwuNUSjSngyfaxGiCqZtCSGnJSepyzjLVj6ETuKyGYEt9aaU",
+  "after": {
+    "owner": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+    "lockNftWallet": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+    "scalesPpm": [
+      "1000000",
+      "0",
+      "0"
+    ],
+    "claimFeeWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp"
+  }
+}

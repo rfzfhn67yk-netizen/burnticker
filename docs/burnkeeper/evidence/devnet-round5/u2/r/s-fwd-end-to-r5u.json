@@ -1,0 +1,37 @@
+{
+  "command": "fwd-end",
+  "dryRun": false,
+  "omitted": null,
+  "step": "fwd-end",
+  "bytes": 760,
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 105670,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+      "Program log: CreateIdempotent",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 4437 of 399850 compute units",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: ForwardOnEnd",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [2]",
+      "Program log: Memo (len 48): \"SNK|endfwd|to=ES1HxjArAP6e|lamports=100000000|v1\"",
+      "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 18594 of 324734 compute units",
+      "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 2253 of 302739 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 101083 of 395413 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "sent": {
+    "signature": "4f2vdqLb1dZyYjdtjhfZYVFe8FL1DuJSYaVzFGsZbRwR2WvBGGSjwnRM3PPTgvhaNM5uenCHbPNX5dYEYkFUAA8M",
+    "err": null,
+    "explorer": "https://explorer.solana.com/tx/4f2vdqLb1dZyYjdtjhfZYVFe8FL1DuJSYaVzFGsZbRwR2WvBGGSjwnRM3PPTgvhaNM5uenCHbPNX5dYEYkFUAA8M?cluster=devnet"
+  }
+}

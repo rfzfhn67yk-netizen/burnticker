@@ -1,0 +1,33 @@
+{
+  "command": "fwd-winner",
+  "dryRun": false,
+  "omitted": null,
+  "step": "fwd-winner",
+  "bytes": 720,
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 124901,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: ForwardToWinner",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [2]",
+      "Program log: Memo (len 83): \"PTB|forward|from=HLjqsZb7TTgD|to=Cc7Yoe1PVRs9|period=2026-10-16|lamports=5851197|v1\"",
+      "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 30886 of 319417 compute units",
+      "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 2253 of 285176 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 124751 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "sent": {
+    "signature": "5g57ohMBvvC5zyKyFTBfQvZtRnFsEjV15LxAxX8KP2P5J4iiE9yYp63QGoWkqvHFLk6CR9BSDCpr1go5YujVTd7B",
+    "err": null,
+    "explorer": "https://explorer.solana.com/tx/5g57ohMBvvC5zyKyFTBfQvZtRnFsEjV15LxAxX8KP2P5J4iiE9yYp63QGoWkqvHFLk6CR9BSDCpr1go5YujVTd7B?cluster=devnet"
+  }
+}

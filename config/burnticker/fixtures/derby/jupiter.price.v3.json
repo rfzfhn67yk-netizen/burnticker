@@ -1,0 +1,22 @@
+{
+ "fetchedAt": "2026-10-10T21:50:00Z",
+ "source": "https://lite-api.jup.ag/price/v3?ids=EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm,DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+ "body": {
+  "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": {
+   "createdAt": "2024-06-07T10:26:40.709Z",
+   "liquidity": 6415511.646379023,
+   "usdPrice": 0.0000034160670252852133,
+   "blockId": 455407822,
+   "decimals": 5,
+   "priceChange24h": 1.2683940993607101
+  },
+  "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm": {
+   "createdAt": "2024-06-07T10:51:21.979Z",
+   "liquidity": 6497073.603400052,
+   "usdPrice": 0.2182472499622609,
+   "blockId": 455408183,
+   "decimals": 6,
+   "priceChange24h": 1.9557170780298763
+  }
+ }
+}

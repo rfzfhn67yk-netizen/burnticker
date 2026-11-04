@@ -1,0 +1,125 @@
+{
+  "command": "submit-pair-result",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": false,
+  "pairResult": "2A8DfM8YCSqgPoypW62i5cQa6Xifh7FEoCazGKkNfRdX",
+  "message": "BURNRECEIPTS-PAIR-v1|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|Cc7Yoe1PVRs9z2yt4tUffSvborxFm6CGfvgg79bzJ3ZY|HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG|2026-10-16|winner=Cc7Yoe1PVRs9z2yt4tUffSvborxFm6CGfvgg79bzJ3ZY|src=69b17c8013a35ee886a0fb56bd845d3dd40ac22539bd31e382a5b0ea1846db8c|proof=0000000000000000000000000000000000000000000000000000000000000000",
+  "instructions": [
+    {
+      "program": "Ed25519SigVerify111111111111111111111111111",
+      "accounts": [],
+      "dataHex": "01003000ffff1000ffff70009301ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a58c4a22d8d75bff93786f29d1d4892b89e14b98343397fe4539a1357012e853d7ec9a764c80dcc2057d5457c6708be3c63ede6c99cfb35cac579995daffdbcb024255524e52454345495054532d504149522d76317c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c436337596f653150565273397a32797434745566665376626f7278466d364347667667673739627a4a335a597c484c6a71735a62375454674474515248617862796d66616f376379484d4835566d70434b68576d466d6e72477c323032362d31302d31367c77696e6e65723d436337596f653150565273397a32797434745566665376626f7278466d364347667667673739627a4a335a597c7372633d363962313763383031336133356565383836613066623536626438343564336464343061633232353339626433316533383261356230656131383436646238637c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+    },
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "submit_pair_result",
+      "accounts": [
+        {
+          "name": "payer",
+          "pubkey": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "name": "config_lo",
+          "pubkey": "92GraaejjM8XVeR9eAcQ6rUF4gk1Wp94DJbLEs8UjA9S",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "config_hi",
+          "pubkey": "B5mdgMLDLVQdjgTwxb7WcXodu5ULDw5vnMqicRGe14kU",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "link_lo",
+          "pubkey": "2HXor7sDty1qJb3mr5NWVktmYUtMDoaKAJz7WMFeE659",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "link_hi",
+          "pubkey": "9ZjdwoaDcoM6FE4G7Xm62AWcaq7JwKHMTwZyVUGBLJym",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "pair_result",
+          "pubkey": "2A8DfM8YCSqgPoypW62i5cQa6Xifh7FEoCazGKkNfRdX",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "instructions",
+          "pubkey": "Sysvar1nstructions1111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "reading_lo",
+          "pubkey": "LVVQg7SL3AqyLYevtrzgtqmvzQ1BJuWwh7whcKN5oSc",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "reading_hi",
+          "pubkey": "2dGhu9BkqzkvXs1a23fT383Zph7banBcTEnmP1ThPBKz",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {
+        "record_date": 20261016,
+        "winner": "Cc7Yoe1PVRs9z2yt4tUffSvborxFm6CGfvgg79bzJ3ZY",
+        "source_url_hash": "69b17c8013a35ee886a0fb56bd845d3dd40ac22539bd31e382a5b0ea1846db8c",
+        "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ],
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 122992,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: SubmitPairResult",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program data: p4hSlhkh9lGsb0nrTLCO2F1BwzAX8ECEaqLdGFBIq8OlhPl8BaaoH/LJd+9JL/TpHRnQmfYz6j9LwATd3aw9FlEGbOLRFcz9mCg1AaxvSetMsI7YXUHDMBfwQIRqot0YUEirw6WE+XwFpqgfAQFpsXyAE6Ne6Iag+1a9hF091ArCJTm9MeOCpbDqGEbbjAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA9MckBUJAtyt4BobyeYup9epQg7Wv4/r2OCmWJ+kBdEY=",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 122842 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "2A8DfM8YCSqgPoypW62i5cQa6Xifh7FEoCazGKkNfRdX",
+      "kind": "lamports",
+      "state": {
+        "lamports": 1833880
+      }
+    }
+  ],
+  "sent": {
+    "signature": "21aY75VBm5rQK9CFypRLSHbrBa7zFsyjZkQmjJJdMRshRvorBxtgTSqy3NeAr3Nvc14vuM9hb4ckg9XbHsTCFrxC",
+    "err": null
+  },
+  "accountsAfterSend": [
+    {
+      "address": "2A8DfM8YCSqgPoypW62i5cQa6Xifh7FEoCazGKkNfRdX",
+      "kind": "lamports",
+      "state": {
+        "lamports": 1833880
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "command": "cpmm-swap",
+  "dryRun": false,
+  "payer": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+  "pool": "5RoGVSCTBmcTSXdUgoktteBAi5sXTrax7QiJ6rh8hNyR",
+  "dir": "sell",
+  "amountIn": "1740000000000",
+  "quotedOut": "9854367",
+  "minOut": "9361648",
+  "reserveSolBefore": "1093833529",
+  "reserveTokBefore": "189385698379753",
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 44312,
+    "tail": [
+      "Program DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 118 of 255806 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success"
+    ]
+  },
+  "sent": {
+    "signature": "52ymUqcHtCviAssrDPxyp9iKE6V6JUvTmDMzwH9K739FZ5dyBeF8kyPkmGDisCg9TZX4W4XooSAfEbY83LLmmRVK",
+    "err": null,
+    "explorer": "https://explorer.solana.com/tx/52ymUqcHtCviAssrDPxyp9iKE6V6JUvTmDMzwH9K739FZ5dyBeF8kyPkmGDisCg9TZX4W4XooSAfEbY83LLmmRVK?cluster=devnet"
+  }
+}

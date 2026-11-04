@@ -1,0 +1,29 @@
+# PROPOSED — NOT IMPORTED BY deploy/caddy/Caddyfile (ops-2, 2026-10-12). The owner applies it on the host during the Cloudflare cut-over
+# (docs/burnticker/OPS-EDGE.md "Cloudflare cut-over", step 5), AFTER the app build that carries src/lib/burnticker/api/clientIp.ts is live.
+#
+# What it does: tells Caddy that Cloudflare's published ranges are trusted proxies, so Caddy's own idea of the client ({client_ip}, used by
+# matchers and by an access log if one is ever enabled) is the visitor from CF-Connecting-IP, and Caddy keeps the incoming
+# X-Forwarded-For and appends the edge's address to it instead of replacing it.
+#
+# What it does NOT do: the API's rate limit does not depend on this block. The app reads the right-most X-Forwarded-For hop (always the
+# address Caddy saw, with or without this block) and trusts CF-Connecting-IP only when that hop is a Cloudflare range
+# (src/lib/burnticker/api/clientIp.ts). So the order of the two changes cannot open a hole: a visitor who connects to the box directly is
+# keyed on their own address either way.
+#
+# How to apply (on the Burnticker VPS, as root):
+#   1. paste the global options block below as the FIRST block of /etc/caddy/Caddyfile (Caddy accepts global options only at the top;
+#      the repository's Caddyfile has none today, so nothing merges);
+#   2. caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+#   3. check: curl -sI https://burnticker.com/ | grep -i -E '^(cf-ray|server):'   (cf-ray present = proxied; no "Server: Caddy", the
+#      security snippet strips it)
+#
+# The ranges are https://www.cloudflare.com/ips-v4 and https://www.cloudflare.com/ips-v6, copied 2026-10-12 — the same list as
+# CLOUDFLARE_RANGES in src/lib/burnticker/api/clientIp.ts (test/burntickerCsp.test.ts checks the two agree). If Cloudflare publishes a
+# change, update both together.
+
+{
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+	}
+}

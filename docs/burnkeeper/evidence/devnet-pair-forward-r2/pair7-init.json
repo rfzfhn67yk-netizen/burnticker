@@ -1,0 +1,137 @@
+{
+  "command": "init-pair",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": false,
+  "plan": {
+    "pair": "JBV62vGicfGNpCqvEFLgDjdbh2PoJyJKMUgye5swtN9q",
+    "vault": "3ynhRiP6d9YSfNDusZuS1x5tj9HmAFTDEp8eJtttdJxF",
+    "mints": {
+      "a": "BNGzZPs8aBuqE53o4yGQ6ZzXUxvvGRzVbcZZrLUKbvnS",
+      "b": "2JL9MaSpsPw7B2L1Hj8gmRxiS41Rno1RN4eo4qpyMDQh"
+    },
+    "rulesSha256": {
+      "a": "779cd81b0df7b5411eda4cf7035ed93de609318fb4969e3e93b336b7370d46e8",
+      "b": "a6d16255e537dc1048ff7faf17042bd56b27527063789a215f38ffd915d3c303"
+    },
+    "pairId": "pcua-vs-pcub-devnet-pf-r2-7",
+    "cpConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "createPoolFee": "150000000",
+    "sideCosts": "182258000",
+    "params": {
+      "virtualSolLamports": "300000000",
+      "virtualTokenAmount": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "targetRaiseLamports": "500000000",
+      "minSideShareBps": 4000,
+      "deadline": 1791741473
+    },
+    "burnPools": {
+      "a": "d3zBrJG1oDiwZCqSwZLfySTqDzrfmPfRgFgMjDrRJhG",
+      "b": "FWSTNH6dhy8aYvpnEfxXPDDKt8B3ZurbeDPwEMVfHmFm"
+    }
+  },
+  "steps": {
+    "mintAndConfigA": {
+      "ok": true,
+      "signature": "2vhess4GJLDvZ8acz9kMCBrqC8gSmuD6ANEM9d22yhFLE9SKvHCMpc5XZSNY9eTnZ2gyNMGT5Gzto8T8c1NBMa5c",
+      "error": null,
+      "unitsConsumed": 48727,
+      "txBytes": 886
+    },
+    "mintAndConfigB": {
+      "ok": true,
+      "signature": "2YmKoHNFu6fmu4Qrmb1re8yq658GG9qZNTipyuZXR34D9wuwkpwFqULKQc1FtWh1N7HQ7PUnighG2C3wgL3nhoTV",
+      "error": null,
+      "unitsConsumed": 47227,
+      "txBytes": 886
+    },
+    "initPair": {
+      "ok": true,
+      "signature": "4qMWFcFxMWjF1Kkoubt714Npp2RNzL6bW37yThjGAVjRtQzj4Crije8VRQKPTJP2RyZXn69c9HPKj5hwwiWbJoLK",
+      "error": null,
+      "unitsConsumed": 141353,
+      "txBytes": 756
+    }
+  },
+  "after": {
+    "pair": "JBV62vGicfGNpCqvEFLgDjdbh2PoJyJKMUgye5swtN9q",
+    "exists": true,
+    "status": "open",
+    "phase": "open",
+    "deadline": "2026-10-11T17:57:53.000Z",
+    "vault": "3ynhRiP6d9YSfNDusZuS1x5tj9HmAFTDEp8eJtttdJxF",
+    "vaultLamports": 650240,
+    "devWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+    "devAccrued": "0",
+    "devWalletLamports": 5041618,
+    "sides": [
+      {
+        "side": "A",
+        "mint": "BNGzZPs8aBuqE53o4yGQ6ZzXUxvvGRzVbcZZrLUKbvnS",
+        "supplyRaw": "1000000000000000",
+        "sold": "0",
+        "sol": "0",
+        "burnPool": "d3zBrJG1oDiwZCqSwZLfySTqDzrfmPfRgFgMjDrRJhG",
+        "burnPoolLamports": 20000000,
+        "burnFees": "0",
+        "devFees": "0",
+        "burnEscrow": "0",
+        "refunding": false,
+        "redeemPool": "0",
+        "redeemSupply": "0",
+        "trades": 0,
+        "pool": "11111111111111111111111111111111",
+        "poolSol": "0",
+        "poolTokens": "0",
+        "lpSupplyAtCreation": "0",
+        "lpLocked": "0",
+        "tokensBurned": "0",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "11111111111111111111111111111111",
+          "poolVerified": false,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      },
+      {
+        "side": "B",
+        "mint": "2JL9MaSpsPw7B2L1Hj8gmRxiS41Rno1RN4eo4qpyMDQh",
+        "supplyRaw": "1000000000000000",
+        "sold": "0",
+        "sol": "0",
+        "burnPool": "FWSTNH6dhy8aYvpnEfxXPDDKt8B3ZurbeDPwEMVfHmFm",
+        "burnPoolLamports": 20000000,
+        "burnFees": "0",
+        "devFees": "0",
+        "burnEscrow": "0",
+        "refunding": false,
+        "redeemPool": "0",
+        "redeemSupply": "0",
+        "trades": 0,
+        "pool": "11111111111111111111111111111111",
+        "poolSol": "0",
+        "poolTokens": "0",
+        "lpSupplyAtCreation": "0",
+        "lpLocked": "0",
+        "tokensBurned": "0",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "11111111111111111111111111111111",
+          "poolVerified": false,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      }
+    ],
+    "params": {
+      "virtualSol": "300000000",
+      "virtualToken": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "reserve": "206900000000000",
+      "targetRaise": "500000000",
+      "minSideShareBps": 4000
+    }
+  }
+}

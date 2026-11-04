@@ -1,0 +1,20 @@
+{
+  "policy": "Our bots never trade our launches (owner, 2026-10-09; SPEC launch-debt-egg §3 and §9.4). Every arm's entry path refuses these coins by address and by ticker. Add the mint address on launch day; no restart is needed.",
+  "tokens": [
+    {
+      "symbol": "DEFICIT",
+      "chain": "solana",
+      "address": "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj",
+      "status": "launched",
+      "note": "The owner’s first launch (Raydium LaunchLab), burns indexed to Treasury Debt to the Penny, rule key DEBT. Created on mainnet on 2026-10-13 (create tx 2YyZVB96…, curve pool 9t2bzymy…). Our bots never trade it."
+    },
+    {
+      "symbol": "REHEARSAL",
+      "chain": "solana",
+      "address": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
+      "status": "launched",
+      "test": true,
+      "note": "The platform's mainnet rehearsal coin (a disclosed throwaway under the real platform config to prove fee routing and the Fee Key claim on mainnet; LP locked forever; not for trading). Created 2026-10-11 on LaunchLab; mint FwXiFscF…pzkp. Our bots never trade it."
+    }
+  ]
+}

@@ -1,0 +1,449 @@
+{
+  "command": "pin-burn-target",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": false,
+  "admission": {
+    "ok": true,
+    "problems": [],
+    "targetMint": "89EZ3MuiKjCekm8baXT9iTLot3SLrSygsj22LKwo2AiT",
+    "pool": "A6DHbbUMcGLWhZC7QCKH26FQN8fP36MGHQu4k4CYD6e5",
+    "poolKind": 0,
+    "decimals": 6,
+    "ammConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "wsolVault": "H2EjMcL3HC5rBZLxMgAwaqDvzrDPJiEViQfTtjGJuyAf",
+    "targetVault": "Gs4m97V5nvCgn7PCNYDAAg8qcNE8Ljw7Ys4kBWNiCy3k",
+    "observation": "GDBpW1S93KUc4Fm38dvvc3wXFjFbqgBfSZsMwkkskW7Z",
+    "wsolIsToken0": true,
+    "wsolReserve": "2209703834",
+    "tokenReserve": "1145666585",
+    "feePpm": "2500",
+    "referenceX32": "2250536795",
+    "spotX32": "2226814489"
+  },
+  "instructions": [
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "pin_burn_target",
+      "accounts": [
+        {
+          "name": "payer",
+          "pubkey": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "pubkey": "HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG",
+          "signer": true,
+          "writable": false
+        },
+        {
+          "name": "config",
+          "pubkey": "B5mdgMLDLVQdjgTwxb7WcXodu5ULDw5vnMqicRGe14kU",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "burn_target",
+          "pubkey": "G1zFxKQNryaoAQXKvGn9qCtYEwGBvRfq35pXtk6rrUAT",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "target_mint",
+          "pubkey": "89EZ3MuiKjCekm8baXT9iTLot3SLrSygsj22LKwo2AiT",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "target_pool",
+          "pubkey": "A6DHbbUMcGLWhZC7QCKH26FQN8fP36MGHQu4k4CYD6e5",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "target_amm_config",
+          "pubkey": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "target_wsol_vault",
+          "pubkey": "H2EjMcL3HC5rBZLxMgAwaqDvzrDPJiEViQfTtjGJuyAf",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "target_token_vault",
+          "pubkey": "Gs4m97V5nvCgn7PCNYDAAg8qcNE8Ljw7Ys4kBWNiCy3k",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "sol_price_update",
+          "pubkey": "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "target_price_update",
+          "pubkey": "6B23K3tkb51vLZA14jcEQVCA1pfHptzEHFA93V5dYwbT",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "end_sink",
+          "pubkey": "23vEcdj5Pv6NPy1Vc232EYAwPhhtVS3GWRA8SLBZAcxH",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {
+        "target_feed_id": "4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54cd4cc61fc"
+      }
+    }
+  ],
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 58505,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: PinBurnTarget",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 2253 of 350320 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 58355 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "B5mdgMLDLVQdjgTwxb7WcXodu5ULDw5vnMqicRGe14kU",
+      "kind": "TokenConfig",
+      "state": {
+        "version": 1,
+        "bump": 255,
+        "fee_bump": 255,
+        "has_baseline": false,
+        "mint": "HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG",
+        "creator": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+        "admin": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+        "rule": {
+          "mode": 0,
+          "carry_rule": 0,
+          "pool_policy": 0,
+          "value_decimals": 2,
+          "unit_value": "100000000000",
+          "max_abs_delta": "200000000000000",
+          "fraction_per_unit_bps": 100,
+          "slippage_bps": 300,
+          "max_twap_deviation_bps": 300,
+          "twap_window_secs": 1200,
+          "floor_lamports": "1000000",
+          "reserve_lamports": "20000000",
+          "tokens_per_unit": "0",
+          "vault_allocation": "0"
+        },
+        "rules_sha256": "2c7cdb048986b82e3759877aeb3b198786a804881319f7765add11ad180df564",
+        "params_hash": "6c84218012291970b603e8e6d3b73c7ef9884093226a0d4296793f280062fd4d",
+        "feed_id": "treasury.debt_to_penny",
+        "feed_id_len": 22,
+        "memo_prefix": "PTB",
+        "memo_prefix_len": 3,
+        "memo_source": "fiscaldata.treasury.gov debt_to_penny",
+        "memo_source_len": 37,
+        "attesters": [
+          {
+            "kind": 0,
+            "key": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          }
+        ],
+        "attester_count": 1,
+        "quorum": 1,
+        "pending_attesters": [
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          }
+        ],
+        "pending_count": 0,
+        "pending_quorum": 0,
+        "pending_eta": "0",
+        "cpmm_pool": "11111111111111111111111111111111",
+        "last_record_date": 0,
+        "last_value": "0",
+        "carry": "0",
+        "crank_cursor": 0,
+        "readings": 0,
+        "burns": 0,
+        "total_burned": "0",
+        "total_spent_lamports": "0",
+        "shortfall": "0",
+        "created_at": "1792113273",
+        "carried_spend_lamports": "0",
+        "pool_untradeable_since": "0",
+        "pool_untradeable_last_seen": "0",
+        "pool_verified": false,
+        "cluster_genesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+        "registration_policy": 0,
+        "ll_platform": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+        "ll_cp_config": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+        "ll_lock_scale_ppm": "1000000",
+        "pool_untradeable_candidate_at": "0",
+        "attester_added_at": [
+          "1792113273",
+          "0",
+          "0",
+          "0",
+          "0"
+        ],
+        "pending_policy": 0,
+        "pending_policy_pool": "11111111111111111111111111111111",
+        "pending_policy_eta": "0",
+        "pair_state": 2,
+        "pair_void_by": 20261231,
+        "pair_after_date": 0,
+        "pair_unlinked_at": "0",
+        "end_state": 0,
+        "end_date": 0,
+        "burn_target_kind": 1,
+        "feedId": "treasury.debt_to_penny",
+        "memoPrefix": "PTB",
+        "memoSource": "fiscaldata.treasury.gov debt_to_penny",
+        "activeAttesters": [
+          {
+            "kind": 0,
+            "key": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn"
+          }
+        ],
+        "adminRenounced": false,
+        "poolRegistered": false
+      }
+    },
+    {
+      "address": "4r6bmZMaV4WmH5udFzMUaYMVEXMkVTDcEcMgr62cUjh5",
+      "kind": "lamports",
+      "state": {
+        "lamports": 20000000
+      }
+    },
+    {
+      "address": "G1zFxKQNryaoAQXKvGn9qCtYEwGBvRfq35pXtk6rrUAT",
+      "kind": "lamports",
+      "state": {
+        "lamports": 2545080
+      }
+    }
+  ],
+  "sent": {
+    "signature": "4yaFDpFy5r49AF57fVMAhMaTN6A1hw7JSoZNv3deCGQu6oDani8oykG1ztv3ueAY89G7b1wew7YdgreAu51PbKpg",
+    "err": null
+  },
+  "accountsAfterSend": [
+    {
+      "address": "B5mdgMLDLVQdjgTwxb7WcXodu5ULDw5vnMqicRGe14kU",
+      "kind": "TokenConfig",
+      "state": {
+        "version": 1,
+        "bump": 255,
+        "fee_bump": 255,
+        "has_baseline": false,
+        "mint": "HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG",
+        "creator": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+        "admin": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+        "rule": {
+          "mode": 0,
+          "carry_rule": 0,
+          "pool_policy": 0,
+          "value_decimals": 2,
+          "unit_value": "100000000000",
+          "max_abs_delta": "200000000000000",
+          "fraction_per_unit_bps": 100,
+          "slippage_bps": 300,
+          "max_twap_deviation_bps": 300,
+          "twap_window_secs": 1200,
+          "floor_lamports": "1000000",
+          "reserve_lamports": "20000000",
+          "tokens_per_unit": "0",
+          "vault_allocation": "0"
+        },
+        "rules_sha256": "2c7cdb048986b82e3759877aeb3b198786a804881319f7765add11ad180df564",
+        "params_hash": "6c84218012291970b603e8e6d3b73c7ef9884093226a0d4296793f280062fd4d",
+        "feed_id": "treasury.debt_to_penny",
+        "feed_id_len": 22,
+        "memo_prefix": "PTB",
+        "memo_prefix_len": 3,
+        "memo_source": "fiscaldata.treasury.gov debt_to_penny",
+        "memo_source_len": 37,
+        "attesters": [
+          {
+            "kind": 0,
+            "key": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          }
+        ],
+        "attester_count": 1,
+        "quorum": 1,
+        "pending_attesters": [
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          },
+          {
+            "kind": 0,
+            "key": "11111111111111111111111111111111"
+          }
+        ],
+        "pending_count": 0,
+        "pending_quorum": 0,
+        "pending_eta": "0",
+        "cpmm_pool": "11111111111111111111111111111111",
+        "last_record_date": 0,
+        "last_value": "0",
+        "carry": "0",
+        "crank_cursor": 0,
+        "readings": 0,
+        "burns": 0,
+        "total_burned": "0",
+        "total_spent_lamports": "0",
+        "shortfall": "0",
+        "created_at": "1792113273",
+        "carried_spend_lamports": "0",
+        "pool_untradeable_since": "0",
+        "pool_untradeable_last_seen": "0",
+        "pool_verified": false,
+        "cluster_genesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+        "registration_policy": 0,
+        "ll_platform": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+        "ll_cp_config": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+        "ll_lock_scale_ppm": "1000000",
+        "pool_untradeable_candidate_at": "0",
+        "attester_added_at": [
+          "1792113273",
+          "0",
+          "0",
+          "0",
+          "0"
+        ],
+        "pending_policy": 0,
+        "pending_policy_pool": "11111111111111111111111111111111",
+        "pending_policy_eta": "0",
+        "pair_state": 2,
+        "pair_void_by": 20261231,
+        "pair_after_date": 0,
+        "pair_unlinked_at": "0",
+        "end_state": 0,
+        "end_date": 0,
+        "burn_target_kind": 1,
+        "feedId": "treasury.debt_to_penny",
+        "memoPrefix": "PTB",
+        "memoSource": "fiscaldata.treasury.gov debt_to_penny",
+        "activeAttesters": [
+          {
+            "kind": 0,
+            "key": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn"
+          }
+        ],
+        "adminRenounced": false,
+        "poolRegistered": false
+      }
+    },
+    {
+      "address": "4r6bmZMaV4WmH5udFzMUaYMVEXMkVTDcEcMgr62cUjh5",
+      "kind": "lamports",
+      "state": {
+        "lamports": 20000000
+      }
+    },
+    {
+      "address": "G1zFxKQNryaoAQXKvGn9qCtYEwGBvRfq35pXtk6rrUAT",
+      "kind": "lamports",
+      "state": {
+        "lamports": 2545080
+      }
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "case": "x20-reading-after-resolved-end",
+  "expected": "RuleEnded",
+  "observed": "RuleEnded",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR submit-reading --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX --date 20261010 --value 3800400000000000 --attester ~/.config/meme-coin-trader/devnet/keeper.json",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6102}]}",
+  "errorLogLines": [
+    "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/submit_reading.rs:47. Error Code: RuleEnded. Error Number: 6102. Error Message: the coin's rule has ended (no new end; after a resolved end, no reading dated later).",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d6"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "submit-reading",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "message": "BURNRECEIPTS-v3|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX|treasury.debt_to_penny|prev=2026-10-09|2026-10-10|38004000000000.00|src=5634f3424fab8b5b424a23cd733b3d6a47cb60468c53ae52323ac973e1dbc6e6|proof=0000000000000000000000000000000000000000000000000000000000000000",
+    "instructions": [
+      {
+        "program": "Ed25519SigVerify111111111111111111111111111",
+        "accounts": [],
+        "dataHex": "01003000ffff1000ffff70006601ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a5e9aad16e184c6602d159af6d9fce7a4d250ff3e53ce9e219bc5fc908a21c26832dc491788884dff448a53f9e3558241e69d692f3f4adf641c5da3c108c48c7044255524e52454345495054532d76337c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c4569704376586f5550474c67337241445a4362325871354b486f314535357a78586b63316e5a7534375254587c74726561737572792e646562745f746f5f70656e6e797c707265763d323032362d31302d30397c323032362d31302d31307c33383030343030303030303030302e30307c7372633d353633346633343234666162386235623432346132336364373333623364366134376362363034363863353361653532333233616339373365316462633665367c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+      },
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "submit_reading",
+        "accounts": [
+          {
+            "name": "payer",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "name": "config",
+            "pubkey": "76Fv5V7zpXRVApXBUvEHjMJ2zQFDtmbAFzmU2c2vNpCB",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "reading",
+            "pubkey": "8GgWW7emr9LrHHYv4424uTQXD4GVXkCZ6a1sUpW6EiZJ",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "instructions",
+            "pubkey": "Sysvar1nstructions1111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "event_authority",
+            "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "program",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {
+          "record_date": 20261010,
+          "value": "3800400000000000",
+          "source_url_hash": "5634f3424fab8b5b424a23cd733b3d6a47cb60468c53ae52323ac973e1dbc6e6",
+          "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":6102}]}",
+      "unitsConsumed": 26973,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: SubmitReading",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/submit_reading.rs:47. Error Code: RuleEnded. Error Number: 6102. Error Message: the coin's rule has ended (no new end; after a resolved end, no reading dated later).",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 26823 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d6"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "76Fv5V7zpXRVApXBUvEHjMJ2zQFDtmbAFzmU2c2vNpCB",
+        "kind": "TokenConfig",
+        "state": null
+      },
+      {
+        "address": "2SvevzMCmDnoBvQkkzR7iRpkzD4MKdZjhLhkgg2x7eGy",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "8GgWW7emr9LrHHYv4424uTQXD4GVXkCZ6a1sUpW6EiZJ",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

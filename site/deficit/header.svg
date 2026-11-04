@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="500" viewBox="0 0 1500 500">
+  <rect width="1500" height="500" fill="#0b0b0f"/>
+  <polyline points="60,440 180,428 300,415 420,408 540,392 660,384 780,362 900,350 1020,322 1140,308 1260,276 1380,252 1440,240" fill="none" stroke="#c0392b" stroke-width="6" stroke-linejoin="round"/>
+  <g fill="#e74c3c"><circle cx="300" cy="415" r="9"/><circle cx="540" cy="392" r="9"/><circle cx="780" cy="362" r="9"/><circle cx="1020" cy="322" r="9"/><circle cx="1260" cy="276" r="9"/></g>
+  <text x="80" y="118" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700" fill="#f4f1ea">$DEFICIT</text>
+  <text x="80" y="172" font-family="Helvetica, Arial, sans-serif" font-size="30" fill="#b8b8c4">Every $1,000,000,000 the U.S. borrows burns 0.01% of supply. Bought back with trading fees and burned. With a receipt.</text>
+  <text x="80" y="214" font-family="Helvetica, Arial, sans-serif" font-size="24" fill="#8a8a96">Source: U.S. Treasury, Debt to the Penny · verify every burn yourself</text>
+  <text x="1440" y="478" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="22" fill="#6d6d78">a memecoin — the rule says what supply does, not what price does</text>
+</svg>

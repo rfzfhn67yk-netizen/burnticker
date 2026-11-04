@@ -1,0 +1,132 @@
+{
+ "fetchedAt": "2026-10-10T02:50:00Z",
+ "url": "https://www.federalregister.gov/api/v1/documents.json?conditions[type][]=RULE&per_page=20&order=newest&fields[]=document_number&fields[]=publication_date&fields[]=title&fields[]=type",
+ "body": {
+  "description": "Documents of type Rule",
+  "count": 10000,
+  "total_pages": 50,
+  "next_page_url": "https://www.federalregister.gov/api/v1/documents?conditions%5Btype%5D%5B%5D=RULE&fields%5B%5D=document_number&fields%5B%5D=publication_date&fields%5B%5D=title&fields%5B%5D=type&format=json&order=newest&page=2&per_page=20&search_after_cursor=WzE3OTE0MTc2MDAwMDAsIjIwMjYtMjA2MzYiXQ",
+  "results": [
+   {
+    "document_number": "C1-2026-20019",
+    "publication_date": "2026-10-09",
+    "title": "Fisheries of the Exclusive Economic Zone Off Alaska; Groundfish Reserves in the Bering Sea and Aleutian Islands Management Area",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20792",
+    "publication_date": "2026-10-09",
+    "title": "Raisins Produced From Grapes Grown in California; Order Amending Marketing Order No. 989",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20757",
+    "publication_date": "2026-10-09",
+    "title": "Schedules of Controlled Substances; Removal of Exemption Status for Inactive Butalbital Products",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20748",
+    "publication_date": "2026-10-09",
+    "title": "Schedules of Controlled Substances: Placement of O-Desmethyltramadol in Schedule I; Correction",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20736",
+    "publication_date": "2026-10-09",
+    "title": "Air Plan Approval; Michigan; Clean Data Determination for the Berrien, MI and Muskegon, MI Areas for the 2015 Ozone Standards",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20727",
+    "publication_date": "2026-10-09",
+    "title": "Medical Devices; Immunology and Microbiology Devices; Classification of the System for Detection of Nucleic Acid From Non-Viral Microorganism(s) Causing Sexually Transmitted Infections Using Home-Collected Specimens",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20726",
+    "publication_date": "2026-10-09",
+    "title": "Medical Devices; Cardiovascular Devices; Classification of the Infant Pulse Rate and Oxygen Saturation Monitor for Over-the-Counter Use",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20725",
+    "publication_date": "2026-10-09",
+    "title": "Medical Devices; Immunology and Microbiology Devices; Classification of the Hematopoietic Cell Enrichment Kit",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20722",
+    "publication_date": "2026-10-09",
+    "title": "Airworthiness Directives; Airbus Helicopters Deutschland GmbH (AHD) Helicopters",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20687",
+    "publication_date": "2026-10-08",
+    "title": "Impact Aid Programs",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20685",
+    "publication_date": "2026-10-08",
+    "title": "Removal of Obsolete Portion of Regulation Relating to Care and Treatment of Ineligible Individuals",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20684",
+    "publication_date": "2026-10-08",
+    "title": "Removal of Obsolete/Suspended Regulations",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20680",
+    "publication_date": "2026-10-08",
+    "title": "Airworthiness Directives; The Boeing Company Airplanes",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20666",
+    "publication_date": "2026-10-08",
+    "title": "Airworthiness Directives; Engine Alliance Engines",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20652",
+    "publication_date": "2026-10-08",
+    "title": "Atlantic Highly Migratory Species; Atlantic Bluefin Tuna Fisheries; General Category October Through November Quota Transfer and Adjustment",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20641",
+    "publication_date": "2026-10-08",
+    "title": "Air Plan Approval; Kentucky; Louisville Area Limited Maintenance Plan for the 1997 8-Hour Ozone NAAQS",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20640",
+    "publication_date": "2026-10-08",
+    "title": "Air Plan Approval; Oklahoma; Interstate Transport Requirements for the 2010 SO2 NAAQS",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20638",
+    "publication_date": "2026-10-08",
+    "title": "Approval and Promulgation of State Implementation Plans; New Jersey; RACT Certifications for the 2008 and 2015 Ozone National Ambient Air Quality Standards",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20637",
+    "publication_date": "2026-10-08",
+    "title": "Fisheries of the Exclusive Economic Zone Off Alaska; Pacific Cod by Vessels Using Pot Gear in the Central Regulatory Area of the Gulf of Alaska",
+    "type": "Rule"
+   },
+   {
+    "document_number": "2026-20636",
+    "publication_date": "2026-10-08",
+    "title": "Air Plan Approval; GA; Removal of Nonattainment Area New Source Review",
+    "type": "Rule"
+   }
+  ]
+ }
+}

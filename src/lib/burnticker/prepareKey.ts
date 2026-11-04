@@ -1,0 +1,55 @@
+/**
+ * THE LAUNCH PAGE'S PREPARE KEY (audit 2026-10-15 M2; review item 1). One key per draft revision ("draft_<random>", plus "_a"/"_b" for
+ * the two posts of a matchup). If the server ever answers `idempotency-key-reused` (the same key with a different body), the page starts
+ * a new key for this draft and sends the request once more, so a press is never stuck on a refusal for the key's 15 minutes. Client-safe.
+ */
+export const IDEMPOTENCY_REUSED_CODE = "idempotency-key-reused";
+
+export function newPrepareKey(rand: () => string = defaultRandom): string { return `draft_${rand()}`; }
+function defaultRandom(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  return typeof c?.randomUUID === "function" ? c.randomUUID().replace(/-/g, "") : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+}
+/** The body's key moved to a new base, keeping its side suffix ("draft_old_a" → "draft_new_a"). */
+export function withNewBase(key: string, base: string): string {
+  const m = /^draft_[A-Za-z0-9]+(.*)$/.exec(key);
+  return m ? `${base}${m[1]}` : base;
+}
+type FetchLike = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<Response>;
+/** A fetch that, on `idempotency-key-reused`, asks `rotate()` for a new base key and sends the same request once more under it. */
+export function keyRotatingFetch(fetchFn: FetchLike, rotate: () => string): FetchLike {
+  return async (url, init) => {
+    const r = await fetchFn(url, init);
+    if (r.status !== 409 || !init?.body) return r;
+    const j = await r.clone().json().catch(() => null) as { code?: string } | null;
+    if (j?.code !== IDEMPOTENCY_REUSED_CODE) return r;
+    let body: Record<string, unknown>;
+    try { body = JSON.parse(init.body) as Record<string, unknown>; } catch { return r; }
+    if (typeof body.idempotencyKey !== "string") return r;
+    return fetchFn(url, { ...init, body: JSON.stringify({ ...body, idempotencyKey: withNewBase(body.idempotencyKey, rotate()) }) });
+  };
+}
+
+/**
+ * One prepare key per draft revision (the launch page's draftPrepareKey / rotatePrepareKey, pure so it is tested): the same revision
+ * keeps its key; a new revision starts a new one; `rotate` gives the current revision a fresh key after idempotency-key-reused.
+ * Second audit 2026-10-19 I-12: the revision passed here is launchRevisions().draft, which carries no wallet or proof.
+ */
+export function draftKeys(make: () => string = () => newPrepareKey(), store: KeyStore | null = null): { keyFor(rev: string): string; rotate(rev: string): string } {
+  // LA7-6 (seventh pre-launch audit; LA6-4): the key is also kept in the tab's storage, keyed by the draft revision, so a reload sends the
+  // same key for the same draft and the server answers with the first prepare (the same draft and mint) instead of building a second one
+  let cur: { rev: string; key: string } | null = null;
+  const save = (c: { rev: string; key: string }) => { try { store?.write(JSON.stringify(c)); } catch { /* no memory, no harm */ } };
+  const kept = (rev: string): string | null => {
+    let raw: string | null = null;
+    try { raw = store?.read() ?? null; } catch { raw = null; }
+    try { const j = JSON.parse(raw ?? "null") as { rev?: unknown; key?: unknown } | null; return j && j.rev === rev && typeof j.key === "string" && /^draft_[A-Za-z0-9_]{8,120}$/.test(j.key) ? j.key : null; } catch { return null; }
+  };
+  return {
+    keyFor(rev) { if (!cur || cur.rev !== rev) { const k = kept(rev); cur = { rev, key: k ?? make() }; if (!k) save(cur); } return cur.key; },
+    rotate(rev) { cur = { rev, key: make() }; save(cur); return cur.key; },
+  };
+}
+/** LA7-6: where the page keeps its prepare key across a reload (sessionStorage under PREPARE_KEY_STORE). */
+export interface KeyStore { read(): string | null; write(v: string): void }
+export const PREPARE_KEY_STORE = "burnticker.launch.prepareKey.v1";

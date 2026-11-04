@@ -1,0 +1,95 @@
+{
+ "schema": "burnticker.ops-status/v1",
+ "generatedAt": "2026-10-12T21:31:04.944Z",
+ "keeper": {
+  "role": "leader",
+  "active": true,
+  "reason": "leader (no peer configured)",
+  "hostIdHash": "bcc00ad890cfa434",
+  "cluster": "devnet",
+  "startedAt": "2026-10-12T21:30:52.502Z",
+  "lastCycleAt": 1791840653290,
+  "lastCycle": {
+   "fetched": 0,
+   "planned": 0,
+   "executed": 0,
+   "errors": 0
+  },
+  "paused": false,
+  "heartbeatEverySec": 60,
+  "missed": 0,
+  "missedLimit": 5,
+  "takeover": null,
+  "peer": {
+   "url": null,
+   "reachable": false,
+   "role": null,
+   "active": null,
+   "lastCycleAt": null,
+   "hostIdHash": null,
+   "takeoverValid": false,
+   "error": null,
+   "checkedAt": null
+  }
+ },
+ "feeds": [],
+ "alerts": {
+  "windowHours": 24,
+  "open": 1,
+  "kinds": {
+   "bt-snapshot-failed": 1
+  }
+ },
+ "retired": {
+  "count": 1,
+  "coins": [
+   {
+    "ticker": "R4KRR",
+    "retiredAt": "2026-10-12T21:20:40.530Z",
+    "lastSweepDate": null,
+    "sweepThresholdLamports": 50000000
+   }
+  ]
+ },
+ "windDowns": {
+  "pending": 1,
+  "coins": [
+   {
+    "ticker": "R4KVV",
+    "mode": "winddown",
+    "reason": "the market was voided (devnet-r4 keeper test)",
+    "endedAt": "2026-10-12T20:19:39.358Z",
+    "daysDone": 0,
+    "windDownDays": 28,
+    "receiptsPending": 0
+   }
+  ]
+ },
+ "snapshot": null,
+ "programs": [
+  {
+   "name": "burn_receipts",
+   "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+   "cluster": "devnet",
+   "deployedHash": "90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35",
+   "buildHash": "90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35",
+   "verified": "matches",
+   "buildKind": "interim-local",
+   "readAt": "2026-10-11"
+  },
+  {
+   "name": "pair_curve",
+   "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
+   "cluster": "devnet",
+   "deployedHash": "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42",
+   "buildHash": "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42",
+   "verified": "matches",
+   "buildKind": "interim-local",
+   "readAt": "2026-10-11"
+  }
+ ],
+ "fence": {
+  "held": [],
+  "adopted": 0
+ }
+}

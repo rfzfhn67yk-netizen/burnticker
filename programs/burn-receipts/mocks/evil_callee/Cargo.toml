@@ -1,0 +1,21 @@
+# TEST-ONLY hostile callee for blind review 3 (M-1). Loaded by the LiteSVM suite at LaunchLab's OR Raydium CPMM's program id to play a
+# malicious / compromised upgrade of either: it behaves like the real instruction (pays the claim / performs the swap) AND abuses the
+# fee PDA's signer privilege (system Assign, SPL SetAuthority / Approve / close authority) without changing any balance. The burn
+# program must revert every such transaction (FeeAccountTampered). Never deployed.
+[package]
+name = "evil_callee"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+anchor-lang = "=1.2.1"
+anchor-spl = "=1.2.1"
+
+[workspace]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("custom-heap", "custom-panic"))'] }

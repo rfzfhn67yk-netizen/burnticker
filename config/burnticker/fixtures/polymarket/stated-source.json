@@ -1,0 +1,344 @@
+{
+ "fetchedAt": "2026-10-12T19:28:00Z",
+ "note": "Real Gamma event bodies, captured read-only for the stated-source parser (no prices are read; each event keeps its first three markets and the fields the parser and the dispute-window reader use).",
+ "events": [
+  {
+   "url": "https://gamma-api.polymarket.com/events?slug=which-party-will-win-the-senate-in-2026",
+   "body": [
+    {
+     "id": "32224",
+     "slug": "which-party-will-win-the-senate-in-2026",
+     "title": "Which party will win the Senate in 2026?",
+     "description": "This market will resolve according to the party that wins control of the United States Senate in the 2026 United States midterm election.\n\nA party wins control of the United States Senate if it wins a majority of the chamber’s voting seats. If no party wins a majority of voting seats, the party that wins control of the chamber is the party that wins half of the voting seats and holds the Vice Presidency. If the outcome remains ambiguous after applying the above criteria, the chamber will be deemed controlled by the party with which the first selected President Pro Tempore of the Congress that convenes after the specified election is affiliated.\n\nThe following rules govern the counting of seats for determining which party wins control of the chamber.\n\nAll regular and special Senate elections that determine representation in the upcoming 120th Congress and are scheduled to take place in November 2026 as of October 31, 2026 are included. Runoffs for qualifying elections will determine attribution of the relevant seat, even if they take place after November 2026. Vacant seats for which no election or special election to fill the seat is scheduled to take place in November 2026 as of October 31, 2026 will be treated as held by the party affiliation of the most recent member to hold that seat.\n\nFor seats contested in the specified election, seats are attributed to the party under which the member was elected. If a member-elect changes party affiliation, or vacates their seat, between election day and the formal organization of Congress, the seat is attributed to the party under which the member was elected.\n\nFor seats not contested in the specified election, seats are attributed to the party that holds the seat as of the date of the election. If a current sitting member of the U.S. Senate who is not up for election changes party affiliation or vacates their seat after the date of the election, the seat is attributed to the party under which the member was affiliated at the time of the election.\n\nSenate members elected as independents who formally caucus with, or, for newly elected members, who announce their intent to caucus with, a party are included in that party’s count. If the caucus decisions of members of the Senate elected as independents cannot be determined on the date of the election, this market may remain open until the earlier of (i) an announcement from the relevant members of their intents to caucus, or (ii) January 4th, 11:59 PM ET of the following calendar year. If no such announcement is made by January 4th, 11:59 PM ET of the following calendar year, the member will not count towards the seat count of any party.\n\nThe resolution sources for this market will be official information from relevant state electoral authorities, the United States Congress, and a consensus of credible reporting.",
+     "resolutionSource": "",
+     "closed": false,
+     "endDate": "2026-11-04T04:59:00Z",
+     "tags": [
+      {
+       "slug": "senate-elections",
+       "label": "Senate"
+      },
+      {
+       "slug": "parent-for-derivative",
+       "label": "Parent For Derivative"
+      },
+      {
+       "slug": "united-states",
+       "label": "United States"
+      },
+      {
+       "slug": "us-presidential-election",
+       "label": "US Election"
+      },
+      {
+       "slug": "politics",
+       "label": "Politics"
+      },
+      {
+       "slug": "midterms",
+       "label": "Midterms"
+      },
+      {
+       "slug": "world-elections",
+       "label": "World Elections"
+      },
+      {
+       "slug": "elections",
+       "label": "Elections"
+      },
+      {
+       "slug": "global-elections",
+       "label": "Global Elections"
+      },
+      {
+       "slug": "earn-4",
+       "label": "Earn 3.25%"
+      },
+      {
+       "slug": "congress",
+       "label": "Congress"
+      },
+      {
+       "slug": "main-election",
+       "label": "Main Election"
+      }
+     ],
+     "markets": [
+      {
+       "id": "562793",
+       "conditionId": "0x307a1ed89d60b61002dd5bbf00e1408c5ed2ab3fcdb056191ca7ef9bc34d38f3",
+       "questionID": "0x22725f09e6a3f61882a1fd2ab4d044dc609767099b539b47053d9d71b5ae6a00",
+       "question": "Will the Democratic Party control the Senate after the 2026 Midterm elections?",
+       "slug": "will-the-democratic-party-control-the-senate-after-the-2026-midterm-elections",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.635\", \"0.365\"]",
+       "active": true,
+       "closed": false,
+       "endDate": "2026-11-04T04:59:00Z",
+       "description": "This market will resolve according to the party that wins control of the United States Senate in the 2026 United States midterm election.\n\nA party wins control of the United States Senate if it wins a majority of the chamber’s voting seats. If no party wins a majority of voting seats, the party that wins control of the chamber is the party that wins half of the voting seats and holds the Vice Presidency. If the outcome remains ambiguous after applying the above criteria, the chamber will be deemed controlled by the party with which the first selected President Pro Tempore of the Congress that convenes after the specified election is affiliated.\n\nThe following rules govern the counting of seats for determining which party wins control of the chamber.\n\nAll regular and special Senate elections that determine representation in the upcoming 120th Congress and are scheduled to take place in November 2026 as of October 31, 2026 are included. Runoffs for qualifying elections will determine attribution of the relevant seat, even if they take place after November 2026. Vacant seats for which no election or special election to fill the seat is scheduled to take place in November 2026 as of October 31, 2026 will be treated as held by the party affiliation of the most recent member to hold that seat.\n\nFor seats contested in the specified election, seats are attributed to the party under which the member was elected. If a member-elect changes party affiliation, or vacates their seat, between election day and the formal organization of Congress, the seat is attributed to the party under which the member was elected.\n\nFor seats not contested in the specified election, seats are attributed to the party that holds the seat as of the date of the election. If a current sitting member of the U.S. Senate who is not up for election changes party affiliation or vacates their seat after the date of the election, the seat is attributed to the party under which the member was affiliated at the time of the election.\n\nSenate members elected as independents who formally caucus with, or, for newly elected members, who announce their intent to caucus with, a party are included in that party’s count. If the caucus decisions of members of the Senate elected as independents cannot be determined on the date of the election, this market may remain open until the earlier of (i) an announcement from the relevant members of their intents to caucus, or (ii) January 4th, 11:59 PM ET of the following calendar year. If no such announcement is made by January 4th, 11:59 PM ET of the following calendar year, the member will not count towards the seat count of any party.\n\nThe resolution sources for this market will be official information from relevant state electoral authorities, the United States Congress, and a consensus of credible reporting.",
+       "resolutionSource": "",
+       "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+       "umaResolutionStatuses": "[]",
+       "customLiveness": 0,
+       "umaBond": "10000",
+       "umaReward": "10",
+       "negRisk": true,
+       "groupItemTitle": "Democratic Party"
+      },
+      {
+       "id": "562794",
+       "conditionId": "0x86bfb53af7250a40928975c551d12c185b762fa4ce0b40c6a64a50c946d72587",
+       "questionID": "0x22725f09e6a3f61882a1fd2ab4d044dc609767099b539b47053d9d71b5ae6a01",
+       "question": "Will the Republican Party control the Senate after the 2026 Midterm elections?",
+       "slug": "will-the-republican-party-control-the-senate-after-the-2026-midterm-elections",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.365\", \"0.635\"]",
+       "active": true,
+       "closed": false,
+       "endDate": "2026-11-04T04:59:00Z",
+       "description": "This market will resolve according to the party that wins control of the United States Senate in the 2026 United States midterm election.\n\nA party wins control of the United States Senate if it wins a majority of the chamber’s voting seats. If no party wins a majority of voting seats, the party that wins control of the chamber is the party that wins half of the voting seats and holds the Vice Presidency. If the outcome remains ambiguous after applying the above criteria, the chamber will be deemed controlled by the party with which the first selected President Pro Tempore of the Congress that convenes after the specified election is affiliated.\n\nThe following rules govern the counting of seats for determining which party wins control of the chamber.\n\nAll regular and special Senate elections that determine representation in the upcoming 120th Congress and are scheduled to take place in November 2026 as of October 31, 2026 are included. Runoffs for qualifying elections will determine attribution of the relevant seat, even if they take place after November 2026. Vacant seats for which no election or special election to fill the seat is scheduled to take place in November 2026 as of October 31, 2026 will be treated as held by the party affiliation of the most recent member to hold that seat.\n\nFor seats contested in the specified election, seats are attributed to the party under which the member was elected. If a member-elect changes party affiliation, or vacates their seat, between election day and the formal organization of Congress, the seat is attributed to the party under which the member was elected.\n\nFor seats not contested in the specified election, seats are attributed to the party that holds the seat as of the date of the election. If a current sitting member of the U.S. Senate who is not up for election changes party affiliation or vacates their seat after the date of the election, the seat is attributed to the party under which the member was affiliated at the time of the election.\n\nSenate members elected as independents who formally caucus with, or, for newly elected members, who announce their intent to caucus with, a party are included in that party’s count. If the caucus decisions of members of the Senate elected as independents cannot be determined on the date of the election, this market may remain open until the earlier of (i) an announcement from the relevant members of their intents to caucus, or (ii) January 4th, 11:59 PM ET of the following calendar year. If no such announcement is made by January 4th, 11:59 PM ET of the following calendar year, the member will not count towards the seat count of any party.\n\nThe resolution sources for this market will be official information from relevant state electoral authorities, the United States Congress, and a consensus of credible reporting.",
+       "resolutionSource": "",
+       "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+       "umaResolutionStatuses": "[]",
+       "customLiveness": 0,
+       "umaBond": "10000",
+       "umaReward": "10",
+       "negRisk": true,
+       "groupItemTitle": "Republican Party"
+      },
+      {
+       "id": "562795",
+       "conditionId": "0x75e8380ff28ca9f077a37235d149f782bd859060e4c9e5c4d43742633e9dfcf2",
+       "questionID": "0x22725f09e6a3f61882a1fd2ab4d044dc609767099b539b47053d9d71b5ae6a02",
+       "question": "Will Party A control the Senate after the 2026 Midterm elections?",
+       "slug": "will-party-a-control-the-senate-after-the-2026-midterm-elections-137",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "active": false,
+       "closed": false,
+       "endDate": "2026-11-03T23:59:00Z",
+       "description": "This market will resolve according to the party that wins control of the United States Senate in the 2026 United States midterm election.\n\nA party wins control of the United States Senate if it wins a majority of the chamber’s voting seats. If no party wins a majority of voting seats, the party that wins control of the chamber is the party that wins half of the voting seats and holds the Vice Presidency. If the outcome remains ambiguous after applying the above criteria, the chamber will be deemed controlled by the party with which the first selected President Pro Tempore of the Congress that convenes after the specified election is affiliated.\n\nThe following rules govern the counting of seats for determining which party wins control of the chamber.\n\nAll regular and special Senate elections that determine representation in the upcoming 120th Congress and are scheduled to take place in November 2026 as of October 31, 2026 are included. Runoffs for qualifying elections will determine attribution of the relevant seat, even if they take place after November 2026. Vacant seats for which no election or special election to fill the seat is scheduled to take place in November 2026 as of October 31, 2026 will be treated as held by the party affiliation of the most recent member to hold that seat.\n\nFor seats contested in the specified election, seats are attributed to the party under which the member was elected. If a member-elect changes party affiliation, or vacates their seat, between election day and the formal organization of Congress, the seat is attributed to the party under which the member was elected.\n\nFor seats not contested in the specified election, seats are attributed to the party that holds the seat as of the date of the election. If a current sitting member of the U.S. Senate who is not up for election changes party affiliation or vacates their seat after the date of the election, the seat is attributed to the party under which the member was affiliated at the time of the election.\n\nSenate members elected as independents who formally caucus with, or, for newly elected members, who announce their intent to caucus with, a party are included in that party’s count. If the caucus decisions of members of the Senate elected as independents cannot be determined on the date of the election, this market may remain open until the earlier of (i) an announcement from the relevant members of their intents to caucus, or (ii) January 4th, 11:59 PM ET of the following calendar year. If no such announcement is made by January 4th, 11:59 PM ET of the following calendar year, the member will not count towards the seat count of any party.\n\nThe resolution sources for this market will be official information from relevant state electoral authorities, the United States Congress, and a consensus of credible reporting.",
+       "resolutionSource": "",
+       "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+       "umaResolutionStatuses": "[]",
+       "customLiveness": 0,
+       "umaBond": "10000",
+       "umaReward": "10",
+       "negRisk": true,
+       "groupItemTitle": "Party A"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "url": "https://gamma-api.polymarket.com/events?slug=donald-trump-of-truth-social-posts-october-6-october-13-2026",
+   "body": [
+    {
+     "id": "1122445",
+     "slug": "donald-trump-of-truth-social-posts-october-6-october-13-2026",
+     "title": "Donald Trump # Truth Social posts October 6 - October 13, 2026?",
+     "description": "This market will resolve according to the number of times Donald Trump (@realDonaldTrump), posts on Truth Social between October 6, 12:00 PM ET and October 13, 2026, 12:00 PM ET.\n\nFor the purposes of this market, only main feed posts, quote posts and reposts will count.\n\nReplies will NOT count towards the total - however, replies which are recorded on the main feed will be counted by the tracker.\n\nDeleted posts will count as long as they remain available long enough to be captured by the tracker (~5 minutes).\n\nThe resolution source for this market is the \"Post Counter\" figure for posts found at https://xtracker.polymarket.com. Individual posts can be viewed by clicking \"Export Data\". If the tracker does not update correctly in accordance with the rules, Truth Social itself may be used as a secondary resolution source.",
+     "resolutionSource": "https://truthsocial.com/@realDonaldTrump",
+     "closed": false,
+     "endDate": "2026-10-13T16:00:00Z",
+     "tags": [
+      {
+       "slug": "politics",
+       "label": "Politics"
+      },
+      {
+       "slug": "trump",
+       "label": "Trump"
+      },
+      {
+       "slug": "tweets-markets",
+       "label": "Tweet Markets"
+      },
+      {
+       "slug": "recurring",
+       "label": "Recurring"
+      }
+     ],
+     "markets": [
+      {
+       "id": "5223392",
+       "conditionId": "0x79b112400e7b9ec5c8fe0cc18f9f161f5b89ac588b2b38af6c6d4b70ac2aedad",
+       "questionID": "0x9a946219f45c44d1bb6229e2d62adaae86559e5339b48cb001fe8b51f74ef900",
+       "question": "Will Donald Trump post 0-19 Truth Social posts from October 6 to October 13, 2026?",
+       "slug": "donald-trump-of-truth-social-posts-october-6-october-13-2026-0-19",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0\", \"1\"]",
+       "active": true,
+       "closed": true,
+       "endDate": "2026-10-13T16:00:00Z",
+       "closedTime": "2026-10-08 19:07:39+00",
+       "umaEndDate": "2026-10-08T19:07:39Z",
+       "description": "This market will resolve according to the number of times Donald Trump (@realDonaldTrump), posts on Truth Social between October 6, 12:00 PM ET and October 13, 2026, 12:00 PM ET.\n\nFor the purposes of this market, only main feed posts, quote posts and reposts will count.\n\nReplies will NOT count towards the total - however, replies which are recorded on the main feed will be counted by the tracker.\n\nDeleted posts will count as long as they remain available long enough to be captured by the tracker (~5 minutes).\n\nThe resolution source for this market is the \"Post Counter\" figure for posts found at https://xtracker.polymarket.com. Individual posts can be viewed by clicking \"Export Data\". If the tracker does not update correctly in accordance with the rules, Truth Social itself may be used as a secondary resolution source.",
+       "resolutionSource": "https://truthsocial.com/@realDonaldTrump",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "umaResolutionStatus": "resolved",
+       "umaResolutionStatuses": "[\"proposed\", \"proposed\"]",
+       "umaBond": "500",
+       "umaReward": "3.5",
+       "negRisk": true,
+       "groupItemTitle": "<20"
+      },
+      {
+       "id": "5223401",
+       "conditionId": "0x2b29cee143d7b12e2b2ee311473702b3470618584a155f2268f52688b7e0b160",
+       "questionID": "0x9a946219f45c44d1bb6229e2d62adaae86559e5339b48cb001fe8b51f74ef901",
+       "question": "Will Donald Trump post 20-39 Truth Social posts from October 6 to October 13, 2026?",
+       "slug": "donald-trump-of-truth-social-posts-october-6-october-13-2026-20-39",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0\", \"1\"]",
+       "active": true,
+       "closed": true,
+       "endDate": "2026-10-13T16:00:00Z",
+       "closedTime": "2026-10-10 08:02:40+00",
+       "umaEndDate": "2026-10-10T08:02:40Z",
+       "description": "This market will resolve according to the number of times Donald Trump (@realDonaldTrump), posts on Truth Social between October 6, 12:00 PM ET and October 13, 2026, 12:00 PM ET.\n\nFor the purposes of this market, only main feed posts, quote posts and reposts will count.\n\nReplies will NOT count towards the total - however, replies which are recorded on the main feed will be counted by the tracker.\n\nDeleted posts will count as long as they remain available long enough to be captured by the tracker (~5 minutes).\n\nThe resolution source for this market is the \"Post Counter\" figure for posts found at https://xtracker.polymarket.com. Individual posts can be viewed by clicking \"Export Data\". If the tracker does not update correctly in accordance with the rules, Truth Social itself may be used as a secondary resolution source.",
+       "resolutionSource": "https://truthsocial.com/@realDonaldTrump",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "umaResolutionStatus": "resolved",
+       "umaResolutionStatuses": "[\"proposed\", \"proposed\"]",
+       "umaBond": "500",
+       "umaReward": "3.5",
+       "negRisk": true,
+       "groupItemTitle": "20-39"
+      },
+      {
+       "id": "5223412",
+       "conditionId": "0x0812e30ecefa72dfeb2cfb2ab787378f2eeb6ff115d75224235dc6facb540507",
+       "questionID": "0x9a946219f45c44d1bb6229e2d62adaae86559e5339b48cb001fe8b51f74ef902",
+       "question": "Will Donald Trump post 40-59 Truth Social posts from October 6 to October 13, 2026?",
+       "slug": "donald-trump-of-truth-social-posts-october-6-october-13-2026-40-59",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0\", \"1\"]",
+       "active": true,
+       "closed": true,
+       "endDate": "2026-10-13T16:00:00Z",
+       "closedTime": "2026-10-11 04:10:00+00",
+       "umaEndDate": "2026-10-11T04:10:00Z",
+       "description": "This market will resolve according to the number of times Donald Trump (@realDonaldTrump), posts on Truth Social between October 6, 12:00 PM ET and October 13, 2026, 12:00 PM ET.\n\nFor the purposes of this market, only main feed posts, quote posts and reposts will count.\n\nReplies will NOT count towards the total - however, replies which are recorded on the main feed will be counted by the tracker.\n\nDeleted posts will count as long as they remain available long enough to be captured by the tracker (~5 minutes).\n\nThe resolution source for this market is the \"Post Counter\" figure for posts found at https://xtracker.polymarket.com. Individual posts can be viewed by clicking \"Export Data\". If the tracker does not update correctly in accordance with the rules, Truth Social itself may be used as a secondary resolution source.",
+       "resolutionSource": "https://truthsocial.com/@realDonaldTrump",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "umaResolutionStatus": "resolved",
+       "umaResolutionStatuses": "[\"proposed\", \"proposed\"]",
+       "umaBond": "500",
+       "umaReward": "3.5",
+       "negRisk": true,
+       "groupItemTitle": "40-59"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "url": "https://gamma-api.polymarket.com/events?slug=mlb-world-series-champion-2026",
+   "body": [
+    {
+     "id": "179312",
+     "slug": "mlb-world-series-champion-2026",
+     "title": "MLB World Series Champion 2026",
+     "description": "This market will resolve according to the team that wins the 2026 MLB World Series. \n\nIf at any point it becomes impossible for a listed team to win the 2026 MLB World Series per the rules of MLB (e.g., they are eliminated in the playoffs), the corresponding market will resolve to “No”.\n\nIf the 2026 MLB season is cancelled, postponed after December 31, 2026 ET, or there is otherwise no winner declared within that timeframe, this market will resolve to “Other”.\n\nThe primary resolution source will be official information from MLB (https://www.mlb.com/); however, a consensus of credible reporting may also be used.",
+     "resolutionSource": "",
+     "closed": false,
+     "endDate": "2026-10-31T23:55:00Z",
+     "tags": [
+      {
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "slug": "world-series",
+       "label": "World Series"
+      },
+      {
+       "slug": "mlb",
+       "label": "MLB"
+      },
+      {
+       "slug": "mlb-playoffs",
+       "label": "MLB Playoffs"
+      },
+      {
+       "slug": "baseball",
+       "label": "baseball"
+      }
+     ],
+     "markets": [
+      {
+       "id": "1235547",
+       "conditionId": "0x3df7be753c8b6ebbddf31d6d63535c4b31c836cb25b1a73085508a271bc103db",
+       "questionID": "0x85de20785f24956ff4ce1471e80f7d379d97f3fb8a20fb5dd881d03aac38df00",
+       "question": "Will the New York Yankees win the 2026 World Series?",
+       "slug": "will-the-new-york-yankees-win-the-2026-world-series",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0\", \"1\"]",
+       "active": true,
+       "closed": true,
+       "endDate": "2026-10-31T23:55:00Z",
+       "closedTime": "2026-10-08 06:21:10+00",
+       "umaEndDate": "2026-10-08T06:21:10Z",
+       "description": "This market will resolve according to the team that wins the 2026 MLB World Series. \n\nIf at any point it becomes impossible for a listed team to win the 2026 MLB World Series per the rules of MLB (e.g., they are eliminated in the playoffs), the corresponding market will resolve to “No”.\n\nIf the 2026 MLB season is cancelled, postponed after December 31, 2026 ET, or there is otherwise no winner declared within that timeframe, this market will resolve to “Other”.\n\nThe primary resolution source will be official information from MLB (https://www.mlb.com/); however, a consensus of credible reporting may also be used.",
+       "resolutionSource": "https://www.mlb.com/",
+       "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+       "umaResolutionStatus": "resolved",
+       "umaResolutionStatuses": "[\"proposed\", \"proposed\", \"resolved\"]",
+       "customLiveness": 0,
+       "umaBond": "500",
+       "umaReward": "5",
+       "negRisk": true,
+       "groupItemTitle": "New York Yankees"
+      },
+      {
+       "id": "1235548",
+       "conditionId": "0x6df5c681e14dadf57c0ba0a7c01d6e2cb04f0f97528e76d39875320aec40fddf",
+       "questionID": "0x85de20785f24956ff4ce1471e80f7d379d97f3fb8a20fb5dd881d03aac38df01",
+       "question": "Will the Toronto Blue Jays win the 2026 World Series?",
+       "slug": "will-the-toronto-blue-jays-win-the-2026-world-series",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0\", \"1\"]",
+       "active": true,
+       "closed": true,
+       "endDate": "2026-10-31T23:55:00Z",
+       "closedTime": "2026-09-23 23:22:16+00",
+       "umaEndDate": "2026-09-23T23:22:16Z",
+       "description": "This market will resolve according to the team that wins the 2026 MLB World Series. \n\nIf at any point it becomes impossible for a listed team to win the 2026 MLB World Series per the rules of MLB (e.g., they are eliminated in the playoffs), the corresponding market will resolve to “No”.\n\nIf the 2026 MLB season is cancelled, postponed after December 31, 2026 ET, or there is otherwise no winner declared within that timeframe, this market will resolve to “Other”.\n\nThe primary resolution source will be official information from MLB (https://www.mlb.com/); however, a consensus of credible reporting may also be used.",
+       "resolutionSource": "https://www.mlb.com/",
+       "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+       "umaResolutionStatus": "resolved",
+       "umaResolutionStatuses": "[\"proposed\", \"proposed\", \"resolved\"]",
+       "customLiveness": 0,
+       "umaBond": "500",
+       "umaReward": "5",
+       "negRisk": true,
+       "groupItemTitle": "Toronto Blue Jays"
+      },
+      {
+       "id": "1235549",
+       "conditionId": "0x4d9567b9fa71a94b6e43ddb62ea6104cbb01926813938d241cce336bd72a8ba5",
+       "questionID": "0x85de20785f24956ff4ce1471e80f7d379d97f3fb8a20fb5dd881d03aac38df02",
+       "question": "Will the Tampa Bay Rays win the 2026 World Series?",
+       "slug": "will-the-tampa-bay-rays-win-the-2026-world-series",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.2355\", \"0.7645\"]",
+       "active": true,
+       "closed": false,
+       "endDate": "2026-10-31T23:55:00Z",
+       "description": "This market will resolve according to the team that wins the 2026 MLB World Series. \n\nIf at any point it becomes impossible for a listed team to win the 2026 MLB World Series per the rules of MLB (e.g., they are eliminated in the playoffs), the corresponding market will resolve to “No”.\n\nIf the 2026 MLB season is cancelled, postponed after December 31, 2026 ET, or there is otherwise no winner declared within that timeframe, this market will resolve to “Other”.\n\nThe primary resolution source will be official information from MLB (https://www.mlb.com/); however, a consensus of credible reporting may also be used.",
+       "resolutionSource": "https://www.mlb.com/",
+       "resolvedBy": "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c0aA9d",
+       "umaResolutionStatuses": "[]",
+       "customLiveness": 0,
+       "umaBond": "500",
+       "umaReward": "5",
+       "negRisk": true,
+       "groupItemTitle": "Tampa Bay Rays"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

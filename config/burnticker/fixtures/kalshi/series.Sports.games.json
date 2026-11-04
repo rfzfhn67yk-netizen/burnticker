@@ -1,0 +1,6060 @@
+{
+ "_fixture": {
+  "source": "GET https://api.elections.kalshi.com/trade-api/v2/series?category=Sports",
+  "fetchedAt": "2026-10-10T15:40:00Z",
+  "note": "only the head-to-head …GAME series kept (290 of 3,883); fields trimmed"
+ },
+ "series": [
+  {
+   "ticker": "KXNBASUMMERGAME",
+   "title": "Pro Basketball Summer League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXISRSUPCUPGAME",
+   "title": "Super Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSAUDIPLGAME",
+   "title": "Saudi Pro League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAWBGAME",
+   "title": "College Basketball Women's Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-women/d1"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNBAGAME",
+   "title": "NBA Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXENGCSGAME",
+   "title": "England Community Shield",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNWSLGAME",
+   "title": "NWSL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNBLGAME",
+   "title": "Australia NBL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "NBL",
+     "url": "https://www.nbl.com.au/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNLLGAME",
+   "title": "National Lacrosse League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Lacrosse"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "TSN",
+     "url": "https://www.tsn.ca"
+    },
+    {
+     "name": "NLL",
+     "url": "https://www.nll.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWTAGAME",
+   "title": "WTA Tennis Winner",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Tennis"
+   ],
+   "settlement_sources": [
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "AP",
+     "url": "https://apnews.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXVENFUTVEGAME",
+   "title": "Venezuela Liga FUTVE game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXOWGAME",
+   "title": "Overwatch Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Overwatch",
+     "url": "https://esports.overwatch.com/en-us/schedule"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSUPERLIGGAME",
+   "title": "Turkish Super Lig Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSBLGAME",
+   "title": "Slovakia SBL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Basketball24",
+     "url": "https://www.basketball24.com/slovakia/extraliga/#/nuUkKi4D/draw/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/slovakia/extraliga/#/nuUkKi4D/draw/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXKLSGAME",
+   "title": "Serbia KLS Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Serbia/basketball.aspx"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/serbia/admiralbet-kls/754#id:104721"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/serbia/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSERIEAWGAME",
+   "title": "Serie A Femminile Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCS2GAME",
+   "title": "Counter-Strike 2 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "B03",
+     "url": "https://bo3.gg/matches/finished"
+    },
+    {
+     "name": "HLTV",
+     "url": "https://www.hltv.org/results"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWFIBAGAME",
+   "title": "Women's FIBA Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "FIBA Women's Basketball",
+     "url": "https://www.fiba.basketball/en/events/fiba-womens-basketball-world-cup-2026-qualifying-tournament-san-juan-puerto-rico/games"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWDBBLGAME",
+   "title": "Women's Bundesliga Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Germany/basketball-League-DBBL-Standings.aspx"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/germany/dbbl-women/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/germany/1-dbbl/251#id:98670"
+    }
+   ]
+  },
+  {
+   "ticker": "KXPLLGAME",
+   "title": "PLL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Lacrosse"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Premier Lacrosse League",
+     "url": "https://premierlacrosseleague.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLEAGUESCUPGAME",
+   "title": "Leagues Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXDBBGAME",
+   "title": "Deutscher Basketball Bund (DBB) Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXTACAPORTGAME",
+   "title": "Taca de Portugal Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXVALORANTGAME",
+   "title": "Valorant game winner",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "VALORANT Esports ",
+     "url": "https://valorantesports.com/en-SG/tournament/113482053125573837/stage/113482257443381258"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    },
+    {
+     "name": "BO3",
+     "url": "https://bo3.gg/valorant/matches/finished"
+    }
+   ]
+  },
+  {
+   "ticker": "KXIBPLGAME",
+   "title": "Men's Iceland Basketball Premier League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "24live",
+     "url": "https://24live.com/page/sport/match-list/basketball-6"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAHGAME",
+   "title": "College Hockey Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/icehockey-men/d1"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLMBGAME",
+   "title": "Mexican Baseball League",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/baseball/mexico/"
+    },
+    {
+     "name": "LMB",
+     "url": "https://lmb.com.mx/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNBBGAME",
+   "title": "Brazil NBB Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Basketball24",
+     "url": "https://www.basketball24.com/brazil/nbb/#/EcvoJuhn/"
+    },
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXENGNLGAME",
+   "title": "English National League Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXISLGAME",
+   "title": "Israel Super League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Basketball24",
+     "url": "https://www.basketball24.com/israel/super-league/#/bw4B24id/standings/overall/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/israel/super-league/#/bw4B24id/standings/overall/"
+    },
+    {
+     "name": "Israel Basketball Super League",
+     "url": "https://basket.co.il/?lang=en"
+    }
+   ]
+  },
+  {
+   "ticker": "KXAFCACGAME",
+   "title": "AFC Asia Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXVTBGAME",
+   "title": "Russia VTB United Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/en-us/basketball/league/vtb-united-league-5450"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/russia/vtb-united-league/1438#id:80491"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/russia/vtb-united-league/#/zPOqkOQ1/standings/overall/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLVAVIRGAME",
+   "title": "Latvian Virsliga Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFINCUPGAME",
+   "title": "Suomen Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLKLGAME",
+   "title": "LKL Lithuania Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/lithuania/betsafe-lkl/975#id:100734"
+    },
+    {
+     "name": "LKL",
+     "url": "https://en.lkl.lt/"
+    },
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Lithuania/basketball.aspx"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/lithuania/lkl/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEFOOTBALLGAME",
+   "title": "eFootball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": null,
+   "settlement_sources": [
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "AP",
+     "url": "https://apnews.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSVNCUPGAME",
+   "title": "Slovenian Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCODGAME",
+   "title": "Call of Duty Games",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Call of Duty League",
+     "url": "https://callofdutyleague.com/en-us/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEREDIVISIEWGAME",
+   "title": "Eredivisie Vrouwen Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXDELGAME",
+   "title": "DEL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/ice-hockey/tournament/germany/del/225#id:77522"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/hockey/germany/del/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSERIEAGAME",
+   "title": "Serie A Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFIBACHAMPGAME",
+   "title": "FIBA Champions League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    },
+    {
+     "name": "FIBA Champions League",
+     "url": "https://www.championsleague.basketball/en"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNZNBLGAME",
+   "title": "New Zealand NBL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/new-zealand/nbl/13476#id:87545"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/new-zealand/nbl/#/KSxUhyl3/standings/overall/"
+    },
+    {
+     "name": "New Zealand NBL",
+     "url": "https://nznbl.basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFINALISSIMAGAME",
+   "title": "Finalissima",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAABGAME",
+   "title": "College Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCZEFNLGAME",
+   "title": "Czech National Football League Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXARGNACBGAME",
+   "title": "Argentine Nacional B Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCLUBWCGAME",
+   "title": "Club World Club Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLNBELITE2GAME",
+   "title": "LNB Elite 2 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXINTERCONCUPGAME",
+   "title": "Intercontinental Cup Match",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "FIFA",
+     "url": "https://www.fifa.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXMLBASGAME",
+   "title": "Professional Baseball All-Star Game",
+   "category": "Sports",
+   "frequency": "annual",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUAEPLGAME",
+   "title": "UAE Pro League",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNBACELEBRITYGAME",
+   "title": "Pro Basketball All-Star Celebrity Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "the league governing the game",
+     "url": "https://www.nba.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCFLGAME",
+   "title": "CFL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football"
+   ],
+   "settlement_sources": [
+    {
+     "name": "CFL",
+     "url": "https://www.cfl.ca/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSRBCUPGAME",
+   "title": "Serbian Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXKORISLIIGAGAME",
+   "title": "Finland Korisliiga Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEUROLEAGUEGAME",
+   "title": "Euroleague Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.euroleaguebasketball.net/euroleague/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCHNSLGAME",
+   "title": "Chinese Super League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBSNGAME",
+   "title": "Puerto Rico BSN Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "Basketball24",
+     "url": "https://www.basketball24.com/puerto-rico/bsn/#/p8LKLVKM/standings/overall/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNLGAME",
+   "title": "National League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/hockey/switzerland/national-league/#/YwJVrFRr/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/ice-hockey/tournament/switzerland/national-league-a/128#id:76908"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSWISSLEAGUEGAME",
+   "title": "Swiss Super League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXGBLGAME",
+   "title": "GBL Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/greece/basket-league/#/694d6IHj/standings/overall/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/greece/stoiximan-basket-league/304#id:83421"
+    },
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/basketball/league/basket-league-85"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLBLGAME",
+   "title": "Latvia LBL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Latvia/basketball.aspx"
+    },
+    {
+     "name": "365scores",
+     "url": "https://www.365scores.com/en-us/basketball/team/latvia-1723"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/team/latvia/7495"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/team/latvia/IPYbeZIn/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAFD3GAME",
+   "title": "DIII College Football Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/scoreboard/football/fbs/2025/11/all-conf"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBIHD1GAME",
+   "title": "Bosnia Division I Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/bosnia-herzegovina/1st-division/14306#id:104552"
+    },
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Bosnia/basketball-Division-I.aspx"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/bosnia-and-herzegovina/prvenstvo-bih/#/ALyFUyUh/standings/overall/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCOPADOBRASILGAME",
+   "title": "Copa do Brasil Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAALAXGAME",
+   "title": "College Lacrosse Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Lacrosse"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/lacrosse-men/d1"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSERIEBGAME",
+   "title": "Serie B Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXACBGAME",
+   "title": "Spain Liga ACB Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/spain/liga-acb/264#id:80922"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/en-us/basketball/league/acb-14"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/spain/acb/#/CSSYsnUs/standings/overall/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSOBBALLGAME",
+   "title": "Summer Olympics Men's Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "USA Basketball",
+     "url": "https://www.usab.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLNBELITEGAME",
+   "title": "LNB Elite Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/tournament/basketball/france/pro-a/156#id:79100"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    },
+    {
+     "name": "LNB Elite",
+     "url": "https://lnb.fr/fr/calendar"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWCGOALEVERYGAME",
+   "title": "World Cup Goal in Every Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "FIFA",
+     "url": "https://FIFA.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSCOCUPGAME",
+   "title": "Scottish Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWNBLGAME",
+   "title": "NBL Australia (W) Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/australia/wnbl/1506#id:98055"
+    },
+    {
+     "name": "WNBL",
+     "url": "https://www.wnbl.com.au/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://flashscore.com/basketball/australia/wnbl-women/#/MLbxbqxH/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXURYPDGAME",
+   "title": "Uruguay Primera Division Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCOPADELREYGAME",
+   "title": "Copa Del Rey Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXJBLEAGUEGAME",
+   "title": "Japan B League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/japan/bleague/1502#id:77915"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/japan/b-league/#/0CsKaLp1/standings/overall/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXMLBSTGAME",
+   "title": "Pro Baseball Spring Training game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUSLGAME",
+   "title": "USL Championship Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXGER3LGAME",
+   "title": "German 3. Liga Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXTFF1LIGGAME",
+   "title": "TFF 1. Lig Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSHLGAME",
+   "title": "SHL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/tournament/ice-hockey/sweden/shl/261#id:75679"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/hockey/sweden/shl/#/CMVpiF7T/standings/overall/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAMLAXGAME",
+   "title": "Men's College Lacrosse Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Lacrosse"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/lacrosse-men/d1"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLIIGAGAME",
+   "title": "Liiga Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/hockey/finland/liiga/#/SCI7qRwB/standings/overall/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/ice-hockey/tournament/finland/liiga/134#id:76515"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBBSERIEA2GAME",
+   "title": "Italy Serie A2 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/italy/serie-a2/"
+    },
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Italy/basketball-League-Serie-A2.aspx"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/italy/serie-a2/1520#id:100045"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNHLGAME",
+   "title": "NHL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "NHL",
+     "url": "https://www.nhl.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCOPPAITALIAGAME",
+   "title": "Coppa Italia Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUSOPENCUPGAME",
+   "title": "US Open Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXKXECULPGAME",
+   "title": "delete",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEUROCUPGAME",
+   "title": "EuroCup Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Eurocup",
+     "url": "https://www.euroleaguebasketball.net/eurocup/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLAXGAME",
+   "title": "NCAA Lacrosse Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Lacrosse"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/lacrosse-men/d1"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAFGAME",
+   "title": "College Football Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/football/fbs"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSVNPLGAME",
+   "title": "Slovenian Prva Liga Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXAHLGAME",
+   "title": "AHL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "AHL",
+     "url": "https://theahl.com/stats/daily-schedule/2026-1-14?league=4&season=90&division=-1"
+    }
+   ]
+  },
+  {
+   "ticker": "KXPLKGAME",
+   "title": "Poland PLK Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/poland/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXDFBPOKALGAME",
+   "title": "DFB Pokal Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLIGAMXGAME",
+   "title": "Liga MX Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBNXTGAME",
+   "title": "BNXT League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "BNXT",
+     "url": "https://bnxtleague.com/"
+    },
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCOUPEDEFRANCEGAME",
+   "title": "Coupe de France Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXMILBGAME",
+   "title": "MILB Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/milb/scores/triple-a"
+    }
+   ]
+  },
+  {
+   "ticker": "KXHNLGAME",
+   "title": "Croatia HNL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSPBGAME",
+   "title": "Venezuela Superliga Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/venezuela/superliga/#/GdmjgQy9/draw/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/venezuela/superliga/16764#id:90712"
+    },
+    {
+     "name": "Basketball24",
+     "url": "https://www.basketball24.com/venezuela/superliga/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUEFANLGAME",
+   "title": "UEFA Nations League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXKMLGAME",
+   "title": "Estonia KML Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Estonia/basketball-League-KML.aspx"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/estonia/kml/973#id:93059"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/estonia/korvpalli-meistriliiga/#/j5OFwoG7/draw/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWLLGAME",
+   "title": "Women's Lacrosse League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Lacrosse"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "WLL",
+     "url": "https://thewll.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXKBOGAME",
+   "title": "KBO Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "KBO",
+     "url": "https://eng.koreabaseball.com/Schedule/DailySchedule.aspx"
+    }
+   ]
+  },
+  {
+   "ticker": "KXPRYLIGA1GAME",
+   "title": "delete",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXMLBGAME",
+   "title": "Professional Baseball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KX1HOMEGAME",
+   "title": "First Home Game Opponent",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Fox Sports",
+     "url": "https://foxsports.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    },
+    {
+     "name": "NFL Network",
+     "url": "https://www.nfl.com/network"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXPHKLGAME",
+   "title": "Croatia Premijer Liga Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/croatia/croatian-premier-league/579#id:101330"
+    },
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Croatia/basketball.aspx"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://flashscore.com/basketball/croatia/premijer-liga/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXISRNLCUPGAME",
+   "title": "National League Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAMBGAME",
+   "title": "Men's College Basketball Men's Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAMBD3GAME",
+   "title": "Men's College Basketball D3 Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXAFLGAME",
+   "title": "AFL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football",
+    "Aussie Rules"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBALLERLEAGUEGAME",
+   "title": "Baller League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Baller League",
+     "url": "https://ballerleague.us/"
+    },
+    {
+     "name": "FotMob",
+     "url": "https://www.fotmob.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXKHLGAME",
+   "title": "KHL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "KHL",
+     "url": "https://en.khl.ru/?utm_referrer=https%3a%2f%2fwww.google.com%2f"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/tournament/ice-hockey/russia/khl/268#id:77998"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSLGREECEGAME",
+   "title": "Super League Greece Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBBLGAME",
+   "title": "Bundesliga Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/"
+    },
+    {
+     "name": "easyCredit BBL",
+     "url": "https://www.easycredit-bbl.de/"
+    },
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/germany/bbl/227#id:79994"
+    }
+   ]
+  },
+  {
+   "ticker": "KXR6GAME",
+   "title": "R6 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Ubisoft",
+     "url": "https://www.ubisoft.com/en-us/esports/rainbow-six/siege/calendar"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFIFAUSPULLGAME",
+   "title": "FIFA US pull game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "2026 FIFA World Cup organizing committee",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "U.S. Soccer Federation",
+     "url": "https://www.ussoccer.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "FIFA",
+     "url": "https://www.fifa.com"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Sky Sports",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Sporting News",
+     "url": "https://www.sportingnews.com"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "BBC Sport",
+     "url": "https://www.bbc.co.uk/sport"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "The Athletic",
+     "url": "https://theathletic.com"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    }
+   ]
+  },
+  {
+   "ticker": "KXMLSASTGAME",
+   "title": "MLS All Star Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEFLL1GAME",
+   "title": "EFL League One Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLBPGAME",
+   "title": "Colombia LBP Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "365scores",
+     "url": "https://www.365scores.com/en-us/basketball/league/lbp-7601"
+    },
+    {
+     "name": "Basketball24",
+     "url": "https://www.basketball24.com/colombia/lbp/#/YmtENa5E/draw/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBRASILEIROGAME",
+   "title": "Brasileiro Serie A Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWCBAGAME",
+   "title": "China CBA (W) Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/china/wcba/2339#id:86793"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/china/wcba-women/fixtures/"
+    },
+    {
+     "name": "AsiaBasket",
+     "url": "https://www.asia-basket.com/China/basketball-League-WCBA.aspx?women=1"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWCGAME",
+   "title": "World Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBRASILEIROBGAME",
+   "title": "Brasileiro Serie B Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWNBAASGAME",
+   "title": "WNBA All Star Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCZEFLGAME",
+   "title": "Czech First League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWNBAGAME",
+   "title": "Women's Pro Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCSGOGAME",
+   "title": "Counter-Strike 2 Games",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "B03",
+     "url": "https://bo3.gg/matches/finished"
+    },
+    {
+     "name": "HLTV",
+     "url": "https://www.hltv.org/results"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSVKCUPGAME",
+   "title": "Slovakian Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXAPFDDHGAME",
+   "title": "APF Division de Honor Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXALLSVENSKANGAME",
+   "title": "Allsvenskan Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWEUROBASKETGAME",
+   "title": "EuroBasket (W) Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCZENBLGAME",
+   "title": "Czech NBL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXDANISHSUPERLIGAGAME",
+   "title": "Danish Superliga Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUCLWGAME",
+   "title": "Champions League Women's Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFROPLGAME",
+   "title": "Faroe Islands Premier League Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEFLCHAMPIONSHIPGAME",
+   "title": "EFL Championship Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXISRSCUPGAME",
+   "title": "State Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAFCSGAME",
+   "title": "College Football FCS Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/scoreboard/football/fcs/2025/15/all-conf"
+    }
+   ]
+  },
+  {
+   "ticker": "KXJLEAGUEGAME",
+   "title": "Japan J League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNBIGAME",
+   "title": "Hungary NB I. A Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/hungary/nb-i/10594#id:102500"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/hungary/nb-i-a/#/bJPLDPSN/"
+    },
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Hungary/basketball-A-Division.aspx"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFIFAWGAME",
+   "title": "FIFA Women's Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXAUTBSLGAME",
+   "title": "Austria BSL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Basketball Austria",
+     "url": "https://www.basketballaustria.tv/en/bsl"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/austria/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/austria/bsl/297#id:97858"
+    },
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Austria/basketball-A-Bundesliga.aspx"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFINYLGAME",
+   "title": "Finnish Ykkosliiga Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCHNL1GAME",
+   "title": "China League 1 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBBSERIEAGAME",
+   "title": "Italy Serie A Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/italy/serie-a/262#id:79529"
+    },
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/en-us/basketball/league/lega-a-19"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://flashscoreusa.com/basketball/italy/lega-a/#/f11X1K56/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBRASILEIROCGAME",
+   "title": "Brasileiro Serie C Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXPBAGAME",
+   "title": "Philippines PBA Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    },
+    {
+     "name": "PBA",
+     "url": "https://www.pba.ph/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXARGLNBGAME",
+   "title": "Liga Nacional de Basquetbol Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/tournament/basketball/argentina/lnb/1680#id:82914"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXDBBFGAME",
+   "title": "Denmark Basketligaen Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/denmark/basketligaen/#/6uyP2V7E/standings/overall/"
+    },
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Denmark/basketball-BasketLigaen.aspx"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/denmark/basketligaen/843#id:98008"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEKSTRAKLASAGAME",
+   "title": "Polish Ekstraklasa Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNFLGAME",
+   "title": "NFL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football"
+   ],
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSKLGAME",
+   "title": "Slovenia 1. SKL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/slovenia/"
+    },
+    {
+     "name": "365scores",
+     "url": "https://www.365scores.com/en-us/basketball/league/1.-skl-641"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCEBLGAME",
+   "title": "Canadian Elite Basketball League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    },
+    {
+     "name": "CEBL",
+     "url": "https://www.cebl.ca/games"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLIGUE1GAME",
+   "title": "Ligue 1 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXGERSCGAME",
+   "title": "Germany Super Cup",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSERIECCUPGAME",
+   "title": "Coppa Italia Lega Pro Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBNXTDGAME",
+   "title": "BNXT Dutch League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "BNXT",
+     "url": "https://bnxtleague.com/"
+    },
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLALIGAGAME",
+   "title": "La Liga Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXIIHFGAME",
+   "title": "IIHF Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "NHL",
+     "url": "https://www.nhl.com"
+    },
+    {
+     "name": "IIHF",
+     "url": "https://www.iihf.com/en/events/2026/wm"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCONCACAFNLGAME",
+   "title": "CONCACAF Nations League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://foxsports.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFIBAGAME",
+   "title": "FIBA Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "FIBA",
+     "url": "https://www.fiba.basketball/en"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAFBOWLGAME",
+   "title": "College Football Teams to Make a Bowl Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "NCAA",
+     "url": "https://www.ncaa.com/sports/football/fbs"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSRBSLGAME",
+   "title": "Serbian SuperLiga Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXQSTARSGAME",
+   "title": "Qatar Stars League",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXIDNSLGAME",
+   "title": "Indonesia Super League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSERIECSCUPGAME",
+   "title": "Supercoppa di Lega Pro Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCONCACAFCCUPGAME",
+   "title": "CONCACAF Champions Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXKLEAGUEGAME",
+   "title": "Korea K League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNFLCELEBRITYGAME",
+   "title": "Pro Football Celebrity Flag Football Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": null,
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "the league governing the game",
+     "url": "https://www.nfl.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNBAALLSTARGAME",
+   "title": "NBA All-Star Game Winner",
+   "category": "Sports",
+   "frequency": "annual",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCANPLGAME",
+   "title": "Canadian Premier League",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWSESBLGAME",
+   "title": "Women's Sweden SBL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAASBGAME",
+   "title": "College Softball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/brackets/softball/d1/2026"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUELGAME",
+   "title": "UEFA Europa League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFIBAECUPGAME",
+   "title": "FIBA Europe Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "FIBA Europe Cup",
+     "url": "https://www.fiba.basketball/en/events/fiba-europe-cup-25-26/games"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFACUPGAME",
+   "title": "FA Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBOLPDIVGAME",
+   "title": "Bolivia Premier Division Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCBAGAME",
+   "title": "Chinese Basketball Association Game ",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/tournament/basketball/china/cba/1566#id:85375"
+    },
+    {
+     "name": "CBA",
+     "url": "https://www.cbaleague.com/#/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXVLEAGUE1GAME",
+   "title": "Vietnam V-League 1 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLALIGA2GAME",
+   "title": "LaLiga 2 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "BBC Sport",
+     "url": "https://www.bbc.com/sport"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSCOTTISHPREMGAME",
+   "title": "Scottish Premiership Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSLBGAME",
+   "title": "England Super League Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Super League Basketball",
+     "url": "https://www.superleaguebasketballm.co.uk/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCHLLDPGAME",
+   "title": "Chile Liga de Primera Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFBUGAME",
+   "title": "Ukraine SuperLeague Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/ukraine/fbu-superleague/#/OxZzYMwS/standings/overall/"
+    },
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Ukraine/Superleague.aspx"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/ukraine/fbu-superleague/2162#id:104550"
+    }
+   ]
+  },
+  {
+   "ticker": "KXJUDGEMENTDAYGAME",
+   "title": "Ballislife x OTD | Judgement Day 1v1 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Ballislife",
+     "url": "https://ballislife.com/"
+    },
+    {
+     "name": "Ballislife Instagram",
+     "url": "https://www.instagram.com/ballislife/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSVK2LGAME",
+   "title": "Slovakian 2. Liga Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KX1STHOMEGAME",
+   "title": "First Home Game Opponent",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football"
+   ],
+   "settlement_sources": [
+    {
+     "name": "BBC Sport",
+     "url": "https://www.bbc.co.uk/sport"
+    },
+    {
+     "name": "CBS Sports",
+     "url": "https://www.cbssports.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "NBC Sports",
+     "url": "https://www.nbcsports.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "the official governing body of event",
+     "url": "https://kalshi.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWCTEAMSINGAME",
+   "title": "World Cup Teams in Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "FIFA",
+     "url": "https://www.fifa.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCLUBFGAME",
+   "title": "Club Friendlies",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXRLGAME",
+   "title": "Rocket League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "BLAST.tv",
+     "url": "https://blast.tv/rl/tournaments/rlcs-major-1-2026"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBUNDESLIGAGAME",
+   "title": "Bundesliga Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSOWBBALLGAME",
+   "title": "Summer Olympics Women's Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    },
+    {
+     "name": "FIBA",
+     "url": "https://www.fiba.basketball/en"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUEFAGAME",
+   "title": "UEFA Soccer Games",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUFLGAME",
+   "title": "UFL Football Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Football"
+   ],
+   "settlement_sources": [
+    {
+     "name": "UFL",
+     "url": "https://www.theufl.com/schedule"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCONMEBOLSUDGAME",
+   "title": "CONMEBOL Sudamericana Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEGYPLGAME",
+   "title": "Egyptian Premier League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEFLTROPHYGAME",
+   "title": "EFL Trophy Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": null,
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "BBC Sport",
+     "url": "https://www.bbc.co.uk/sport"
+    }
+   ]
+  },
+  {
+   "ticker": "KXGRECUPGAME",
+   "title": "Greek Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEFLCUPGAME",
+   "title": "EFL Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLIGAPORTUGALGAME",
+   "title": "Liga Portugal Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXTBTGAME",
+   "title": "TBT Hoops Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "TBT Hoops",
+     "url": "https://tbthoops.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSESBLGAME",
+   "title": "Sweden SBL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFRASUPERCUPGAME",
+   "title": "France Super Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBSLGAME",
+   "title": "Turkey BSL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/turkey/turkiye-sigorta-basketbol-super-ligi/519#id:81036"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/turkey/super-lig/#/ni4GXRSE/standings/overall/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXIPLGAME",
+   "title": "Indian Premier League Cricket Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Cricket"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPNcricinfo",
+     "url": "https://www.espncricinfo.com"
+    },
+    {
+     "name": "Cricbuzz",
+     "url": "https://www.cricbuzz.com/"
+    },
+    {
+     "name": "ICC",
+     "url": "https://www.icc-cricket.com/fixtures-results"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "BBC Sport",
+     "url": "https://www.bbc.co.uk/sport"
+    }
+   ]
+  },
+  {
+   "ticker": "KXELITESERIENGAME",
+   "title": "Eliteserien Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXPLEAGUEGAME",
+   "title": "Taiwan P. League+",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/chinese-taipei/p-league/18639#id:83747"
+    },
+    {
+     "name": "P. League+",
+     "url": "https://pleagueofficial.com/about-en"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://flashscore.com/basketball/taiwan/p-league/#/bT4iTij4/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXITASUPERCUPGAME",
+   "title": "Italy Super Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXTWEEDEDIVGAME",
+   "title": "Tweede Divisie Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUEFASCGAME",
+   "title": "UEFA Super Cup",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXPSLGAME",
+   "title": "Pakistan Super League Cricket Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Cricket"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPNcricinfo",
+     "url": "https://www.espncricinfo.com"
+    },
+    {
+     "name": "Cricbuzz",
+     "url": "https://www.cricbuzz.com/"
+    },
+    {
+     "name": "ICC",
+     "url": "https://www.icc-cricket.com/fixtures-results"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "BBC Sport",
+     "url": "https://www.bbc.co.uk/sport"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEBBALLGAME",
+   "title": "eBasketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": null,
+   "settlement_sources": [
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "AP",
+     "url": "https://apnews.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFIBACHAMPLEAGUEGAME",
+   "title": "FIBA Champions League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "FIBA Champions League",
+     "url": "https://www.championsleague.basketball/en"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEWSLGAME",
+   "title": "England Women's Super League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEREDIVISIEGAME",
+   "title": "Eredivisie Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUECLGAME",
+   "title": "UEFA Conference League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXROCKETLEAGUEGAME",
+   "title": "Rocket League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/esports/lol"
+    }
+   ]
+  },
+  {
+   "ticker": "KXAFCONGAME",
+   "title": "AFCON Game Winner",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "BBC Sport",
+     "url": "https://www.bbc.com/sport"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLOLGAME",
+   "title": "League of Legends Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/esports/lol"
+    },
+    {
+     "name": "BO3",
+     "url": "https://bo3.gg/lol/matches/finished"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXINTLFRIENDLYGAME",
+   "title": "International Friendly Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXECULPGAME",
+   "title": "Ecuador Liga Pro Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXETTANGAME",
+   "title": "Ettan Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWOCURLGAME",
+   "title": "Winter Olympics Curling Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Olympics"
+   ],
+   "settlement_sources": [
+    {
+     "name": "the Winter Olympics 2026",
+     "url": "https://www.olympics.com/en/milano-cortina-2026"
+    }
+   ]
+  },
+  {
+   "ticker": "KXESPSUPERCUPGAME",
+   "title": "Spain Super Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAABBGAME",
+   "title": "College Baseball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/baseball"
+    },
+    {
+     "name": "D1 Baseball",
+     "url": "https://d1baseball.com/scores/"
+    },
+    {
+     "name": "CBS Sports",
+     "url": "https://www.cbssports.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/baseball/d1"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSGPPLGAME",
+   "title": "Singapore Premier League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXVBAGAME",
+   "title": "Vietnam VBA Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "24live",
+     "url": "https://24live.com/page/sport/event/basketball-6/21680?lang=en"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/vietnam/vba/20590#id:93609"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/vietnam/vba/#/fJz0vRMF/standings/overall/"
+    },
+    {
+     "name": "Basketball24",
+     "url": "https://www.basketball24.com/vietnam/vba/#/fJz0vRMF/standings/overall/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWKBLGAME",
+   "title": "Korea KBL (W) Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/south-korea/wkbl/2334#id:82928"
+    },
+    {
+     "name": "24live",
+     "url": "https://24live.com/page/sport/event/basketball-6/2702;sid=4307;table=1?registration="
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/south-korea/wkbl-women/#/dC0OlqMb/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXSERIECGAME",
+   "title": "Serie C Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXDIMAYORGAME",
+   "title": "Liga DIMAYOR Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXELHGAME",
+   "title": "ELH Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/hockey/czech-republic/extraliga/#/K0tmQWEr/standings/overall/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/ice-hockey/tournament/czech-republic/extraliga/237#id:76489"
+    }
+   ]
+  },
+  {
+   "ticker": "KXDBBSUPERGAME",
+   "title": "DBB Supercup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXKNVBCUPGAME",
+   "title": "KNVB Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXESOCCERGAME",
+   "title": "eSoccer Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "DRAFTED.GG",
+     "url": "https://drafted.gg/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBBSERIEBGAME",
+   "title": "Italy Serie B Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "24live",
+     "url": "https://24live.com/page/sport/event/basketball-6/11347?lang=en"
+    },
+    {
+     "name": "Lega Pallacanestro",
+     "url": "https://www.legapallacanestro.com/serie-b"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/italy/serie-b/14251#id:79756"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://flashscoreusa.com/basketball/italy/lega-a/#/f11X1K56/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXJ2LEAGUEGAME",
+   "title": "Japan J2 League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXKBLGAME",
+   "title": "Korea KBL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/south-korea/kbl/#/rwjTSYzi/draw/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/tournament/basketball/south-korea/kbl/1540#id:78467"
+    }
+   ]
+  },
+  {
+   "ticker": "KXMLBBGAME",
+   "title": "Mobile Legends Bang Bang Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXDENSUPERLIGAGAME",
+   "title": "Danish Superliga Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBBINTLGAME",
+   "title": "International Friendly Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCHESSGAME",
+   "title": "Freestyle Chess",
+   "category": "Sports",
+   "frequency": "weekly",
+   "tags": [
+    "Chess"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "Freestyle Chess",
+     "url": "https://www.freestyle-chess.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXISRNLGAME",
+   "title": "Liga Leumit Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFROCUPGAME",
+   "title": "Faroe Islands Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAHOCKEYGAME",
+   "title": "College Hockey Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Hockey"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/icehockey-men/d1"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWIBPLGAME",
+   "title": "Women's Iceland Premier League Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "24live",
+     "url": "https://24live.com/page/sport/match-list/basketball-6"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBILGAME",
+   "title": "Ball is Life Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Ballislife",
+     "url": "https://ballislife.com/"
+    },
+    {
+     "name": "Ballislife Instagram",
+     "url": "https://www.instagram.com/ballislife/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBIG3GAME",
+   "title": "Big 3 Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "BIG3",
+     "url": "https://big3.com/"
+    },
+    {
+     "name": "CBS Sports",
+     "url": "https://www.cbssports.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWSBLGAME",
+   "title": "Sweden SBL Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Eurobasket",
+     "url": "https://www.eurobasket.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWEUROLEAGUEGAME",
+   "title": "EuroLeague (W) Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/europe/euroleague-women/#/Mu76Myd2/standings/overall/"
+    },
+    {
+     "name": "FIBA",
+     "url": "https://www.fiba.basketball/en/events/eurocup-women-26-27"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/international/euroleague-women/1167#id:98672"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUNRIVALEDGAME",
+   "title": "Unrivaled Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Unrivaled",
+     "url": "https://www.unrivaled.basketball/schedule"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWPLGAME",
+   "title": "Women's Indian Premier League Cricket Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Cricket"
+   ],
+   "settlement_sources": [
+    {
+     "name": "WPL",
+     "url": "https://www.wplt20.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXMLSGAME",
+   "title": "Major League Soccer Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "MLS",
+     "url": "https://www.mlssoccer.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLIGAEXPGAME",
+   "title": "Liga Expansion Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXFIFAGAME",
+   "title": "Fifa Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXISRPLGAME",
+   "title": "Israeli Premier League Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXK2LEAGUEGAME",
+   "title": "Korea K-League 2 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXWBCGAME",
+   "title": "World Baseball Classic Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "World Baseball Classic",
+     "url": "https://www.mlb.com/world-baseball-classic/teams"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBALGAME",
+   "title": "Basketball Africa League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/africa/bal/#/84ky9r3m/standings/overall/"
+    },
+    {
+     "name": "BAL",
+     "url": "https://bal.nba.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ]
+  },
+  {
+   "ticker": "KXALEAGUEGAME",
+   "title": "Australian A League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEBASKETBALLGAME",
+   "title": "eBasketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "DRAFTED.GG",
+     "url": "https://drafted.gg/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBBWSERIEAGAME",
+   "title": "Italy Serie A (W) Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/italy/serie-a1-femminile/556#id:100044"
+    },
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/Italy/basketball-League-Serie-A1-Women.aspx?women=1"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/italy/serie-a1-women/#/hK3XoSmR/standings/overall/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEUROBASKETGAME",
+   "title": "EuroBasket Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "EuroBasket",
+     "url": "https://www.eurobasket.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXDOTA2GAME",
+   "title": "Dota 2 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Esports"
+   ],
+   "settlement_sources": [
+    {
+     "name": "BO3",
+     "url": "https://bo3.gg/dota2/matches/finished"
+    },
+    {
+     "name": "Dota 2 ",
+     "url": "https://www.dota2.com/home"
+    },
+    {
+     "name": "DLTV",
+     "url": "https://dltv.org/results"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBUNDESLIGA2GAME",
+   "title": "Bundesliga 2 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUCLGAME",
+   "title": "UEFA Champions League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEERSTEDIVGAME",
+   "title": "Eerste Divisie Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXISRPLCUPGAME",
+   "title": "Premier League Cup Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLPBGAME",
+   "title": "Portugal LPB Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/portugal/lpb/1926#id:78342"
+    },
+    {
+     "name": "Basketball24",
+     "url": "https://www.basketball24.com/portugal/lpb/#/fuG55VJq/draw/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/basketball/portugal/lpb/#/fuG55VJq/draw/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNCAAMSOCCERGAME",
+   "title": "College Soccer Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/soccer-men/d1"
+    }
+   ]
+  },
+  {
+   "ticker": "KXTHAIL1GAME",
+   "title": "Thai League 1 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXARGPREMDIVGAME",
+   "title": "Argentina Primera Division Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXTTELITEGAME",
+   "title": "TT Elite Series Table Tennis Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Table Tennis"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/table-tennis"
+    }
+   ]
+  },
+  {
+   "ticker": "KXASEANGAME",
+   "title": "ASEAN Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXEPLGAME",
+   "title": "English Premier League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXAFCCLGAME",
+   "title": "AFC Champions League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXMYSLGAME",
+   "title": "Malaysia Super League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXABAGAME",
+   "title": "Adriatic ABA Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "Flashscore",
+     "url": "https://flashscoreusa.com/basketball/europe/admiralbet-aba-league/"
+    },
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/en-us/basketball/league/aba-league-548"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/basketball/tournament/international/admiralbet-aba-league/235#id:80150"
+    }
+   ]
+  },
+  {
+   "ticker": "KXBELGIANPLGAME",
+   "title": "Belgian Pro League Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXUSLCUPGAME",
+   "title": "USL Cup Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXNPBGAME",
+   "title": "Japan NPB Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscore.com/baseball/japan/npb/results/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXCONMEBOLLIBGAME",
+   "title": "CONMEBOL Libertadores Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXATPGAME",
+   "title": "ATP Tennis Winner",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Tennis"
+   ],
+   "settlement_sources": [
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "AP",
+     "url": "https://apnews.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXMLBFTGAME",
+   "title": "Pro Baseball Futures Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Baseball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXPERLIGA1GAME",
+   "title": "Peru Liga 1 Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLNBPGAME",
+   "title": "LNBP Basketball Game",
+   "category": "Sports",
+   "frequency": "custom",
+   "tags": [
+    "Basketball"
+   ],
+   "settlement_sources": [
+    {
+     "name": "365 Scores",
+     "url": "https://www.365scores.com/"
+    },
+    {
+     "name": "24live",
+     "url": "https://24live.com/page/sport/match-list/basketball-6"
+    },
+    {
+     "name": "Sofascore",
+     "url": "https://www.sofascore.com/"
+    },
+    {
+     "name": "Flashscore",
+     "url": "https://www.flashscoreusa.com/basketball/"
+    }
+   ]
+  },
+  {
+   "ticker": "KXLIGUE2GAME",
+   "title": "Ligue 2 Game",
+   "category": "Sports",
+   "frequency": "one_off",
+   "tags": [
+    "Soccer"
+   ],
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ]
+  }
+ ]
+}

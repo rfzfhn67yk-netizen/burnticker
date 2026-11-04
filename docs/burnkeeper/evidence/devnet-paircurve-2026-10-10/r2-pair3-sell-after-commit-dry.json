@@ -1,0 +1,36 @@
+{
+  "command": "sell",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "5LUZ63F62Wwq6Ma2pPiMqiEftFaRFYuckU9xsiaQJpiZ",
+  "side": "A",
+  "amount": "25356965175403",
+  "quote": {
+    "gross": "24398399",
+    "fees": {
+      "fee": "243983",
+      "dev": "60995",
+      "burn": "182988"
+    },
+    "net": "24154416",
+    "soldAfter": "481782338332667",
+    "solAfter": "244469526"
+  },
+  "result": {
+    "ok": false,
+    "signature": null,
+    "error": "SellsClosed",
+    "unitsConsumed": 19184,
+    "txBytes": 533,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN invoke [1]",
+      "Program log: Instruction: Sell",
+      "Program log: AnchorError thrown in programs/pair_curve/src/instructions/trade.rs:141. Error Code: SellsClosed. Error Number: 6012. Error Message: sells are closed after graduation (trade on the CPMM pool).",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN consumed 19034 of 599850 compute units",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN failed: custom program error: 0x177c"
+    ]
+  }
+}

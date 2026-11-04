@@ -1,0 +1,110 @@
+{
+  "command": "submit-pair-result",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": false,
+  "pairResult": "4sATxz1jP58m5ZdFfBCUW2cN6Hyyzy6wo7u97B7vg8zN",
+  "message": "BURNRECEIPTS-PAIR-v1|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|Cc7Yoe1PVRs9z2yt4tUffSvborxFm6CGfvgg79bzJ3ZY|HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG|2026-10-14|winner=Cc7Yoe1PVRs9z2yt4tUffSvborxFm6CGfvgg79bzJ3ZY|src=bd44ea4cc071677789ca27f3fedf3b671ce95ff5e728efb2b083ec18bc2fe6b1|proof=0000000000000000000000000000000000000000000000000000000000000000",
+  "instructions": [
+    {
+      "program": "Ed25519SigVerify111111111111111111111111111",
+      "accounts": [],
+      "dataHex": "01003000ffff1000ffff70009301ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a50dd3779451c93d3dac8f9c678e53dc94b6026feebf986c13fd7ebfec99e2e2e9334a1cfb545a54aaface825863da14a0d111966feb1f5d772cf1910735d8dd0e4255524e52454345495054532d504149522d76317c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c436337596f653150565273397a32797434745566665376626f7278466d364347667667673739627a4a335a597c484c6a71735a62375454674474515248617862796d66616f376379484d4835566d70434b68576d466d6e72477c323032362d31302d31347c77696e6e65723d436337596f653150565273397a32797434745566665376626f7278466d364347667667673739627a4a335a597c7372633d626434346561346363303731363737373839636132376633666564663362363731636539356666356537323865666232623038336563313862633266653662317c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+    },
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "submit_pair_result",
+      "accounts": [
+        {
+          "name": "payer",
+          "pubkey": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "name": "config_lo",
+          "pubkey": "92GraaejjM8XVeR9eAcQ6rUF4gk1Wp94DJbLEs8UjA9S",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "config_hi",
+          "pubkey": "B5mdgMLDLVQdjgTwxb7WcXodu5ULDw5vnMqicRGe14kU",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "link_lo",
+          "pubkey": "2HXor7sDty1qJb3mr5NWVktmYUtMDoaKAJz7WMFeE659",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "link_hi",
+          "pubkey": "9ZjdwoaDcoM6FE4G7Xm62AWcaq7JwKHMTwZyVUGBLJym",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "pair_result",
+          "pubkey": "4sATxz1jP58m5ZdFfBCUW2cN6Hyyzy6wo7u97B7vg8zN",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "instructions",
+          "pubkey": "Sysvar1nstructions1111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "reading_lo",
+          "pubkey": "6HKzFEk2WPFKZueRPgMxC7kS8PywsMEZr7HnpP1CGFe5",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "reading_hi",
+          "pubkey": "AJrczRegUZegbj4AwZidLZRur4G5bQFrPkxHLorDeKBv",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {
+        "record_date": 20261014,
+        "winner": "Cc7Yoe1PVRs9z2yt4tUffSvborxFm6CGfvgg79bzJ3ZY",
+        "source_url_hash": "bd44ea4cc071677789ca27f3fedf3b671ce95ff5e728efb2b083ec18bc2fe6b1",
+        "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ],
+  "simulation": {
+    "err": "{\"InstructionError\":[2,{\"Custom\":6091}]}",
+    "unitsConsumed": 43423,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: SubmitPairResult",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/pair.rs:352. Error Code: PairDateBeforePairing. Error Number: 6091. Error Message: pair result: the date is before the coins were paired.",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 43273 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17cb"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "4sATxz1jP58m5ZdFfBCUW2cN6Hyyzy6wo7u97B7vg8zN",
+      "kind": "lamports",
+      "state": null
+    }
+  ]
+}

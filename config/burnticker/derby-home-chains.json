@@ -1,0 +1,8 @@
+{
+  "schema": "burnticker.derby-home-chains/v1",
+  "note": "Burn Derby (2026-10-10): the canonical home-chain contract of coins that have no Solana mint, for the DexScreener cross-read when RedStone (or Hermes) is the primary. Curated, never searched by symbol: DexScreener's symbol search returns copies with inflated liquidity. Each entry was checked against DexScreener's token endpoint on 2026-10-10 (deepest Ethereum pair, base token = the coin).",
+  "coins": {
+    "SHIB": { "chain": "ethereum", "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE" },
+    "PEPE": { "chain": "ethereum", "address": "0x6982508145454Ce325dDbE47a25d4ec3d2311933" }
+  }
+}

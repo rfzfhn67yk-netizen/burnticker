@@ -1,0 +1,64 @@
+{
+ "fetchedAt": "2026-10-13T00:12:00Z",
+ "note": "Real response, captured read-only; each event trimmed to magnitude, time, review status and type. Place names, felt reports and alert levels are dropped: the adapter never reads them.",
+ "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&eventtype=earthquake&minmagnitude=6.5&starttime=2026-08-29&endtime=2026-10-13&orderby=time-asc",
+ "body": {
+  "type": "FeatureCollection",
+  "metadata": {
+   "generated": 1791850320000,
+   "count": 5
+  },
+  "features": [
+   {
+    "type": "Feature",
+    "properties": {
+     "mag": 6.5,
+     "time": 1789161835815,
+     "status": "reviewed",
+     "type": "earthquake"
+    },
+    "id": "us7000tgrk"
+   },
+   {
+    "type": "Feature",
+    "properties": {
+     "mag": 6.5,
+     "time": 1789654792472,
+     "status": "reviewed",
+     "type": "earthquake"
+    },
+    "id": "us7000ti1p"
+   },
+   {
+    "type": "Feature",
+    "properties": {
+     "mag": 6.6,
+     "time": 1790371383309,
+     "status": "reviewed",
+     "type": "earthquake"
+    },
+    "id": "us6000txpi"
+   },
+   {
+    "type": "Feature",
+    "properties": {
+     "mag": 7.7,
+     "time": 1791568566036,
+     "status": "reviewed",
+     "type": "earthquake"
+    },
+    "id": "us6000u18k"
+   },
+   {
+    "type": "Feature",
+    "properties": {
+     "mag": 6.6,
+     "time": 1791577539080,
+     "status": "reviewed",
+     "type": "earthquake"
+    },
+    "id": "us6000u19w"
+   }
+  ]
+ }
+}

@@ -1,0 +1,11 @@
+{
+  "mint": "GkLVz1vcJT3zYcFDH1PL95Qb358EMigJs2Z5MWTSq9Bn",
+  "feePda": "ARDGd7LT11CTQKgsQa7tNnpjQWQdQPpB42SKXoToygUf",
+  "feeLamports": 50000000,
+  "feeWsol": "7f4HeHqCREkxWUyQWWqacR33Zs9j3y7TDvMp3iautS4q",
+  "feeWsolExists": true,
+  "feeWsolOwner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "feeWsolLamports": 31738440,
+  "feeWsolAmount": "30250000",
+  "incineratorLamports": 0
+}
