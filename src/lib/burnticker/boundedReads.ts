@@ -88,8 +88,11 @@ export async function readCoinsBounded<T>(items: readonly { key: string; read: (
   };
   const coldMs = Math.max(o.deadlineMs, o.coldDeadlineMs ?? o.deadlineMs);
   const warm = clock(o.deadlineMs), cold = coldMs === o.deadlineMs ? warm : clock(coldMs);
-  // the deadline that applies to a coin: the short one when it has a last good read to fall back on
-  const limitOf = (key: string) => (s.good.has(key) ? { d: warm, ms: o.deadlineMs } : { d: cold, ms: coldMs });
+  // the deadline that applies to a coin: the short one when it has a last good read to fall back on. 2026-11-03 (the Coins page listed
+  // $DEFICIT and one coin after a quiet evening): a kept read past EARLIER_MAX_AGE_MS cannot be served (fallback retires it), so it is no
+  // fallback at all; such a coin is read under the cold deadline, like a coin never read, instead of being cut off at the short one and dropped.
+  const usable = (key: string): boolean => { const k = s.good.get(key); return !!k && now() - k.at <= EARLIER_MAX_AGE_MS; };
+  const limitOf = (key: string) => (usable(key) ? { d: warm, ms: o.deadlineMs } : { d: cold, ms: coldMs });
   const fallback = (key: string, why: "late" | "failed", error: unknown): BoundedRead<T> => {
     const k = s.good.get(key) as Kept<T> | undefined;
     if (k && now() - k.at > EARLIER_MAX_AGE_MS) { s.good.delete(key); return { state: "failed", error: new ReadTooOldError(now() - k.at) }; }

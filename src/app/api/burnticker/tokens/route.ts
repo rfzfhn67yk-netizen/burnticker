@@ -15,7 +15,7 @@ import { coinListingOf } from "@/lib/burnticker/coinsListServe";
 import type { CoinListing } from "@/lib/burnticker/coinsList";
 import { auditForIndex } from "@/lib/burnticker/home";
 import { indexMemoTooOld } from "@/lib/burnticker/coinsGrid";
-import { isVisitorRequest, memoRefresher } from "@/lib/burnticker/memoRefresher";
+import { IDLE_MS, isVisitorRequest, memoRefresher } from "@/lib/burnticker/memoRefresher";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +35,7 @@ function refreshIndex(): Promise<void> {
   return indexInFlight;
 }
 // HB-145 (2026-10-20): rebuilt by a timer behind the requests (memoRefresher.ts); only the very first build after a start is waited for
-const indexRefresher = memoRefresher({ refresh: refreshIndex, ageMs: () => (indexMemo ? Date.now() - indexMemo.at : null), freshMs: () => indexMemo?.memoMs ?? 15_000 });
+const indexRefresher = memoRefresher({ refresh: refreshIndex, ageMs: () => (indexMemo ? Date.now() - indexMemo.at : null), freshMs: () => indexMemo?.memoMs ?? 15_000, idleMs: IDLE_MS });
 
 /**
  * The platform index: every token's status (from the registry + the program client), totals, the audit badge, and which pieces are stubs.

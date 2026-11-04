@@ -36,6 +36,16 @@ describe("finding 2: a read's own time", () => {
     if (old[0].state === "failed") assert.ok(old[0].error instanceof ReadTooOldError);
     assert.match(earlierReadsNote([{ ticker: "K", r: old[0] }], clock), /too old to serve \(K\)/);
   });
+  test("2026-11-03: a kept read past the limit is no fallback, so the coin reads under the cold deadline instead of being dropped", async () => {
+    const scope = {}; let clock = 0;
+    await readCoinsBounded([{ key: "k", read: async () => "old" }], { concurrency: 1, deadlineMs: 50, scope, now: () => clock });
+    clock = EARLIER_MAX_AGE_MS + 1;
+    // the read takes 120 ms: past the 50 ms warm deadline, inside the 400 ms cold one
+    const slow = () => new Promise<string>((ok) => setTimeout(() => ok("fresh"), 120));
+    const r = await readCoinsBounded([{ key: "k", read: slow }], { concurrency: 1, deadlineMs: 50, coldDeadlineMs: 400, scope, now: () => clock });
+    assert.equal(r[0].state, "fresh", "waited past the short deadline, like a coin never read");
+    if (r[0].state === "fresh") assert.equal(r[0].value, "fresh");
+  });
 });
 
 describe("finding 3: the Next to settle date", () => {

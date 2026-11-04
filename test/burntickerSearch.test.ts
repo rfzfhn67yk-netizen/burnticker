@@ -147,7 +147,10 @@ describe("the API: /search, /elections, /elections/pair, /sports — schemas, no
 
   test("search and elections through the routes; no payload carries a price, odds, volume or liquidity", async () => {
     await world();
-    const s = await get(`/search?q=${encodeURIComponent("El-Sayed wins Michigan Senate")}`, "search") as { cards: { title: string }[] };
+    // 2026-11-03: the route reads the real clock, and the search hides a Polymarket market closing within CLOSING_SOON_HOURS (48) of now;
+    // the fixture's race ends 2026-11-04T04:59Z, so from 2026-11-02 this request came back with no cards. closingSoon=1 keeps the
+    // card regardless of the day the suite runs; the hiding itself is tested with a fixed clock above.
+    const s = await get(`/search?q=${encodeURIComponent("El-Sayed wins Michigan Senate")}&closingSoon=1`, "search") as { cards: { title: string }[] };
     assert.match(s.cards[0].title, /^Abdul El-Sayed \(D\) wins the Michigan Senate race/);
     const types = await get("/elections", "elections") as { types: { id: string; races: number }[] };
     assert.ok(types.types.find((t) => t.id === "senate")!.races > 10);

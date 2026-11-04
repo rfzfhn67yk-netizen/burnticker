@@ -516,7 +516,13 @@ async function signOutcome(page: any, ms = 120_000): Promise<{ state: "complete"
       if (!busy) return { state: "stopped", text: (await red.innerText()).trim() };
     }
     const blocked = card.getByText("Not signable here yet:").first();
-    if (await blocked.isVisible().catch(() => false)) return { state: "stopped", text: (await card.locator(".text-amber-400").first().innerText()).replace(/\s+/g, " ") };
+    if (await blocked.isVisible().catch(() => false)) {
+      const text = (await card.locator(".text-amber-400").first().innerText()).replace(/\s+/g, " ");
+      // 2026-10-30 (b-reload-relaunch on the box): a fresh card reads the site's lookup-table setting once as it mounts (SignCard.tsx pins
+      // undefined = still reading, signPlan.ts pinReadProblems), so that one line is a moment of loading, not a stop; it clears on its own
+      // or turns into a settled problem, and the deadline above still bounds the wait.
+      if (!/still reading which lookup table/.test(text)) return { state: "stopped", text };
+    }
     await sleep(1000);
   }
   return fail(`The signing card did not finish within ${Math.round(ms / 1000)} s. It shows: ${(await card.innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 300)}`);
