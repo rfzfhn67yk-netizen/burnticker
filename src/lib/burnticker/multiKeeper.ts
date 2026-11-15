@@ -9,6 +9,7 @@ import { feedById } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { isFirstSnowSeries, snowSeasonEnd, snowSeasonVoidFromMs } from "@/lib/burnticker/sources/nws";
 import { readingMatches, RevisedReadingError, selectorKeyOf, wideRule, type PairRole, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
+import { CROSS_READ_LAG_GRACE_MS, CROSS_READ_LAG_RE } from "@/lib/burnticker/catalogue/corroborate";
 import { readingsAfterLaunch, receiptBeforeLaunch } from "@/lib/burnticker/launchCut";
 import { DECIMALS, endSinkOf, isSettledPairRule, isOneShot, settledPairShape, pairClause, pairMirrorRule, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitStep, unitSteps, voidByEndMs, windDownUnits, type CarryPolicy, type EndReceiptKind, type PairGate, type SettledEvent } from "@/lib/burnticker/units";
@@ -122,6 +123,29 @@ export interface KeeperDeps {
 }
 
 export interface FetchReport { key: string; written: number; refusals: string[]; awaitingFinal: number; error: string | null; skipped: boolean }
+
+/** The status row that marks where a selector's read window stood when its first not-yet-final reading was seen (review N7); its
+ *  updated_at is when the current hold began, which alertableRefusals reads. */
+export const anchorKeyOf = (selectorKey: string): string => `fetch.awaiting-anchor.${selectorKey}`;
+
+/**
+ * 2026-11-14: the refusals a cycle hands to the alert layer (status "lastCycle" → bt-reading-implausible on the phone). A cross-read
+ * publication lag (corroborate.ts CROSS_READ_LAG_RE) is held correctly and clears on its own within hours; it is reported only once the
+ * selector's hold (the awaiting-anchor row's age) has outlived CROSS_READ_LAG_GRACE_MS. Every other refusal passes through unchanged.
+ */
+export function alertableRefusals(reg: Pick<Registry, "statusUpdatedAt">, fetched: readonly Pick<FetchReport, "key" | "refusals">[], now: number, graceMs: number = CROSS_READ_LAG_GRACE_MS): string[] {
+  const out: string[] = [];
+  for (const f of fetched) {
+    for (const r of f.refusals) {
+      if (CROSS_READ_LAG_RE.test(r)) {
+        const since = reg.statusUpdatedAt(anchorKeyOf(f.key));
+        if (since === null || now - since < graceMs) continue;
+      }
+      out.push(r);
+    }
+  }
+  return out;
+}
 export type ExecOutcome =
   | { mint: string; eventId: string; outcome: "confirmed"; signature: string; burnRaw: bigint; adopted: boolean }
   | { mint: string; eventId: string; outcome: "skipped" | "exhausted" | "waiting" | "error" | "dry-run"; why: string };
@@ -318,7 +342,7 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
     const sinceKey0 = since && key.startsWith("catalogue:") ? periodLike(since.slice(0, 10), last!.at) : since;   // the period kind of the last reading (day, month, week, quarter)
     // THE AWAITING ANCHOR (review N7): while the adapter reports events that closed but are not final yet, the read window does not move
     // past where it stood when they were first seen — a market that resolves weeks after a later one settled is still read when it does.
-    const anchorKey = `fetch.awaiting-anchor.${key}`;
+    const anchorKey = anchorKeyOf(key);
     const anchorRaw = d.registry.getStatus(anchorKey);
     const anchorObj = anchorRaw ? (JSON.parse(anchorRaw) as { since: string | null } | null) : null;
     const anchor = anchorObj ? anchorObj.since : undefined;

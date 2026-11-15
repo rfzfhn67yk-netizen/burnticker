@@ -136,6 +136,32 @@ describe("tonight's failures reach the phone (2026-10-14): the page's launch rou
     const out = await pairUnmatchedAlerts(reg as never, program as never, Date.now(), () => {});
     assert.deepEqual(out, []);
   });
+  // 2026-11-14 (owner's phone): the night the NFL pairs voided, pair-unlinked fired at 00:00Z and pair-unmatched "not paired on chain
+  // (states 3/3)" for the same pairs a minute later. An unlinked or voided pair is unpaired by design and raises nothing more.
+  test("pair-unmatched skips a pair recorded unlinked, a voided pair, and a pair the chain shows UNLINKED on both sides", async () => {
+    const { pairUnmatchedAlerts, unlinkedKey } = await import("@/lib/burnticker/pairForwardKeeper");
+    const live = (m: string) => ({ mint: m, ticker: m.toUpperCase(), status: "live" });
+    const noAlert = () => { throw new Error("no alert expected"); };
+    const noChain = () => { throw new Error("the chain must not be read"); };
+    const noRule = () => { throw new Error("the rule must not be read"); };
+    const pairs = () => [{ pairId: "p", mintA: "a", mintB: "b", selectorKey: "s", createdAt: 0 }];
+    // recorded unlinked by this keeper: skipped before the rule or the chain is read
+    let reg: Record<string, unknown> = { pairs, token: live, getStatus: (k: string) => (k === unlinkedKey("p") ? JSON.stringify({ reason: "voidBy", at: 1 }) : null), pairOutcome: () => null, lockedRule: noRule, recordAlert: noAlert };
+    assert.deepEqual(await pairUnmatchedAlerts(reg as never, { pairForward: { port: noChain } } as never, Date.now(), () => {}), []);
+    // voided in pair_outcomes (the void-by day passed), no unlink recorded yet: skipped the same way
+    reg = { pairs, token: live, getStatus: () => null, pairOutcome: () => ({ state: "voided", at: 1, detail: "no registered pool" }), lockedRule: noRule, recordAlert: noAlert };
+    assert.deepEqual(await pairUnmatchedAlerts(reg as never, { pairForward: { port: noChain } } as never, Date.now(), () => {}), []);
+    // nothing recorded here, but the chain says UNLINKED (3) on both sides: plain coins for good, not a pairing still to make
+    reg = { pairs, token: live, getStatus: () => null, pairOutcome: () => null, lockedRule: () => ({ rule: { pair: { winnerTakesBurn: true } } }), recordAlert: noAlert };
+    const unlinkedChain = { pairForward: { port: () => ({ links: async () => ({ paired: false, stateA: 3, stateB: 3, a: null, b: null }) }) } };
+    assert.deepEqual(await pairUnmatchedAlerts(reg as never, unlinkedChain as never, Date.now(), () => {}), []);
+    // the control: a live pair the chain shows still unpaired (states 1/0) is reported, as before
+    const raised: string[] = [];
+    reg = { ...reg, recordAlert: (a: { kind: string }) => { raised.push(a.kind); return 1; } };
+    const openChain = { pairForward: { port: () => ({ links: async () => ({ paired: false, stateA: 1, stateB: 0, a: { pairingDeadline: 1_800_000_000 }, b: null }) }) } };
+    assert.deepEqual(await pairUnmatchedAlerts(reg as never, openChain as never, Date.now(), () => {}), ["p"]);
+    assert.deepEqual(raised, ["pair-unmatched"]);
+  });
 });
 
 describe("the pinned-metadata check runs on this host first (2026-10-14: the gateway redirects to a CDN)", () => {
