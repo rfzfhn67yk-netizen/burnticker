@@ -25,6 +25,15 @@ import { isSingleOfficialSource, singleSourceMethod } from "@/lib/burnticker/sin
  * refusal). Each accepted reading's `method` names the cross-read, its value and the agreement basis, so the receipt shows both.
  */
 
+/**
+ * 2026-11-14 (owner's phone): the period-aligned "cross-read has no value for this period yet" hold is the ordinary publication lag
+ * between two operators (EIA posts the weekly gasoline price on Monday afternoon; FRED's GASREGW carries it hours later; W46 was held at
+ * 14:03Z and recorded at 20:04Z the same day). The hold is right; the phone alert for it is noise unless the lag outlives the grace below.
+ * The keeper matches refusals against this pattern when it hands them to the alert layer (multiKeeper.ts alertableRefusals).
+ */
+export const CROSS_READ_LAG_RE = /, the cross-read .+ has no value for this period yet\./;
+export const CROSS_READ_LAG_GRACE_MS = 48 * 3_600_000;
+
 export interface CorroborateDeps { entries: readonly SourceEntry[]; crossFeed: (id: string) => Feed | null; fetchImpl: FetchLike; now: () => number }
 type Align = "period" | "snapshot" | "quarter-end";
 

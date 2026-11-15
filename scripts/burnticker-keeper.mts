@@ -40,7 +40,7 @@ import { FakeBurnProgram, type BurnProgramClient } from "../src/lib/burnticker/p
 import { ProgramBurnClient } from "../src/lib/burnticker/programClient.ts";
 import { clusterOfGenesis } from "../src/lib/burnKeeper/solana.ts";
 import { SOL_MINT, usdPrice } from "../src/lib/burnKeeper/jupiterSwap.ts";
-import type { KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
+import { alertableRefusals, type KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
 import { expectedHostOf } from "../src/lib/burnticker/admission.ts";
 import { cosignerFromEnv } from "../src/lib/burnticker/attesters/cosign.ts";
 import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
@@ -464,7 +464,7 @@ while (!stopping) {
     tracker.note(r);
     const f = r.fetched.filter((x) => !x.skipped);
     if (f.length || r.planned.length || r.executed.length) log(`cycle: ${f.length} fetch(es), ${r.planned.length} planned, ${r.executed.length} executed${r.errors.length ? ` · errors: ${r.errors.slice(0, 3).join(" | ")}` : ""}`);
-    registry.setStatus("lastCycle", { at: Date.now(), fetched: f.length, planned: r.planned.length, executed: r.executed.length, errors: r.errors.slice(0, 5), refusals: r.fetched.flatMap((x) => x.refusals).slice(0, 10) });
+    registry.setStatus("lastCycle", { at: Date.now(), fetched: f.length, planned: r.planned.length, executed: r.executed.length, errors: r.errors.slice(0, 5), refusals: alertableRefusals(registry, r.fetched, Date.now()).slice(0, 10) });
   } else log(`cycle failed: ${(cycleError ?? "").slice(0, 200)}`);
   if (!gate.sendsAllowed) deps.dryRun = true;
   // Rivalry pairs on the pair curve (2026-10-10, docs/burnticker/PAIR-CURVE.md): graduate both sides / register / void — program

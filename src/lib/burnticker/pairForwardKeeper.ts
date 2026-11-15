@@ -231,12 +231,17 @@ export async function pairUnmatchedAlerts(reg: Registry, program: Pick<BurnProgr
     const a = reg.token(pr.mintA), b = reg.token(pr.mintB);
     if (!a || !b) continue;
     if (a.status !== "live" || b.status !== "live") continue;   // 2026-10-14: a pair whose coins never launched (drafts, expired) is not unmatched, it is unmade
+    // 2026-11-14 (owner's phone, the night the NFL pairs voided): a pair this keeper has recorded as unlinked, or whose outcome is voided,
+    // is unpaired BY DESIGN; the pair-unlinked alert already said so. Raising "not paired on chain (states 3/3)" a minute later is noise.
+    if (reg.getStatus(unlinkedKey(pr.pairId)) !== null) continue;
+    if (reg.pairOutcome(pr.pairId)?.state === "voided") continue;
     let rule = false;
     try { rule = pairWinnerTakesBurn(reg.lockedRule(a).rule); } catch { rule = false; }
     if (!rule) continue;
     let l: Awaited<ReturnType<PairForwardPort["links"]>>;
     try { l = await program.pairForward.port(pr.mintA, pr.mintB).links(); } catch { continue; }
     if (l.paired) continue;
+    if (l.stateA === 3 && l.stateB === 3) continue;   // UNLINKED on both sides (unlink_pair ran, here or elsewhere): plain coins for good, not a pairing still to make
     const deadline = Math.max(l.a?.pairingDeadline ?? 0, l.b?.pairingDeadline ?? 0);
     const text = `pair ${pr.pairId} ($${a.ticker} / $${b.ticker}) is not paired on chain (states ${l.stateA}/${l.stateB})${deadline ? `; the pairing window closes ${new Date(deadline * 1000).toISOString()} — after that both are plain coins for good` : ""}`;
     alert(reg, now, log, "pair-unmatched", `pair-unmatched:${pr.pairId}`, text, { pairId: pr.pairId });

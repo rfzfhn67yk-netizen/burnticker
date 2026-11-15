@@ -612,6 +612,8 @@ export class Registry {
   /** HS-119: removes one status row (the search memo drops the queries past its bound). */
   deleteStatus(key: string): void { this.db.prepare("DELETE FROM status WHERE key=?").run(key); }
   getStatus(key: string): string | null { const r = this.db.prepare("SELECT value FROM status WHERE key=?").get(key) as { value: string } | undefined; return r ? r.value : null; }
+  /** 2026-11-14: when a status row was last written (ms), or null without the row — the age of a hold, for alerts that wait out a known lag. */
+  statusUpdatedAt(key: string): number | null { const r = this.db.prepare("SELECT updated_at FROM status WHERE key=?").get(key) as { updated_at: number } | undefined; return r ? Number(r.updated_at) : null; }
 
   // ---- tokens ----
   /** Registers a token. The rule text must be canonical (it is re-locked and its hash recomputed here, never trusted from the caller). */

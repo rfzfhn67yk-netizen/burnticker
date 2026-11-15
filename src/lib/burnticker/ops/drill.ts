@@ -6,7 +6,7 @@ import { FakeBurnProgram } from "@/lib/burnticker/program";
 import { buildLaunchBundle, FakeLaunchLab } from "@/lib/burnticker/launchBundle";
 import { BURNTICKER_RULES_SCHEMA, lockRule } from "@/lib/burnticker/rules";
 import { feedById } from "@/lib/burnticker/catalogue";
-import { runCycle, type CycleReport, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
+import { alertableRefusals, runCycle, type CycleReport, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { registryAlertSink } from "@/lib/burnticker/alerts";
 import type { OracleAdapter, ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import type { SettledEvent } from "@/lib/burnticker/units";
@@ -132,7 +132,7 @@ export async function runDrill(o: { feed: string; mode: DrillMode; now?: number;
     for (let i = 0; i < 3; i++) {
       const r = await runCycle(deps);
       reports.push(r); observeCycle(reg, r, clock.t);
-      reg.setStatus("lastCycle", { at: clock.t, fetched: r.fetched.filter((x) => !x.skipped).length, planned: r.planned.length, executed: r.executed.length, errors: r.errors.slice(0, 5), refusals: r.fetched.flatMap((x) => x.refusals).slice(0, 10) }, clock.t);
+      reg.setStatus("lastCycle", { at: clock.t, fetched: r.fetched.filter((x) => !x.skipped).length, planned: r.planned.length, executed: r.executed.length, errors: r.errors.slice(0, 5), refusals: alertableRefusals(reg, r.fetched, clock.t).slice(0, 10) }, clock.t);
       const next = reg.feedState(t.selectorKey).nextFetchAt;
       clock.t = Math.max(clock.t + 60_000, (next ?? clock.t) + 1000);
     }
