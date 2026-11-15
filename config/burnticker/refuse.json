@@ -1,0 +1,60 @@
+{
+  "schema": "burnticker.refuse/v1",
+  "note": "Applied at create time to the selected series/market/event titles and categories, whatever the oracle (the owner, 2026-10-09; owner to confirm the list). Elections are ALLOWED by the owner's decision. Patterns are case-insensitive regular expressions over the title; categories match exactly.",
+  "categories": [],
+  "titlePatterns": [
+    {
+      "id": "death",
+      "pattern": "\\b(die|dies|died|death|deaths|dead|killed|kill|killing|fatal|fatalit(y|ies)|obituar|assassinat|suicide|execut(ed|ion)|lethal)\\b",
+      "reason": "markets about deaths",
+      "sentence": "Burnticker does not launch coins on wars, invasions or deaths."
+    },
+    {
+      "id": "violence",
+      "pattern": "\\b(shooting|shot|stabb|bomb|bombing|explosion|massacre|attack(s|ed)?|invasion|invade|airstrike|strike(s)? on|war crime|genocide|violen(t|ce)|riot)\\b",
+      "reason": "markets about violence",
+      "sentence": "Burnticker does not launch coins on wars, invasions or deaths."
+    },
+    {
+      "id": "terror",
+      "pattern": "\\b(terror|terrorist|terrorism|hostage|kidnap|hijack)\\b",
+      "reason": "markets about terror"
+    },
+    {
+      "id": "casualties",
+      "pattern": "\\b(casualt(y|ies)|death toll|body count|wounded|injur(ed|ies) count|how many (people )?(will )?(die|be killed))\\b",
+      "reason": "casualty counts",
+      "sentence": "Burnticker does not launch coins on wars, invasions or deaths."
+    },
+    {
+      "id": "conflict",
+      "pattern": "\\b(?<!(?:star|trade|price|culture|console|bidding|format|flame|turf|cold|tariff|currency|streaming) )wars?\\b|\\bwartime\\b|\\bmilitary (action|strike|operation|intervention|conflict|campaign)s?\\b|\\b(invade|invades|invaded|invading)\\b|\\bground (offensive|troops)\\b|\\b(deploy|send|sends|deploys) troops\\b|\\bceasefire\\b|\\bnuclear (strike|attack|war|weapon|test)s?\\b|\\bmissile (strike|attack|launch)e?s?\\b|\\bdrone strikes?\\b|\\bairstrikes?\\b|\\bannex(es|ed|ation)?\\b|\\bbomb(s|ed)?\\b",
+      "reason": "markets about wars and invasions",
+      "flag": "BURNTICKER_REFUSE_CONFLICT",
+      "sentence": "Burnticker does not launch coins on wars, invasions or deaths."
+    },
+    {
+      "id": "private-individual",
+      "pattern": "\\b(private citizen|named individual|will .* be (arrested|indicted|charged|convicted|sentenced|divorced|pregnant|fired))\\b",
+      "reason": "named private individuals' lives"
+    },
+    {
+      "id": "truth-social",
+      "pattern": "\\btruth ?social\\b",
+      "reason": "Truth Social is never a source or a subject (owner rule, sources-2 brief 2026-10-12)"
+    },
+    {
+      "id": "disaster",
+      "pattern": "\\b(earthquake|tsunami|hurricane landfall|wildfire acres|flood deaths|pandemic deaths)\\b",
+      "reason": "markets about disasters"
+    }
+  ],
+  "namePatterns": [
+    {
+      "id": "impersonation",
+      "pattern": "^(official|real|the)\\s+",
+      "reason": "names that claim to be official"
+    }
+  ],
+  "conflictNote": "QA pass 9 #31 (2026-10-13): the conflict pattern is built ON while the owner decides; BURNTICKER_REFUSE_CONFLICT=off turns it off. A refusal on the death, violence, casualty or conflict patterns says one sentence at admission."
+}

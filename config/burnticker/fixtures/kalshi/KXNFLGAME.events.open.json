@@ -1,0 +1,1522 @@
+{
+ "_fixture": {
+  "source": "GET https://api.elections.kalshi.com/trade-api/v2/events?series_ticker=KXNFLGAME&status=open&with_nested_markets=true&limit=200",
+  "fetchedAt": "2026-10-10T15:47:49.924Z",
+  "note": "market fields trimmed to what the parser reads; prices dropped"
+ },
+ "cursor": "",
+ "events": [
+  {
+   "event_ticker": "KXNFLGAME-26OCT11PHIJAC",
+   "series_ticker": "KXNFLGAME",
+   "title": "PHI Eagles vs JAC Jaguars",
+   "sub_title": "PHI vs JAC (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11PHIJAC-JAC",
+     "event_ticker": "KXNFLGAME-26OCT11PHIJAC",
+     "title": "Jacksonville wins",
+     "yes_sub_title": "Jacksonville",
+     "no_sub_title": "Jacksonville",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T13:30:00Z",
+     "expected_expiration_time": "2026-10-11T16:30:00Z",
+     "occurrence_datetime": "2026-10-11T16:30:00Z",
+     "rules_primary": "If Jacksonville wins the PHI Eagles vs JAC Jaguars Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11PHIJAC-PHI",
+     "event_ticker": "KXNFLGAME-26OCT11PHIJAC",
+     "title": "Philadelphia wins",
+     "yes_sub_title": "Philadelphia",
+     "no_sub_title": "Philadelphia",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T13:30:00Z",
+     "expected_expiration_time": "2026-10-11T16:30:00Z",
+     "occurrence_datetime": "2026-10-11T16:30:00Z",
+     "rules_primary": "If Philadelphia wins the PHI Eagles vs JAC Jaguars Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11CINMIA",
+   "series_ticker": "KXNFLGAME",
+   "title": "CIN Bengals vs MIA Dolphins",
+   "sub_title": "CIN vs MIA (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11CINMIA-MIA",
+     "event_ticker": "KXNFLGAME-26OCT11CINMIA",
+     "title": "Miami wins",
+     "yes_sub_title": "Miami",
+     "no_sub_title": "Miami",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Miami wins the CIN Bengals vs MIA Dolphins Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11CINMIA-CIN",
+     "event_ticker": "KXNFLGAME-26OCT11CINMIA",
+     "title": "Cincinnati wins",
+     "yes_sub_title": "Cincinnati",
+     "no_sub_title": "Cincinnati",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Cincinnati wins the CIN Bengals vs MIA Dolphins Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11CLENYJ",
+   "series_ticker": "KXNFLGAME",
+   "title": "CLE Browns vs NY Jets",
+   "sub_title": "CLE vs NYJ (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11CLENYJ-NYJ",
+     "event_ticker": "KXNFLGAME-26OCT11CLENYJ",
+     "title": "New York J wins",
+     "yes_sub_title": "New York J",
+     "no_sub_title": "New York J",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If New York J wins the CLE Browns vs NY Jets Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11CLENYJ-CLE",
+     "event_ticker": "KXNFLGAME-26OCT11CLENYJ",
+     "title": "Cleveland wins",
+     "yes_sub_title": "Cleveland",
+     "no_sub_title": "Cleveland",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Cleveland wins the CLE Browns vs NY Jets Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11HOUTEN",
+   "series_ticker": "KXNFLGAME",
+   "title": "HOU Texans vs TEN Titans",
+   "sub_title": "HOU vs TEN (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11HOUTEN-TEN",
+     "event_ticker": "KXNFLGAME-26OCT11HOUTEN",
+     "title": "Tennessee wins",
+     "yes_sub_title": "Tennessee",
+     "no_sub_title": "Tennessee",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Tennessee wins the HOU Texans vs TEN Titans Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11HOUTEN-HOU",
+     "event_ticker": "KXNFLGAME-26OCT11HOUTEN",
+     "title": "Houston wins",
+     "yes_sub_title": "Houston",
+     "no_sub_title": "Houston",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Houston wins the HOU Texans vs TEN Titans Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11INDPIT",
+   "series_ticker": "KXNFLGAME",
+   "title": "IND Colts vs PIT Steelers",
+   "sub_title": "IND vs PIT (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11INDPIT-PIT",
+     "event_ticker": "KXNFLGAME-26OCT11INDPIT",
+     "title": "Pittsburgh wins",
+     "yes_sub_title": "Pittsburgh",
+     "no_sub_title": "Pittsburgh",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Pittsburgh wins the IND Colts vs PIT Steelers Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11INDPIT-IND",
+     "event_ticker": "KXNFLGAME-26OCT11INDPIT",
+     "title": "Indianapolis wins",
+     "yes_sub_title": "Indianapolis",
+     "no_sub_title": "Indianapolis",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Indianapolis wins the IND Colts vs PIT Steelers Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11LVNE",
+   "series_ticker": "KXNFLGAME",
+   "title": "LV Raiders vs NE Patriots",
+   "sub_title": "LV vs NE (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11LVNE-NE",
+     "event_ticker": "KXNFLGAME-26OCT11LVNE",
+     "title": "New England wins",
+     "yes_sub_title": "New England",
+     "no_sub_title": "New England",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If New England wins the LV Raiders vs NE Patriots Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11LVNE-LV",
+     "event_ticker": "KXNFLGAME-26OCT11LVNE",
+     "title": "Las Vegas wins",
+     "yes_sub_title": "Las Vegas",
+     "no_sub_title": "Las Vegas",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Las Vegas wins the LV Raiders vs NE Patriots Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11MINNO",
+   "series_ticker": "KXNFLGAME",
+   "title": "MIN Vikings vs NO Saints",
+   "sub_title": "MIN vs NO (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11MINNO-NO",
+     "event_ticker": "KXNFLGAME-26OCT11MINNO",
+     "title": "New Orleans wins",
+     "yes_sub_title": "New Orleans",
+     "no_sub_title": "New Orleans",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If New Orleans wins the MIN Vikings vs NO Saints Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11MINNO-MIN",
+     "event_ticker": "KXNFLGAME-26OCT11MINNO",
+     "title": "Minnesota wins",
+     "yes_sub_title": "Minnesota",
+     "no_sub_title": "Minnesota",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Minnesota wins the MIN Vikings vs NO Saints Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11NYGWAS",
+   "series_ticker": "KXNFLGAME",
+   "title": "NY Giants vs WAS Commanders",
+   "sub_title": "NYG vs WAS (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11NYGWAS-WAS",
+     "event_ticker": "KXNFLGAME-26OCT11NYGWAS",
+     "title": "Washington wins",
+     "yes_sub_title": "Washington",
+     "no_sub_title": "Washington",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If Washington wins the NY Giants vs WAS Commanders Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11NYGWAS-NYG",
+     "event_ticker": "KXNFLGAME-26OCT11NYGWAS",
+     "title": "New York G wins",
+     "yes_sub_title": "New York G",
+     "no_sub_title": "New York G",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T17:00:00Z",
+     "expected_expiration_time": "2026-10-11T20:00:00Z",
+     "occurrence_datetime": "2026-10-11T20:00:00Z",
+     "rules_primary": "If New York G wins the NY Giants vs WAS Commanders Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11DENLAC",
+   "series_ticker": "KXNFLGAME",
+   "title": "DEN Broncos vs LA Chargers",
+   "sub_title": "DEN vs LAC (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11DENLAC-LAC",
+     "event_ticker": "KXNFLGAME-26OCT11DENLAC",
+     "title": "Los Angeles C wins",
+     "yes_sub_title": "Los Angeles C",
+     "no_sub_title": "Los Angeles C",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T20:05:00Z",
+     "expected_expiration_time": "2026-10-11T23:05:00Z",
+     "occurrence_datetime": "2026-10-11T23:05:00Z",
+     "rules_primary": "If Los Angeles C wins the DEN Broncos vs LA Chargers Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11DENLAC-DEN",
+     "event_ticker": "KXNFLGAME-26OCT11DENLAC",
+     "title": "Denver wins",
+     "yes_sub_title": "Denver",
+     "no_sub_title": "Denver",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T20:05:00Z",
+     "expected_expiration_time": "2026-10-11T23:05:00Z",
+     "occurrence_datetime": "2026-10-11T23:05:00Z",
+     "rules_primary": "If Denver wins the DEN Broncos vs LA Chargers Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11CHIGB",
+   "series_ticker": "KXNFLGAME",
+   "title": "CHI Bears vs GB Packers",
+   "sub_title": "CHI vs GB (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11CHIGB-GB",
+     "event_ticker": "KXNFLGAME-26OCT11CHIGB",
+     "title": "Green Bay wins",
+     "yes_sub_title": "Green Bay",
+     "no_sub_title": "Green Bay",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T20:25:00Z",
+     "expected_expiration_time": "2026-10-11T23:25:00Z",
+     "occurrence_datetime": "2026-10-11T23:25:00Z",
+     "rules_primary": "If Green Bay wins the CHI Bears vs GB Packers Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11CHIGB-CHI",
+     "event_ticker": "KXNFLGAME-26OCT11CHIGB",
+     "title": "Chicago wins",
+     "yes_sub_title": "Chicago",
+     "no_sub_title": "Chicago",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T20:25:00Z",
+     "expected_expiration_time": "2026-10-11T23:25:00Z",
+     "occurrence_datetime": "2026-10-11T23:25:00Z",
+     "rules_primary": "If Chicago wins the CHI Bears vs GB Packers Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11DETARI",
+   "series_ticker": "KXNFLGAME",
+   "title": "DET Lions vs ARI Cardinals",
+   "sub_title": "DET vs ARI (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11DETARI-ARI",
+     "event_ticker": "KXNFLGAME-26OCT11DETARI",
+     "title": "Arizona wins",
+     "yes_sub_title": "Arizona",
+     "no_sub_title": "Arizona",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T20:25:00Z",
+     "expected_expiration_time": "2026-10-11T23:25:00Z",
+     "occurrence_datetime": "2026-10-11T23:25:00Z",
+     "rules_primary": "If Arizona wins the DET Lions vs ARI Cardinals Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11DETARI-DET",
+     "event_ticker": "KXNFLGAME-26OCT11DETARI",
+     "title": "Detroit wins",
+     "yes_sub_title": "Detroit",
+     "no_sub_title": "Detroit",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T20:25:00Z",
+     "expected_expiration_time": "2026-10-11T23:25:00Z",
+     "occurrence_datetime": "2026-10-11T23:25:00Z",
+     "rules_primary": "If Detroit wins the DET Lions vs ARI Cardinals Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11SFSEA",
+   "series_ticker": "KXNFLGAME",
+   "title": "SF 49ers vs SEA Seahawks",
+   "sub_title": "SF vs SEA (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11SFSEA-SEA",
+     "event_ticker": "KXNFLGAME-26OCT11SFSEA",
+     "title": "Seattle wins",
+     "yes_sub_title": "Seattle",
+     "no_sub_title": "Seattle",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T20:25:00Z",
+     "expected_expiration_time": "2026-10-11T23:25:00Z",
+     "occurrence_datetime": "2026-10-11T23:25:00Z",
+     "rules_primary": "If Seattle wins the SF 49ers vs SEA Seahawks Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11SFSEA-SF",
+     "event_ticker": "KXNFLGAME-26OCT11SFSEA",
+     "title": "San Francisco wins",
+     "yes_sub_title": "San Francisco",
+     "no_sub_title": "San Francisco",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-13T20:25:00Z",
+     "expected_expiration_time": "2026-10-11T23:25:00Z",
+     "occurrence_datetime": "2026-10-11T23:25:00Z",
+     "rules_primary": "If San Francisco wins the SF 49ers vs SEA Seahawks Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT11BALATL",
+   "series_ticker": "KXNFLGAME",
+   "title": "BAL Ravens vs ATL Falcons",
+   "sub_title": "BAL vs ATL (Oct 11)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT11BALATL-ATL",
+     "event_ticker": "KXNFLGAME-26OCT11BALATL",
+     "title": "Atlanta wins",
+     "yes_sub_title": "Atlanta",
+     "no_sub_title": "Atlanta",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-14T00:20:00Z",
+     "expected_expiration_time": "2026-10-12T03:20:00Z",
+     "occurrence_datetime": "2026-10-12T03:20:00Z",
+     "rules_primary": "If Atlanta wins the BAL Ravens vs ATL Falcons Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT11BALATL-BAL",
+     "event_ticker": "KXNFLGAME-26OCT11BALATL",
+     "title": "Baltimore wins",
+     "yes_sub_title": "Baltimore",
+     "no_sub_title": "Baltimore",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-14T00:20:00Z",
+     "expected_expiration_time": "2026-10-12T03:20:00Z",
+     "occurrence_datetime": "2026-10-12T03:20:00Z",
+     "rules_primary": "If Baltimore wins the BAL Ravens vs ATL Falcons Pro Football game originally scheduled for Oct 11, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT12BUFLAR",
+   "series_ticker": "KXNFLGAME",
+   "title": "BUF Bills vs LA Rams",
+   "sub_title": "BUF vs LAR (Oct 12)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT12BUFLAR-LAR",
+     "event_ticker": "KXNFLGAME-26OCT12BUFLAR",
+     "title": "Los Angeles R wins",
+     "yes_sub_title": "Los Angeles R",
+     "no_sub_title": "Los Angeles R",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-15T00:15:00Z",
+     "expected_expiration_time": "2026-10-13T03:15:00Z",
+     "occurrence_datetime": "2026-10-13T03:15:00Z",
+     "rules_primary": "If Los Angeles R wins the BUF Bills vs LA Rams Pro Football game originally scheduled for Oct 12, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT12BUFLAR-BUF",
+     "event_ticker": "KXNFLGAME-26OCT12BUFLAR",
+     "title": "Buffalo wins",
+     "yes_sub_title": "Buffalo",
+     "no_sub_title": "Buffalo",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-15T00:15:00Z",
+     "expected_expiration_time": "2026-10-13T03:15:00Z",
+     "occurrence_datetime": "2026-10-13T03:15:00Z",
+     "rules_primary": "If Buffalo wins the BUF Bills vs LA Rams Pro Football game originally scheduled for Oct 12, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT15SEADEN",
+   "series_ticker": "KXNFLGAME",
+   "title": "SEA Seahawks vs DEN Broncos",
+   "sub_title": "SEA vs DEN (Oct 15)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT15SEADEN-DEN",
+     "event_ticker": "KXNFLGAME-26OCT15SEADEN",
+     "title": "Denver wins",
+     "yes_sub_title": "Denver",
+     "no_sub_title": "Denver",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-18T00:15:00Z",
+     "expected_expiration_time": "2026-10-16T03:15:00Z",
+     "occurrence_datetime": "2026-10-16T03:15:00Z",
+     "rules_primary": "If Denver wins the SEA Seahawks vs DEN Broncos Pro Football game originally scheduled for Oct 15, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT15SEADEN-SEA",
+     "event_ticker": "KXNFLGAME-26OCT15SEADEN",
+     "title": "Seattle wins",
+     "yes_sub_title": "Seattle",
+     "no_sub_title": "Seattle",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-18T00:15:00Z",
+     "expected_expiration_time": "2026-10-16T03:15:00Z",
+     "occurrence_datetime": "2026-10-16T03:15:00Z",
+     "rules_primary": "If Seattle wins the SEA Seahawks vs DEN Broncos Pro Football game originally scheduled for Oct 15, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18HOUJAC",
+   "series_ticker": "KXNFLGAME",
+   "title": "HOU Texans vs JAC Jaguars",
+   "sub_title": "HOU vs JAC (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18HOUJAC-JAC",
+     "event_ticker": "KXNFLGAME-26OCT18HOUJAC",
+     "title": "Jacksonville wins",
+     "yes_sub_title": "Jacksonville",
+     "no_sub_title": "Jacksonville",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T13:30:00Z",
+     "expected_expiration_time": "2026-10-18T16:30:00Z",
+     "occurrence_datetime": "2026-10-18T16:30:00Z",
+     "rules_primary": "If Jacksonville wins the HOU Texans vs JAC Jaguars Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18HOUJAC-HOU",
+     "event_ticker": "KXNFLGAME-26OCT18HOUJAC",
+     "title": "Houston wins",
+     "yes_sub_title": "Houston",
+     "no_sub_title": "Houston",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T13:30:00Z",
+     "expected_expiration_time": "2026-10-18T16:30:00Z",
+     "occurrence_datetime": "2026-10-18T16:30:00Z",
+     "rules_primary": "If Houston wins the HOU Texans vs JAC Jaguars Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18BALCLE",
+   "series_ticker": "KXNFLGAME",
+   "title": "BAL Ravens vs CLE Browns",
+   "sub_title": "BAL vs CLE (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18BALCLE-CLE",
+     "event_ticker": "KXNFLGAME-26OCT18BALCLE",
+     "title": "Cleveland wins",
+     "yes_sub_title": "Cleveland",
+     "no_sub_title": "Cleveland",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Cleveland wins the BAL Ravens vs CLE Browns Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18BALCLE-BAL",
+     "event_ticker": "KXNFLGAME-26OCT18BALCLE",
+     "title": "Baltimore wins",
+     "yes_sub_title": "Baltimore",
+     "no_sub_title": "Baltimore",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Baltimore wins the BAL Ravens vs CLE Browns Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18CARPHI",
+   "series_ticker": "KXNFLGAME",
+   "title": "CAR Panthers vs PHI Eagles",
+   "sub_title": "CAR vs PHI (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18CARPHI-PHI",
+     "event_ticker": "KXNFLGAME-26OCT18CARPHI",
+     "title": "Philadelphia wins",
+     "yes_sub_title": "Philadelphia",
+     "no_sub_title": "Philadelphia",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Philadelphia wins the CAR Panthers vs PHI Eagles Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18CARPHI-CAR",
+     "event_ticker": "KXNFLGAME-26OCT18CARPHI",
+     "title": "Carolina wins",
+     "yes_sub_title": "Carolina",
+     "no_sub_title": "Carolina",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Carolina wins the CAR Panthers vs PHI Eagles Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18CHIATL",
+   "series_ticker": "KXNFLGAME",
+   "title": "CHI Bears vs ATL Falcons",
+   "sub_title": "CHI vs ATL (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18CHIATL-ATL",
+     "event_ticker": "KXNFLGAME-26OCT18CHIATL",
+     "title": "Atlanta wins",
+     "yes_sub_title": "Atlanta",
+     "no_sub_title": "Atlanta",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Atlanta wins the CHI Bears vs ATL Falcons Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18CHIATL-CHI",
+     "event_ticker": "KXNFLGAME-26OCT18CHIATL",
+     "title": "Chicago wins",
+     "yes_sub_title": "Chicago",
+     "no_sub_title": "Chicago",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Chicago wins the CHI Bears vs ATL Falcons Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18NONYG",
+   "series_ticker": "KXNFLGAME",
+   "title": "NOLA Saints vs NY Giants",
+   "sub_title": "NO vs NYG (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18NONYG-NYG",
+     "event_ticker": "KXNFLGAME-26OCT18NONYG",
+     "title": "New York G wins",
+     "yes_sub_title": "New York G",
+     "no_sub_title": "New York G",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If New York G wins the NOLA Saints vs NY Giants Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18NONYG-NO",
+     "event_ticker": "KXNFLGAME-26OCT18NONYG",
+     "title": "New Orleans wins",
+     "yes_sub_title": "New Orleans",
+     "no_sub_title": "New Orleans",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If New Orleans wins the NOLA Saints vs NY Giants Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18NYJNE",
+   "series_ticker": "KXNFLGAME",
+   "title": "NY Jets vs NE Patriots",
+   "sub_title": "NYJ vs NE (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18NYJNE-NE",
+     "event_ticker": "KXNFLGAME-26OCT18NYJNE",
+     "title": "New England wins",
+     "yes_sub_title": "New England",
+     "no_sub_title": "New England",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If New England wins the NY Jets vs NE Patriots Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18NYJNE-NYJ",
+     "event_ticker": "KXNFLGAME-26OCT18NYJNE",
+     "title": "New York J wins",
+     "yes_sub_title": "New York J",
+     "no_sub_title": "New York J",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If New York J wins the NY Jets vs NE Patriots Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18PITTB",
+   "series_ticker": "KXNFLGAME",
+   "title": "PIT Steelers vs TB Buccaneers",
+   "sub_title": "PIT vs TB (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18PITTB-TB",
+     "event_ticker": "KXNFLGAME-26OCT18PITTB",
+     "title": "Tampa Bay wins",
+     "yes_sub_title": "Tampa Bay",
+     "no_sub_title": "Tampa Bay",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Tampa Bay wins the PIT Steelers vs TB Buccaneers Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18PITTB-PIT",
+     "event_ticker": "KXNFLGAME-26OCT18PITTB",
+     "title": "Pittsburgh wins",
+     "yes_sub_title": "Pittsburgh",
+     "no_sub_title": "Pittsburgh",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Pittsburgh wins the PIT Steelers vs TB Buccaneers Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18TENIND",
+   "series_ticker": "KXNFLGAME",
+   "title": "TEN Titans vs IND Colts",
+   "sub_title": "TEN vs IND (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18TENIND-IND",
+     "event_ticker": "KXNFLGAME-26OCT18TENIND",
+     "title": "Indianapolis wins",
+     "yes_sub_title": "Indianapolis",
+     "no_sub_title": "Indianapolis",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Indianapolis wins the TEN Titans vs IND Colts Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18TENIND-TEN",
+     "event_ticker": "KXNFLGAME-26OCT18TENIND",
+     "title": "Tennessee wins",
+     "yes_sub_title": "Tennessee",
+     "no_sub_title": "Tennessee",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T17:00:00Z",
+     "expected_expiration_time": "2026-10-18T20:00:00Z",
+     "occurrence_datetime": "2026-10-18T20:00:00Z",
+     "rules_primary": "If Tennessee wins the TEN Titans vs IND Colts Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18ARILAR",
+   "series_ticker": "KXNFLGAME",
+   "title": "ARI Cardinals vs LA Rams",
+   "sub_title": "ARI vs LAR (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18ARILAR-LAR",
+     "event_ticker": "KXNFLGAME-26OCT18ARILAR",
+     "title": "Los Angeles R wins",
+     "yes_sub_title": "Los Angeles R",
+     "no_sub_title": "Los Angeles R",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T20:05:00Z",
+     "expected_expiration_time": "2026-10-18T23:05:00Z",
+     "occurrence_datetime": "2026-10-18T23:05:00Z",
+     "rules_primary": "If Los Angeles R wins the ARI Cardinals vs LA Rams Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18ARILAR-ARI",
+     "event_ticker": "KXNFLGAME-26OCT18ARILAR",
+     "title": "Arizona wins",
+     "yes_sub_title": "Arizona",
+     "no_sub_title": "Arizona",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T20:05:00Z",
+     "expected_expiration_time": "2026-10-18T23:05:00Z",
+     "occurrence_datetime": "2026-10-18T23:05:00Z",
+     "rules_primary": "If Arizona wins the ARI Cardinals vs LA Rams Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18BUFLV",
+   "series_ticker": "KXNFLGAME",
+   "title": "BUF Bills vs LV Raiders",
+   "sub_title": "BUF vs LV (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18BUFLV-LV",
+     "event_ticker": "KXNFLGAME-26OCT18BUFLV",
+     "title": "Las Vegas wins",
+     "yes_sub_title": "Las Vegas",
+     "no_sub_title": "Las Vegas",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T20:25:00Z",
+     "expected_expiration_time": "2026-10-18T23:25:00Z",
+     "occurrence_datetime": "2026-10-18T23:25:00Z",
+     "rules_primary": "If Las Vegas wins the BUF Bills vs LV Raiders Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18BUFLV-BUF",
+     "event_ticker": "KXNFLGAME-26OCT18BUFLV",
+     "title": "Buffalo wins",
+     "yes_sub_title": "Buffalo",
+     "no_sub_title": "Buffalo",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T20:25:00Z",
+     "expected_expiration_time": "2026-10-18T23:25:00Z",
+     "occurrence_datetime": "2026-10-18T23:25:00Z",
+     "rules_primary": "If Buffalo wins the BUF Bills vs LV Raiders Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18LACKC",
+   "series_ticker": "KXNFLGAME",
+   "title": "LA Chargers vs KC Chiefs",
+   "sub_title": "LAC vs KC (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18LACKC-KC",
+     "event_ticker": "KXNFLGAME-26OCT18LACKC",
+     "title": "Kansas City wins",
+     "yes_sub_title": "Kansas City",
+     "no_sub_title": "Kansas City",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T20:25:00Z",
+     "expected_expiration_time": "2026-10-18T23:25:00Z",
+     "occurrence_datetime": "2026-10-18T23:25:00Z",
+     "rules_primary": "If Kansas City wins the LA Chargers vs KC Chiefs Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18LACKC-LAC",
+     "event_ticker": "KXNFLGAME-26OCT18LACKC",
+     "title": "Los Angeles C wins",
+     "yes_sub_title": "Los Angeles C",
+     "no_sub_title": "Los Angeles C",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-20T20:25:00Z",
+     "expected_expiration_time": "2026-10-18T23:25:00Z",
+     "occurrence_datetime": "2026-10-18T23:25:00Z",
+     "rules_primary": "If Los Angeles C wins the LA Chargers vs KC Chiefs Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT18DALGB",
+   "series_ticker": "KXNFLGAME",
+   "title": "DAL Cowboys vs GB Packers",
+   "sub_title": "DAL vs GB (Oct 18)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT18DALGB-GB",
+     "event_ticker": "KXNFLGAME-26OCT18DALGB",
+     "title": "Green Bay wins",
+     "yes_sub_title": "Green Bay",
+     "no_sub_title": "Green Bay",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-21T00:20:00Z",
+     "expected_expiration_time": "2026-10-19T03:20:00Z",
+     "occurrence_datetime": "2026-10-19T03:20:00Z",
+     "rules_primary": "If Green Bay wins the DAL Cowboys vs GB Packers Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT18DALGB-DAL",
+     "event_ticker": "KXNFLGAME-26OCT18DALGB",
+     "title": "Dallas wins",
+     "yes_sub_title": "Dallas",
+     "no_sub_title": "Dallas",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-21T00:20:00Z",
+     "expected_expiration_time": "2026-10-19T03:20:00Z",
+     "occurrence_datetime": "2026-10-19T03:20:00Z",
+     "rules_primary": "If Dallas wins the DAL Cowboys vs GB Packers Pro Football game originally scheduled for Oct 18, 2026, then the market resolves to Yes."
+    }
+   ]
+  },
+  {
+   "event_ticker": "KXNFLGAME-26OCT19WASSF",
+   "series_ticker": "KXNFLGAME",
+   "title": "WAS Commanders vs SF 49ers",
+   "sub_title": "WAS vs SF (Oct 19)",
+   "category": "Sports",
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "Pro Football",
+    "competition_scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "markets": [
+    {
+     "ticker": "KXNFLGAME-26OCT19WASSF-SF",
+     "event_ticker": "KXNFLGAME-26OCT19WASSF",
+     "title": "San Francisco wins",
+     "yes_sub_title": "San Francisco",
+     "no_sub_title": "San Francisco",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-22T00:15:00Z",
+     "expected_expiration_time": "2026-10-20T03:15:00Z",
+     "occurrence_datetime": "2026-10-20T03:15:00Z",
+     "rules_primary": "If San Francisco wins the WAS Commanders vs SF 49ers Pro Football game originally scheduled for Oct 19, 2026, then the market resolves to Yes."
+    },
+    {
+     "ticker": "KXNFLGAME-26OCT19WASSF-WAS",
+     "event_ticker": "KXNFLGAME-26OCT19WASSF",
+     "title": "Washington wins",
+     "yes_sub_title": "Washington",
+     "no_sub_title": "Washington",
+     "status": "active",
+     "result": "",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "expiration_value": "",
+     "settlement_timer_seconds": 60,
+     "close_time": "2026-10-22T00:15:00Z",
+     "expected_expiration_time": "2026-10-20T03:15:00Z",
+     "occurrence_datetime": "2026-10-20T03:15:00Z",
+     "rules_primary": "If Washington wins the WAS Commanders vs SF 49ers Pro Football game originally scheduled for Oct 19, 2026, then the market resolves to Yes."
+    }
+   ]
+  }
+ ]
+}

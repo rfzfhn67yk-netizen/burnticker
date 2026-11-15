@@ -1,0 +1,23 @@
+{
+  "command": "void",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "8XGyJ9b3C5pjMQdXEKa7fJKzQWKwNu4GEm5LEtHPcZe3",
+  "result": {
+    "ok": false,
+    "signature": null,
+    "error": "DeadlineNotReached",
+    "unitsConsumed": 14850,
+    "txBytes": 318,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN invoke [1]",
+      "Program log: Instruction: VoidPair",
+      "Program log: AnchorError thrown in programs/pair_curve/src/instructions/void_pair.rs:43. Error Code: DeadlineNotReached. Error Number: 6018. Error Message: void is only possible at or after the deadline.",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN consumed 14700 of 599850 compute units",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN failed: custom program error: 0x1782"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "command": "end-status",
+  "cluster": "devnet",
+  "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+  "end_state": 0,
+  "end_date": 0,
+  "crank_cursor": 20261007,
+  "last_record_date": 20261008,
+  "endSink": null,
+  "ruleEnd": null,
+  "forwardOnEnd": {
+    "status": "no-end-sink"
+  }
+}

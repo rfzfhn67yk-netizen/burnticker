@@ -1,0 +1,19 @@
+{
+  "case": "x31-cli-forward-after-void-prints-void",
+  "expected": "none",
+  "observed": "none",
+  "match": true,
+  "exitCode": 0,
+  "command": "BR forward-on-end --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint 7UH16o8Fdqq33kHMUpDaSHbmevjG1r8DmiHWYp4cqptm",
+  "simulationErr": null,
+  "errorLogLines": [],
+  "stderr": [],
+  "output": {
+    "command": "forward-on-end",
+    "cluster": "devnet",
+    "mint": "7UH16o8Fdqq33kHMUpDaSHbmevjG1r8DmiHWYp4cqptm",
+    "plan": {
+      "status": "void"
+    }
+  }
+}

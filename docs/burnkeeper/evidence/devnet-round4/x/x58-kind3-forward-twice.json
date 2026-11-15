@@ -1,0 +1,211 @@
+{
+  "case": "x58-kind3-forward-twice",
+  "expected": "NothingToForward",
+  "observed": "NothingToForward",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR forward-on-end --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint iJhkwouWchLzuXiwHsJsZRoARHXnPQxN7U5As28khNg",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6108}]}",
+  "errorLogLines": [
+    "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:318. Error Code: NothingToForward. Error Number: 6108. Error Message: forward_on_end: less than the end sink's minimum to forward.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17dc"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "forward-on-end",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "target": "2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz",
+    "intended": "2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz",
+    "sinkKind": 3,
+    "instructions": [
+      {
+        "program": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        "accounts": [
+          {
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "pubkey": "Hgc4ezaSyXF355mm3ejudGAb69z15BTy6n5cCxtmsDwJ",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "pubkey": "AdLa77DxXWRqoacnupGdABTTyfdGpL8Q73ARJ3KBD82N",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "pubkey": "So11111111111111111111111111111111111111112",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "dataHex": "01"
+      },
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "forward_on_end",
+        "accounts": [
+          {
+            "name": "cranker",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": false
+          },
+          {
+            "name": "platform",
+            "pubkey": "EXz6enAb7mSUfC1bWJstF96uLZiCSdFcLLSQ9cwhhxx6",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "config",
+            "pubkey": "HuGy9S3AfnhjgXKKqUrrdG6JiSDwvyN7FcVPaWVs8h94",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "fee_vault",
+            "pubkey": "5SmPV7WmxNkzPG6Qtyiwg9pX2jA5Kjyj6SGSoNGknVGk",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "fee_wsol",
+            "pubkey": "21dFussa85GvREm5EhaDmjzn5oG279ap8JnWsfSjTQs3",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "end_sink",
+            "pubkey": "AYMY1if3PRFfiW7MVUXBhs3z92EGGhhQC8mLjwfQRC44",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "rule_end",
+            "pubkey": "BCY7pAkruBK6feBA6ztczo4yprTn1fbFeTbL8uYWeoFD",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "target_config",
+            "pubkey": "3fjc8YtBzS5FRhRBga3iferJDKJbEbiiEdSWoGqH2EvZ",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "target_fee_vault",
+            "pubkey": "AdLa77DxXWRqoacnupGdABTTyfdGpL8Q73ARJ3KBD82N",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "target_fee_wsol",
+            "pubkey": "Hgc4ezaSyXF355mm3ejudGAb69z15BTy6n5cCxtmsDwJ",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "token_program",
+            "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "memo_program",
+            "pubkey": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "sink_config",
+            "pubkey": "3fjc8YtBzS5FRhRBga3iferJDKJbEbiiEdSWoGqH2EvZ",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "pair_link",
+            "pubkey": "CfbdXZduEvrRJdCnzbJawy1UUop9Veb8a8qghe9QSrqY",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "pair_result",
+            "pubkey": "ApfQoTcQu7bFujpFh8wQ76efWZF39oSy4SyPemErvRUp",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "event_authority",
+            "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "program",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {}
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":6108}]}",
+      "unitsConsumed": 73702,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+        "Program log: CreateIdempotent",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 4437 of 399850 compute units",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: ForwardOnEnd",
+        "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:318. Error Code: NothingToForward. Error Number: 6108. Error Message: forward_on_end: less than the end sink's minimum to forward.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 69115 of 395413 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17dc"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "HuGy9S3AfnhjgXKKqUrrdG6JiSDwvyN7FcVPaWVs8h94",
+        "kind": "TokenConfig",
+        "state": null
+      },
+      {
+        "address": "5SmPV7WmxNkzPG6Qtyiwg9pX2jA5Kjyj6SGSoNGknVGk",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "AdLa77DxXWRqoacnupGdABTTyfdGpL8Q73ARJ3KBD82N",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

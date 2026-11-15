@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+  <!-- Burnticker avatar: a strip of ticker tape carrying the wordmark, with a flame rising out of it. -->
+  <defs>
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ff4d1f"/>
+      <stop offset="0.55" stop-color="#ffb000"/>
+      <stop offset="1" stop-color="#ffe08a"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ffb000"/>
+      <stop offset="1" stop-color="#fff3c4"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="800" fill="#0a0a0c"/>
+  <!-- faint dot grid: the LED board behind a ticker -->
+  <g fill="#17171c">
+    <circle cx="80" cy="80" r="4"/><circle cx="160" cy="80" r="4"/><circle cx="240" cy="80" r="4"/><circle cx="320" cy="80" r="4"/><circle cx="400" cy="80" r="4"/><circle cx="480" cy="80" r="4"/><circle cx="560" cy="80" r="4"/><circle cx="640" cy="80" r="4"/><circle cx="720" cy="80" r="4"/>
+    <circle cx="80" cy="160" r="4"/><circle cx="160" cy="160" r="4"/><circle cx="640" cy="160" r="4"/><circle cx="720" cy="160" r="4"/>
+    <circle cx="80" cy="240" r="4"/><circle cx="720" cy="240" r="4"/>
+    <circle cx="80" cy="720" r="4"/><circle cx="160" cy="720" r="4"/><circle cx="240" cy="720" r="4"/><circle cx="320" cy="720" r="4"/><circle cx="400" cy="720" r="4"/><circle cx="480" cy="720" r="4"/><circle cx="560" cy="720" r="4"/><circle cx="640" cy="720" r="4"/><circle cx="720" cy="720" r="4"/>
+    <circle cx="80" cy="640" r="4"/><circle cx="720" cy="640" r="4"/>
+  </g>
+  <!-- the flame -->
+  <path d="M400 128 C 470 210, 560 262, 548 384 C 540 452, 500 490, 462 506 C 486 462, 478 420, 440 392 C 436 436, 414 462, 386 480 C 358 462, 340 428, 346 384 C 302 420, 294 470, 318 512 C 262 486, 232 428, 240 364 C 252 268, 352 220, 400 128 Z" fill="url(#flame)"/>
+  <path d="M400 300 C 436 344, 470 372, 462 428 C 458 462, 436 486, 412 498 C 420 470, 412 448, 396 432 C 380 452, 366 478, 372 504 C 346 486, 332 452, 338 420 C 346 372, 380 338, 400 300 Z" fill="url(#core)"/>
+  <!-- the tape, tilted, with the wordmark -->
+  <g transform="rotate(-5 400 572)">
+    <rect x="-40" y="500" width="880" height="144" fill="#ffb000"/>
+    <rect x="-40" y="500" width="880" height="10" fill="#ff4d1f"/>
+    <rect x="-40" y="634" width="880" height="10" fill="#ff4d1f"/>
+    <g fill="#0a0a0c">
+      <circle cx="0" cy="522" r="7"/><circle cx="60" cy="522" r="7"/><circle cx="120" cy="522" r="7"/><circle cx="180" cy="522" r="7"/><circle cx="240" cy="522" r="7"/><circle cx="300" cy="522" r="7"/><circle cx="360" cy="522" r="7"/><circle cx="420" cy="522" r="7"/><circle cx="480" cy="522" r="7"/><circle cx="540" cy="522" r="7"/><circle cx="600" cy="522" r="7"/><circle cx="660" cy="522" r="7"/><circle cx="720" cy="522" r="7"/><circle cx="780" cy="522" r="7"/>
+      <circle cx="0" cy="622" r="7"/><circle cx="60" cy="622" r="7"/><circle cx="120" cy="622" r="7"/><circle cx="180" cy="622" r="7"/><circle cx="240" cy="622" r="7"/><circle cx="300" cy="622" r="7"/><circle cx="360" cy="622" r="7"/><circle cx="420" cy="622" r="7"/><circle cx="480" cy="622" r="7"/><circle cx="540" cy="622" r="7"/><circle cx="600" cy="622" r="7"/><circle cx="660" cy="622" r="7"/><circle cx="720" cy="622" r="7"/><circle cx="780" cy="622" r="7"/>
+    </g>
+    <text x="400" y="600" text-anchor="middle" font-family="Menlo, 'DejaVu Sans Mono', Consolas, monospace" font-size="86" font-weight="700" letter-spacing="6" fill="#0a0a0c">BURNTICKER</text>
+  </g>
+</svg>

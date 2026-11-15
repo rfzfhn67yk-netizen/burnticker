@@ -1,0 +1,8 @@
+{
+  "command": "status",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "3WzEhdXaWZVA8K21rywXzgwK3RktQzPmxsWfZvcDb9fh",
+  "exists": false
+}

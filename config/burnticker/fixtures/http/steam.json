@@ -1,0 +1,10 @@
+{
+ "fetchedAt": "2026-10-10T02:50:00Z",
+ "url": "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=730",
+ "body": {
+  "response": {
+   "player_count": 502868,
+   "result": 1
+  }
+ }
+}

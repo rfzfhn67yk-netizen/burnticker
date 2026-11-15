@@ -1,0 +1,17 @@
+{
+  "ticker": "RAYS",
+  "seriesTitle": "Tampa Bay Rays losses (MLB)",
+  "selectorKey": "catalogue:espn.team:mlb-TB-loss",
+  "supply": {
+    "initial": "1000000000",
+    "current": "975900000",
+    "source": "chain"
+  },
+  "burned": {
+    "total": "24100000",
+    "pctOfSupply": 2.41,
+    "count": 5,
+    "last30d": "24100000",
+    "lastAt": "2026-10-09"
+  }
+}

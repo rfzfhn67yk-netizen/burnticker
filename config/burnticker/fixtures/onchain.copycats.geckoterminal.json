@@ -1,0 +1,219 @@
+{
+ "fetchedAt": "2026-10-10T03:47:43Z",
+ "url": "https://api.geckoterminal.com/api/v2/search/pools?query=DEFICIT&network=solana&include=base_token&page=1",
+ "note": "Real response, keyless. Two Solana pools whose base token NAME contains 'Deficit' (GRASS 'Grass Deficit', ADHD 'Attention Deficit Hamster Degen'); neither symbol is DEFICIT; both pools created 2026-10-04/05 with $2.7K / $5.1K reserve and zero 24h traders.",
+ "body": {
+  "data": [
+   {
+    "id": "solana_68C7mK1ridTAEVB4oUAsbMBpcLqjSyJDaBCDihzvP785",
+    "type": "pool",
+    "attributes": {
+     "base_token_price_usd": "0.000003395656676",
+     "base_token_price_native_currency": "0.0000000279908036791501",
+     "quote_token_price_usd": "121.3132968682",
+     "quote_token_price_native_currency": "1.0",
+     "base_token_price_quote_token": "0.00000002799080368",
+     "quote_token_price_base_token": "35726019.5692374",
+     "address": "68C7mK1ridTAEVB4oUAsbMBpcLqjSyJDaBCDihzvP785",
+     "name": "GRASS / SOL",
+     "pool_created_at": "2026-10-04T11:30:32Z",
+     "fdv_usd": "3395.656676",
+     "market_cap_usd": null,
+     "price_change_percentage": {
+      "m5": "0",
+      "m15": "0",
+      "m30": "0",
+      "h1": "0",
+      "h6": "0",
+      "h24": "0"
+     },
+     "transactions": {
+      "m5": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "m15": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "m30": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "h1": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "h6": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "h24": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      }
+     },
+     "volume_usd": {
+      "m5": "0.0",
+      "m15": "0.0",
+      "m30": "0.0",
+      "h1": "0.0",
+      "h6": "0.0",
+      "h24": "0.0"
+     },
+     "reserve_in_usd": "2671.51"
+    },
+    "relationships": {
+     "base_token": {
+      "data": {
+       "id": "solana_5pNNia7c2LMFYp117zTrBZNSigiRUQ4SP8phsv5iJnVk",
+       "type": "token"
+      }
+     },
+     "quote_token": {
+      "data": {
+       "id": "solana_So11111111111111111111111111111111111111112",
+       "type": "token"
+      }
+     },
+     "dex": {
+      "data": {
+       "id": "pump-fun",
+       "type": "dex"
+      }
+     }
+    }
+   },
+   {
+    "id": "solana_9ZuP3a5QeE3Yu2bsHS3d4v2w86dztRyvsxAWtSdas7i3",
+    "type": "pool",
+    "attributes": {
+     "base_token_price_usd": "0.000005128683444",
+     "base_token_price_native_currency": "0.0000000432061389247326",
+     "quote_token_price_usd": "121.4825185023",
+     "quote_token_price_native_currency": "1.0",
+     "base_token_price_quote_token": "0.00000004320613892",
+     "quote_token_price_base_token": "23144859.1539747",
+     "address": "9ZuP3a5QeE3Yu2bsHS3d4v2w86dztRyvsxAWtSdas7i3",
+     "name": "ADHD / SOL",
+     "pool_created_at": "2026-10-05T06:47:40Z",
+     "fdv_usd": "5128.683444",
+     "market_cap_usd": null,
+     "price_change_percentage": {
+      "m5": "0",
+      "m15": "0",
+      "m30": "0",
+      "h1": "0",
+      "h6": "0",
+      "h24": "0"
+     },
+     "transactions": {
+      "m5": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "m15": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "m30": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "h1": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "h6": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      },
+      "h24": {
+       "buys": 0,
+       "sells": 0,
+       "buyers": 0,
+       "sellers": 0
+      }
+     },
+     "volume_usd": {
+      "m5": "0.0",
+      "m15": "0.0",
+      "m30": "0.0",
+      "h1": "0.0",
+      "h6": "0.0",
+      "h24": "0.0"
+     },
+     "reserve_in_usd": "5123.9281"
+    },
+    "relationships": {
+     "base_token": {
+      "data": {
+       "id": "solana_6oE3dS5EDeawoWvJFM2kV19gi6YL9FkgTBTMWSR8QhuU",
+       "type": "token"
+      }
+     },
+     "quote_token": {
+      "data": {
+       "id": "solana_So11111111111111111111111111111111111111112",
+       "type": "token"
+      }
+     },
+     "dex": {
+      "data": {
+       "id": "meteora-dbc",
+       "type": "dex"
+      }
+     }
+    }
+   }
+  ],
+  "included": [
+   {
+    "id": "solana_5pNNia7c2LMFYp117zTrBZNSigiRUQ4SP8phsv5iJnVk",
+    "type": "token",
+    "attributes": {
+     "address": "5pNNia7c2LMFYp117zTrBZNSigiRUQ4SP8phsv5iJnVk",
+     "name": "Grass Deficit",
+     "symbol": "GRASS",
+     "decimals": 6,
+     "image_url": "https://assets.geckoterminal.com/4mxurei5me0qw4den0bc9owzziqu",
+     "coingecko_coin_id": null
+    }
+   },
+   {
+    "id": "solana_6oE3dS5EDeawoWvJFM2kV19gi6YL9FkgTBTMWSR8QhuU",
+    "type": "token",
+    "attributes": {
+     "address": "6oE3dS5EDeawoWvJFM2kV19gi6YL9FkgTBTMWSR8QhuU",
+     "name": "Attention Deficit Hamster Degen",
+     "symbol": "ADHD",
+     "decimals": 9,
+     "image_url": "https://assets.geckoterminal.com/j2vk65sphasns9pqpz2u15qhaek3",
+     "coingecko_coin_id": null
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,15 @@
+10:15:28 {"dir":"buy","amountIn":"6000000","quotedOut":"1221728928940","solRes":"1000000001","sim":null,"sig":"4h1afBVG8Mjp4GJfhbxWcNbeugRiBsYD9d2PuXVDUUs8NUdSTNTPC1MxmSEGDgsnv5NfteuWFKtvaoLBJw5BHM3g","err":null}
+10:18:03 {"dir":"sell","amountIn":"1200000000000","quotedOut":"5777368","solRes":"1005985001","sim":null,"sig":"2UpaPGKDsLVWzrMo4tiYAUg1uXkPKF7j2oMg5GVUVwoogZEEhpkJN6TZurUQXw56iMGmdfR3MmxyPkVrTBPbtW8C","err":null}
+10:20:35 {"dir":"buy","amountIn":"6000000","quotedOut":"1221365218469","solRes":"1000178671","sim":null,"sig":"3TeEa9kYhxEth8inPctGaiSTKv97YnqEVfZmKrhmXLk8XMMHsDJUXLTkAzrzXCBb8bwH7MURJkza5q3AV3RsNzKB","err":null}
+10:23:07 {"dir":"sell","amountIn":"1200000000000","quotedOut":"5779079","solRes":"1006178671","sim":null,"sig":"56KLhmg2xNo5uZpPwcNB49TzfZpgHY9dtPE94xayYsdP2cuxJBaCeuKjwRygtuzhgdAThafDmgghgQ7oNef3ggpu","err":null}
+10:25:39 {"dir":"buy","amountIn":"6000000","quotedOut":"1221005873337","solRes":"1000370622","sim":null,"sig":"fayUS6YFkn58e4xC5RBLHqTkbez6spkZeKGCnE1M2hkvBKcj812qut6ssUAwp1t14voU6SJfRgWn68ywjYDuoX8","err":null}
+10:28:11 {"dir":"sell","amountIn":"1200000000000","quotedOut":"5780770","solRes":"1006311512","sim":null,"sig":"Z2nAMjs7sg1zEAMQm8jw2qGxKgBb7SKtnvramLys3Kh4fpvSfNWBzkner1BbNwbUFGg1dmVudth79yeCDrPVe5G","err":null}
+10:30:44 {"dir":"buy","amountIn":"6000000","quotedOut":"1220650840679","solRes":"1000501763","sim":null,"sig":"3LqNEPToG8oeNTQvYK2394UmFu99Pncj4jQZyrN7qjLXWiv5Q66QiS8LNEwfiUMHrtYVyFeBPaoKprpnfJJZnVvs","err":null}
+10:33:16 {"dir":"sell","amountIn":"1200000000000","quotedOut":"5782441","solRes":"1006501763","sim":null,"sig":"qG4Jmr2jFMjX3PbLNwQuqy8oDi28eJiDPpuwJ8ymKxpNTy6wyvFw917U9GYQEfGXPw8rkCATfqZjaAzQZVsNShF","err":null}
+10:35:49 {"dir":"buy","amountIn":"6000000","quotedOut":"1220300066834","solRes":"1000690334","sim":null,"sig":"3G9VM2bfwTWd4mq4e1aD248ShgtLNuR9uruLow5mLk6ThJ1oimbDNSwhAzCciUQ5htEf6JZW1RdQh21tAUpdMEAg","err":null}
+10:38:21 {"dir":"sell","amountIn":"1200000000000","quotedOut":"6016151","solRes":"1026763592","sim":null,"sig":"548aT75bRsD9ohyyPxWty75fqyTXUaR359Cp3JnXL4RRAc2fFSneWxsksHrUuC3hcqf6y8iTJmsvVagESVCP9idb","err":null}
+10:40:53 {"dir":"buy","amountIn":"6000000","quotedOut":"1173167954208","solRes":"1020717287","sim":null,"sig":"3fE8Po6wMPmHxV9AfL2oQCG7t1AHTbLuxkH3u7Cky5LaVyPeizSYSpAcm11hcgRnawfLH5UouUd7g5TcYWkqroZ","err":null}
+10:43:26 {"dir":"sell","amountIn":"1200000000000","quotedOut":"6015082","solRes":"1026717287","sim":null,"sig":"2EZ1CQ5GDaUDaMy6h8zFM1SGYz64XGQnFQ5D1qYEmqtsoh2eXxg74HPi5bCagzjkFyJ6ES1pKd8wTX4D3ddsuD3V","err":null}
+10:45:58 {"dir":"buy","amountIn":"6000000","quotedOut":"1173375253000","solRes":"1020672057","sim":null,"sig":"hvY48BhthRUFDDxX1NWG5yedtHGfnZZ7RRC2ThiQgQbyZka32F2EzPZSJqsMjGf1EgFa4xc3FTwGhxzMmhFSKSM","err":null}
+10:48:30 {"dir":"sell","amountIn":"1200000000000","quotedOut":"6014025","solRes":"1026561421","sim":null,"sig":"4AS6owBp8EihzyjkDrymVG39sS2Z2smvXJk7DwUhHki8u7AAkQFQC1PxmcfYjeajc1M57hPR3yYfBx77HRaC1aTw","err":null}
+done

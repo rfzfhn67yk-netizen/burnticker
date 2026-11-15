@@ -1,0 +1,517 @@
+{
+ "source": "registry backup 2026-10-19T18:22Z, one row per distinct locked rule (ticker, name, statement without its footer, rule)",
+ "coins": [
+  {
+   "ticker": "NEXTM6",
+   "name": "Next Magnitude 6",
+   "statement": "$NEXTM6 burns once on the next earthquake of magnitude 6 or more anywhere in the world. On the first day after launch with an earthquake of magnitude 6 or more anywhere in the world, the burn pool spends 100% buying $NEXTM6 on Raydium in slices sized to the pool's liquidity and burns it once, with a receipt on chain. Only events the USGS has reviewed count, and each UTC day is read two days after it ends. The reading is a magnitude and nothing else. This coin settles on the U.S. Geological Survey's own published data, a single official source. A day the feed is unavailable is held, not counted. This coin resolves once. Then whatever is left burns $DEFICIT, and the coin retires. If the result is voided, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": null,
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 1
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "usgs.quakenext:6",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "TWOCUTS",
+   "name": "Two Fed Cuts 2026",
+   "statement": "$TWOCUTS burns if 2 Fed rate cuts happen in 2026. If it happens, the burn pool spends 100% buying $TWOCUTS on Raydium in slices sized to the pool's liquidity and burns it once, with a receipt on chain. It settles on Polymarket's on-chain payout. Polymarket states it resolves this from the Federal Reserve. The result becomes final after the dispute window of about 2 hours. Nothing happens otherwise. This coin resolves once. Then whatever is left burns $DEFICIT, and the coin retires. If the result is voided, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": {
+     "onNo": null,
+     "onYes": {
+      "fractionOfPool": 1
+     }
+    },
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "binary",
+    "market": "0xe0d9f508a249e0070db06eb7d1e1fb17eb23c963f6fb722c4c3f81e23240c1cd",
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "polymarket",
+    "pair": null,
+    "reserveSol": "0.02",
+    "scalar": null,
+    "schema": "burnticker.rules/v1",
+    "series": null,
+    "vault": null
+   }
+  },
+  {
+   "ticker": "DENWIN",
+   "name": "Broncos Wins vs Seahawks",
+   "statement": "$DENWIN burns if the Broncos win against the Seahawks. If the Broncos win against the Seahawks on Oct 15, 2026, the burn pool spends 100% buying $DENWIN on Raydium in slices sized to the pool's liquidity and burns it once, with a receipt on chain. The game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. Nothing happens otherwise, and a tie burns nothing. This coin resolves once, on Oct 15, 2026. Then whatever is left burns the winning coin, or $DEFICIT if there isn't one, and the coin retires. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. One game, two teams: the winning team's coin burns its own pool on the result and takes the losing team's coin's pool at the end. After a draw, both pools go to $DEFICIT's burn. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": {
+     "clause": "both-or-neither",
+     "counterpartMint": "Bg545NmTcascUHGpH8HcJpTgrasUqFZEDNhYhuTbBURN",
+     "game": {
+      "series": [
+       "espn.game:nfl-2475453-SEA-win",
+       "espn.game:nfl-2475453-DEN-win"
+      ]
+     },
+     "pairId": "seawin-vs-denwin-espn-game-nfl-2475453-s",
+     "side": "B",
+     "voidBy": "2026-11-14",
+     "winnerTakesBurn": true
+    },
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 1
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.game:nfl-2475453-DEN-win",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "SEAWIN",
+   "name": "Seahawks Wins vs Broncos",
+   "statement": "$SEAWIN burns if the Seahawks win at the Broncos. If the Seahawks win at the Broncos on Oct 15, 2026, the burn pool spends 100% buying $SEAWIN on Raydium in slices sized to the pool's liquidity and burns it once, with a receipt on chain. The game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. Nothing happens otherwise, and a tie burns nothing. This coin resolves once, on Oct 15, 2026. Then whatever is left burns the winning coin, or $DEFICIT if there isn't one, and the coin retires. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. One game, two teams: the winning team's coin burns its own pool on the result and takes the losing team's coin's pool at the end. After a draw, both pools go to $DEFICIT's burn. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": {
+     "clause": "both-or-neither",
+     "counterpartMint": null,
+     "game": {
+      "series": [
+       "espn.game:nfl-2475453-SEA-win",
+       "espn.game:nfl-2475453-DEN-win"
+      ]
+     },
+     "pairId": "seawin-vs-denwin-espn-game-nfl-2475453-s",
+     "side": "A",
+     "voidBy": "2026-11-14",
+     "winnerTakesBurn": true
+    },
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 1
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.game:nfl-2475453-SEA-win",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "BALWIN",
+   "name": "Ravens Wins vs Steelers",
+   "statement": "$BALWIN burns when the Ravens beat the Steelers. For each of those wins in the 2026 season, playoffs included, 2% of the burn pool is spent on this coin in its Raydium pool and every token it gets is burned, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. When the Steelers win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side. This coin covers the 2026 season only, including the playoffs. After both teams' last game, whatever is left burns the coin of the team that won more of these games, or $DEFICIT if that coin is not live, and the coin retires. If neither team won more of these games, or the result is voided or the season is cancelled, nothing moves at the end and whatever is left burns down on this coin over four weeks. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": {
+     "clause": "both-or-neither",
+     "counterpartMint": "33fGPWrMaLjfX69wsnd3ruaQtGVMU3kKcTsBTnE4ggid",
+     "pairId": "pitwin-vs-balwin-espn-team-nfl-pit-23-2",
+     "side": "B",
+     "voidBy": "2026-11-14",
+     "winnerTakesBurn": true
+    },
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 0.02
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.team:nfl-BAL.33-win-m2026.PIT.23",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "PITWIN",
+   "name": "Steelers Wins vs Ravens",
+   "statement": "$PITWIN burns when the Steelers beat the Ravens. For each of those wins in the 2026 season, playoffs included, 2% of the burn pool is spent on this coin in its Raydium pool and every token it gets is burned, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. When the Ravens win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side. This coin covers the 2026 season only, including the playoffs. After both teams' last game, whatever is left burns the coin of the team that won more of these games, or $DEFICIT if that coin is not live, and the coin retires. If neither team won more of these games, or the result is voided or the season is cancelled, nothing moves at the end and whatever is left burns down on this coin over four weeks. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": {
+     "clause": "both-or-neither",
+     "counterpartMint": null,
+     "pairId": "pitwin-vs-balwin-espn-team-nfl-pit-23-2",
+     "side": "A",
+     "voidBy": "2026-11-14",
+     "winnerTakesBurn": true
+    },
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 0.02
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.team:nfl-PIT.23-win-m2026.BAL.33",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "CLARITY",
+   "name": "Clarity Act Signed",
+   "statement": "$CLARITY burns if Clarity Act (H.R.3633) signed into law in 2026. If it happens, the burn pool spends 100% buying $CLARITY on Raydium in slices sized to the pool's liquidity and burns it once, with a receipt on chain. It settles on Polymarket's on-chain payout. Polymarket states it resolves this from the Congress website\u2019s legislation tracker and other official information from the government of the United States, however other credible reporting may be used. The result becomes final after the dispute window of about 2 hours. Nothing happens otherwise. This coin resolves once. Then whatever is left burns $DEFICIT, and the coin retires. If the result is voided, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": {
+     "onNo": null,
+     "onYes": {
+      "fractionOfPool": 1
+     }
+    },
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "binary",
+    "market": "0x9cb23d04b2ded06147482076688b69b487a8d982c63ebdda2ab3678cf27cf390",
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "polymarket",
+    "pair": null,
+    "reserveSol": "0.02",
+    "scalar": null,
+    "schema": "burnticker.rules/v1",
+    "series": null,
+    "vault": null
+   }
+  },
+  {
+   "ticker": "PHINFLWIN",
+   "name": "Eagles 2026 Wins",
+   "statement": "$PHINFLWIN burns when the Eagles win. This coin burns 5% of its pool every game the Eagles win, through the last game of the 2026 postseason. Each burn buys $PHINFLWIN on Raydium, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. A second independent source confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 season only. If the Eagles win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": null,
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 0.05
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.team:nfl-PHI.21-win-s2026",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "CLEMLBWIN",
+   "name": "Guardians 2026 Wins",
+   "statement": "$CLEMLBWIN burns when the Guardians win. This coin burns 2% of its pool every game the Guardians win, through the last game of the 2026 postseason. Each burn buys $CLEMLBWIN on Raydium, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 season only. If the Guardians win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": null,
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 0.02
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.team:mlb-CLE.5-win-s2026",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "BALWIN",
+   "name": "Ravens Wins vs Steelers",
+   "statement": "$BALWIN burns when the Ravens beat the Steelers. For each of those wins in the 2026 season, playoffs included, 2% of the burn pool is spent on this coin in its Raydium pool and every token it gets is burned, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. When the Steelers win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side. This coin covers the 2026 season only, including the playoffs. After both teams' last game, whatever is left burns the coin of the team that won more of these games, or $DEFICIT if that coin is not live, and the coin retires. If neither team won more of these games, or the result is voided or the season is cancelled, nothing moves at the end and whatever is left burns down on this coin over four weeks. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": {
+     "clause": "both-or-neither",
+     "counterpartMint": "3ZFbJfbBzZq6U7J636mp8YwaL9rtnsrxA1QkPVsWBURN",
+     "pairId": "pitwin-vs-balwin-espn-team-nfl-pit-23-wi",
+     "side": "B",
+     "voidBy": "2026-11-14",
+     "winnerTakesBurn": true
+    },
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 0.02
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.team:nfl-BAL.33-win-m2026.PIT.23",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "PITWIN",
+   "name": "Steelers Wins vs Ravens",
+   "statement": "$PITWIN burns when the Steelers beat the Ravens. For each of those wins in the 2026 season, playoffs included, 2% of the burn pool is spent on this coin in its Raydium pool and every token it gets is burned, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. When the Ravens win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side. This coin covers the 2026 season only, including the playoffs. After both teams' last game, whatever is left burns the coin of the team that won more of these games, or $DEFICIT if that coin is not live, and the coin retires. If neither team won more of these games, or the result is voided or the season is cancelled, nothing moves at the end and whatever is left burns down on this coin over four weeks. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": {
+     "clause": "both-or-neither",
+     "counterpartMint": null,
+     "pairId": "pitwin-vs-balwin-espn-team-nfl-pit-23-wi",
+     "side": "A",
+     "voidBy": "2026-11-14",
+     "winnerTakesBurn": true
+    },
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 0.02
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.team:nfl-PIT.23-win-m2026.BAL.33",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "BALWIN",
+   "name": "Ravens Wins vs Steelers",
+   "statement": "$BALWIN burns when the Ravens beat the Steelers. For each of those wins in the 2026 season, playoffs included, 2% of the burn pool is spent on this coin in its Raydium pool and every token it gets is burned, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. When the Steelers win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side. This coin covers the 2026 season only, including the playoffs. After both teams' last game, whatever is left burns the coin of the team that won more of these games, or $DEFICIT if that coin is not live, and the coin retires. If neither team won more of these games, or the result is voided or the season is cancelled, nothing moves at the end and whatever is left burns down on this coin over four weeks. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": {
+     "clause": "both-or-neither",
+     "counterpartMint": "FuMvn9jrn71pHS7p4q1NSjgbqEKR6EDzgpSWSyKxWAur",
+     "pairId": "pitwin-vs-balwin-espn-team-nfl-pit-23-wi",
+     "side": "B",
+     "voidBy": "2026-11-14",
+     "winnerTakesBurn": true
+    },
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 0.02
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.team:nfl-BAL.33-win-m2026.PIT.23",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "BALWIN",
+   "name": "Ravens Wins vs Steelers",
+   "statement": "$BALWIN burns when the Ravens beat the Steelers. For each of those wins in the 2026 season, playoffs included, 2% of the burn pool is spent on this coin in its Raydium pool and every token it gets is burned, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. When the Steelers win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side. This coin covers the 2026 season only, including the playoffs. After both teams' last game, whatever is left burns the coin of the team that won more of these games, or $DEFICIT if that coin is not live, and the coin retires. If neither team won more of these games, or the result is voided or the season is cancelled, nothing moves at the end and whatever is left burns down on this coin over four weeks. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": {
+     "clause": "both-or-neither",
+     "counterpartMint": "23aixXSsQmbV3vnKWtqPAVHr5Pyn77ogAtqVD17Vburn",
+     "pairId": "pitwin-vs-balwin-espn-team-nfl-pit-23-wi",
+     "side": "B",
+     "voidBy": "2026-11-14",
+     "winnerTakesBurn": true
+    },
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 0.02
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.team:nfl-BAL.33-win-m2026.PIT.23",
+    "vault": null
+   }
+  },
+  {
+   "ticker": "TIMINGKC",
+   "name": "Timing test",
+   "statement": "$TIMINGKC burns when the Chiefs win. For every Chiefs win in the 2026 season, the burn pool spends 5% buying $TIMINGKC on Raydium and burns it, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. A second independent source confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 Chiefs season only, including the playoffs. After the Chiefs' last game, whatever is left burns $DEFICIT, and the coin retires. It does not continue into 2027. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.",
+   "rule": {
+    "binary": null,
+    "filter": {},
+    "floorUsd": "1",
+    "kind": "scalar",
+    "market": null,
+    "onEnd": {
+     "endSink": true,
+     "sweepThresholdLamports": 50000000,
+     "windDownDays": 28
+    },
+    "onVoid": "skip",
+    "oracle": "catalogue",
+    "pair": null,
+    "reserveSol": "0.02",
+    "scalar": {
+     "baseline": 0,
+     "direction": "up",
+     "perUnit": {
+      "fractionOfPool": 0.05
+     },
+     "unit": 1
+    },
+    "schema": "burnticker.rules/v1",
+    "series": "espn.team:nfl-KC.12-win-s2026",
+    "vault": null
+   }
+  }
+ ]
+}

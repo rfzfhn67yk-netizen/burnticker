@@ -1,0 +1,183 @@
+{
+ "fetchedAt": "2026-10-12T19:25:00Z",
+ "note": "Real response, captured read-only. The keeper's URL asks for the last 60 days of signing dates; this capture asked from 2026-08-01. Fields as requested.",
+ "url": "https://www.federalregister.gov/api/v1/documents.json?conditions[type][]=PRESDOCU&conditions[presidential_document_type][]=executive_order&conditions[signing_date][gte]=2026-08-01&per_page=1000&order=newest&fields[]=document_number&fields[]=executive_order_number&fields[]=signing_date&fields[]=publication_date&fields[]=title&fields[]=type&fields[]=subtype",
+ "body": {
+  "description": "Documents signed on or after 08/01/2026, of type Presidential Document, and of presidential document type Executive Order",
+  "count": 19,
+  "total_pages": 1,
+  "results": [
+   {
+    "document_number": "2026-20855",
+    "executive_order_number": "14435",
+    "signing_date": "2026-10-05",
+    "publication_date": "2026-10-09",
+    "title": "Emergency Tax Relief on Diesel Fuel",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-20321",
+    "executive_order_number": "14434",
+    "signing_date": "2026-09-29",
+    "publication_date": "2026-10-02",
+    "title": "Inaugurating the Era of Super Intelligence",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-20320",
+    "executive_order_number": "14433",
+    "signing_date": "2026-09-29",
+    "publication_date": "2026-10-02",
+    "title": "Eliminating Disease-Carrying Pests and Restoring Enjoyment of the Great Outdoors",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-20319",
+    "executive_order_number": "14432",
+    "signing_date": "2026-09-29",
+    "publication_date": "2026-10-02",
+    "title": "Streamlining Access to Government Services Through America.gov",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-19555",
+    "executive_order_number": "14431",
+    "signing_date": "2026-09-18",
+    "publication_date": "2026-09-23",
+    "title": "Enhancing Program Integrity and Interagency Coordination in the Administration of the H-1B Nonimmigrant Visa Program",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-19417",
+    "executive_order_number": "14430",
+    "signing_date": "2026-09-17",
+    "publication_date": "2026-09-22",
+    "title": "Restoring American Saltwater Angling and Recreation",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-19416",
+    "executive_order_number": "14429",
+    "signing_date": "2026-09-17",
+    "publication_date": "2026-09-22",
+    "title": "Reinvigorating America's Hunting Heritage",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-19335",
+    "executive_order_number": "14428",
+    "signing_date": "2026-09-16",
+    "publication_date": "2026-09-21",
+    "title": "Providing Meaningful Water Quality Improvements Through Collaboration and Oversight of Federal Support",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-18739",
+    "executive_order_number": "14427",
+    "signing_date": "2026-09-08",
+    "publication_date": "2026-09-11",
+    "title": "Adjusting Certain Delegations Under the Defense Production Act",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-18738",
+    "executive_order_number": "14426",
+    "signing_date": "2026-09-08",
+    "publication_date": "2026-09-11",
+    "title": "Accelerating Access to Veterans' Benefits and Employment Opportunities",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-18571",
+    "executive_order_number": "14425",
+    "signing_date": "2026-09-04",
+    "publication_date": "2026-09-10",
+    "title": "Supporting America's Ranchers",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-18567",
+    "executive_order_number": "14424",
+    "signing_date": "2026-09-04",
+    "publication_date": "2026-09-10",
+    "title": "Promoting Fair Competition in Livestock Markets and Expanding Market Access for American Meat Producers",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-18141",
+    "executive_order_number": "14423",
+    "signing_date": "2026-08-28",
+    "publication_date": "2026-09-03",
+    "title": "Establishing the United States Space Academy",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-18020",
+    "executive_order_number": "14422",
+    "signing_date": "2026-08-27",
+    "publication_date": "2026-09-02",
+    "title": "Honoring the American History of the Great Lakes and Renaming Lake Ontario as Lake America",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-17843",
+    "executive_order_number": "14421",
+    "signing_date": "2026-08-26",
+    "publication_date": "2026-08-31",
+    "title": "Declaring a National Emergency To Secure the United States Bulk-Power System",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-16730",
+    "executive_order_number": "14420",
+    "signing_date": "2026-08-10",
+    "publication_date": "2026-08-14",
+    "title": "Delivering Gold Standard Childhood Vaccine Recommendations for Americans",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-16404",
+    "executive_order_number": "14419",
+    "signing_date": "2026-08-06",
+    "publication_date": "2026-08-11",
+    "title": "Ending Birth Tourism",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-16403",
+    "executive_order_number": "14418",
+    "signing_date": "2026-08-06",
+    "publication_date": "2026-08-11",
+    "title": "Continuing To Protect the Meaning and Value of American Citizenship",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   },
+   {
+    "document_number": "2026-16125",
+    "executive_order_number": "14417",
+    "signing_date": "2026-08-03",
+    "publication_date": "2026-08-06",
+    "title": "Establishing the President's Military Spouse Commission",
+    "type": "Presidential Document",
+    "subtype": "Executive Order"
+   }
+  ]
+ }
+}

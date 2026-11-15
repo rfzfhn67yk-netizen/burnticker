@@ -1,0 +1,133 @@
+{
+  "case": "x66-relink-after-unlink",
+  "expected": "PairTerminal",
+  "observed": "PairTerminal",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR link-pair --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --pair 792sAKMeHvZCxZpZeutjCWUt4cJkybLmRbgbbh8XgYD2",
+  "simulationErr": "{\"InstructionError\":[1,{\"Custom\":6098}]}",
+  "errorLogLines": [
+    "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/pair.rs:226. Error Code: PairTerminal. Error Number: 6098. Error Message: link_pair: the pair_curve Pair is voided or one of its sides is refunding.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d2"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "link-pair",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "mintA": "AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L",
+    "mintB": "ExNU8xg4vVNEr9G9aX7VDpFoHUQjQyjRibvohyRtBHqi",
+    "linkA": "7w645yWibhrACcsY1HWPZTvH5nhnVnVCSTsEqfYv2nmm",
+    "linkB": "DBQ74FJCPxK7MpcQDbuN4BpCKuKrEvnUgCJvAVuifraK",
+    "instructions": [
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "link_pair",
+        "accounts": [
+          {
+            "name": "payer",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "name": "pair",
+            "pubkey": "792sAKMeHvZCxZpZeutjCWUt4cJkybLmRbgbbh8XgYD2",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "config_a",
+            "pubkey": "9TxKcKw2XZUFFw8nHrR8VXkETegeFKkYYdg6AuPbqHot",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "config_b",
+            "pubkey": "BgbS1LmX4VM1rJfboFwtdvEDc8SFzPyUPSX4FSJ7PJra",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "link_a",
+            "pubkey": "7w645yWibhrACcsY1HWPZTvH5nhnVnVCSTsEqfYv2nmm",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "link_b",
+            "pubkey": "DBQ74FJCPxK7MpcQDbuN4BpCKuKrEvnUgCJvAVuifraK",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "event_authority",
+            "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "program",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {}
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[1,{\"Custom\":6098}]}",
+      "unitsConsumed": 30028,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: LinkPair",
+        "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/pair.rs:226. Error Code: PairTerminal. Error Number: 6098. Error Message: link_pair: the pair_curve Pair is voided or one of its sides is refunding.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 29878 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d2"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "9TxKcKw2XZUFFw8nHrR8VXkETegeFKkYYdg6AuPbqHot",
+        "kind": "TokenConfig",
+        "state": null
+      },
+      {
+        "address": "B8QcKrGj5YVmMUb8CMewS3cgZExnmZB1o9PoXy1xxXT8",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "BgbS1LmX4VM1rJfboFwtdvEDc8SFzPyUPSX4FSJ7PJra",
+        "kind": "TokenConfig",
+        "state": null
+      },
+      {
+        "address": "8ndLTxG6FXWbGUerHB1WdhsyoYwKFwVrsRhCky8vRUr7",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "7w645yWibhrACcsY1HWPZTvH5nhnVnVCSTsEqfYv2nmm",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "DBQ74FJCPxK7MpcQDbuN4BpCKuKrEvnUgCJvAVuifraK",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

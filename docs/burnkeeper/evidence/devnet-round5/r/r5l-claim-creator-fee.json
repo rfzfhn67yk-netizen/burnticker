@@ -1,0 +1,211 @@
+{
+  "command": "claim-launchlab-creator-fee",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": false,
+  "instructions": [
+    {
+      "program": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+      "accounts": [
+        {
+          "pubkey": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "pubkey": "7f4HeHqCREkxWUyQWWqacR33Zs9j3y7TDvMp3iautS4q",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "pubkey": "ARDGd7LT11CTQKgsQa7tNnpjQWQdQPpB42SKXoToygUf",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "pubkey": "So11111111111111111111111111111111111111112",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "dataHex": "01"
+    },
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "claim_launchlab_creator_fee",
+      "accounts": [
+        {
+          "name": "payer",
+          "pubkey": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+          "signer": true,
+          "writable": false
+        },
+        {
+          "name": "config",
+          "pubkey": "GS3ZhnhdpAnCNdJEewuHxDCRWLmm6vQFGx62z6vNyDrL",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "fee_vault",
+          "pubkey": "ARDGd7LT11CTQKgsQa7tNnpjQWQdQPpB42SKXoToygUf",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_wsol",
+          "pubkey": "7f4HeHqCREkxWUyQWWqacR33Zs9j3y7TDvMp3iautS4q",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "wsol_mint",
+          "pubkey": "So11111111111111111111111111111111111111112",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "fee_tokens",
+          "pubkey": "DrsF2r59LcfeXit9jKLgXoAptxwVDjvnw6Q3uZLYsUZ3",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "launchlab_vault_authority",
+          "pubkey": "AnWhtzWn6RxXXYAJW3UCMYvyvC7hGNWHUJzVWKfT2GBX",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "launchlab_creator_fee_vault",
+          "pubkey": "37zp5TYVMymQ6asxYTer3gfdb3XbHN2uye7zvDfdVoai",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "launchlab_program",
+          "pubkey": "DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "token_program",
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "associated_token_program",
+          "pubkey": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {}
+    }
+  ],
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 80725,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+      "Program log: CreateIdempotent",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 179 of 389922 compute units",
+      "Program return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: Initialize the associated token account",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 384833 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 229 of 382371 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 18012 of 399850 compute units",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: ClaimLaunchlabCreatorFee",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 invoke [2]",
+      "Program log: Instruction: ClaimCreatorFee",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [3]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 112 of 326775 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 consumed 20638 of 346817 compute units",
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 2253 of 322312 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 62563 of 381838 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "7f4HeHqCREkxWUyQWWqacR33Zs9j3y7TDvMp3iautS4q",
+      "kind": "token",
+      "state": {
+        "amount": "250000"
+      }
+    },
+    {
+      "address": "ARDGd7LT11CTQKgsQa7tNnpjQWQdQPpB42SKXoToygUf",
+      "kind": "lamports",
+      "state": {
+        "lamports": 20000000
+      }
+    }
+  ],
+  "sent": {
+    "signature": "3UwyGgwvWnr6pg8KGN9ehCXQvcgdhn8PB4B8yEd8mZyAa4qBF3AbzfQ2casRFGVmihxqdBRoKWunaAydUCtitTHN",
+    "err": null
+  },
+  "accountsAfterSend": [
+    {
+      "address": "7f4HeHqCREkxWUyQWWqacR33Zs9j3y7TDvMp3iautS4q",
+      "kind": "token",
+      "state": {
+        "amount": "250000"
+      }
+    },
+    {
+      "address": "ARDGd7LT11CTQKgsQa7tNnpjQWQdQPpB42SKXoToygUf",
+      "kind": "lamports",
+      "state": {
+        "lamports": 20000000
+      }
+    }
+  ]
+}

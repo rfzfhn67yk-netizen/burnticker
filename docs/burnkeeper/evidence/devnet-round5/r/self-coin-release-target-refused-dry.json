@@ -1,0 +1,131 @@
+{
+  "command": "release-target",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": true,
+  "flagship": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+  "instructions": [
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "release_target",
+      "accounts": [
+        {
+          "name": "cranker",
+          "pubkey": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+          "signer": true,
+          "writable": false
+        },
+        {
+          "name": "platform",
+          "pubkey": "EXz6enAb7mSUfC1bWJstF96uLZiCSdFcLLSQ9cwhhxx6",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "config",
+          "pubkey": "QAHUpRFQzz9EkWgrGBMJ69svY55GaDB1XSmGg6SMEmx",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "burn_target",
+          "pubkey": "8eF6rknbBD4GrWkR1Q4RzQSEMu5Vgw5uSRV3E8an1jSR",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "fee_vault",
+          "pubkey": "HXEXbwJFENsRFv65XQqBKGuXbYK3jTAb9Am7YxW8S8cm",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_wsol",
+          "pubkey": "HPkh76YNNCD9ZU4Z6hPc36viNZaEeeziLV89oEmUQXWB",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "flagship_config",
+          "pubkey": "FqfwxFKaiLRaK1HAsBsRRkXAq3nzbEt92fX9qWQTZYPh",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "flagship_fee_vault",
+          "pubkey": "3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "flagship_fee_wsol",
+          "pubkey": "4VcsuCXw3sQqWm4Sv36X7hwkup9owSXcjThwSibtCTzk",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "memo_program",
+          "pubkey": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {}
+    }
+  ],
+  "simulation": {
+    "err": "{\"InstructionError\":[1,{\"Custom\":3012}]}",
+    "unitsConsumed": 16651,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: ReleaseTarget",
+      "Program log: AnchorError caused by account: burn_target. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 16501 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0xbc4"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "QAHUpRFQzz9EkWgrGBMJ69svY55GaDB1XSmGg6SMEmx",
+      "kind": "TokenConfig",
+      "state": null
+    },
+    {
+      "address": "HXEXbwJFENsRFv65XQqBKGuXbYK3jTAb9Am7YxW8S8cm",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a",
+      "kind": "lamports",
+      "state": null
+    }
+  ]
+}

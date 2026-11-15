@@ -1,0 +1,10 @@
+{
+ "fetchedAt": "2026-10-10T02:50:00Z",
+ "url": "https://api.eia.gov/v2/petroleum/pri/gnd/data/?frequency=weekly&data[0]=value&facets[series][]=EMM_EPMR_PTE_NUS_DPG&sort[0][column]=period&sort[0][direction]=desc&length=5",
+ "body": {
+  "error": {
+   "code": "API_KEY_MISSING",
+   "message": "No api_key was supplied.  Please register for one at https://www.eia.gov/opendata/register.php"
+  }
+ }
+}

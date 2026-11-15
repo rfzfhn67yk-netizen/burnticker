@@ -1,0 +1,99 @@
+{
+ "fetchedAt": "2026-10-13T00:12:38Z",
+ "note": "Real response, captured read-only: USGS HANS Volcano Activity Notices sent from 2026-03-05 to 2026-03-20 (a window with a raise to WARNING at Kilauea). Trimmed like usgs.van.json.",
+ "url": "https://volcanoes.usgs.gov/hans-public/api/search/search",
+ "request": {
+  "obsAbbr": "",
+  "noticeTypeCd": "VAN",
+  "volcCd": "",
+  "startUnixtime": 1772668800,
+  "endUnixtime": 1773964800,
+  "searchText": "",
+  "pageIndex": 0
+ },
+ "body": {
+  "noticeTotal": 10,
+  "noticeData": [
+   {
+    "sentUtc": "2026-03-19 01:15:20",
+    "sentUnixtime": 1773882920,
+    "noticeTypeCd": "VAN",
+    "volcCds": "hi3",
+    "noticeIdentifier": "DOI-USGS-HVO-2026-03-19T01:05:49+00:00",
+    "noticeHtml": "Volcano: <b>Kilauea</b> (VNUM #332010)<br/>Current Volcano Alert Level: WATCH"
+   },
+   {
+    "sentUtc": "2026-03-16 00:47:22",
+    "sentUnixtime": 1773622042,
+    "noticeTypeCd": "VAN",
+    "volcCds": "ak147",
+    "noticeIdentifier": "DOI-USGS-AVO-2026-03-16T00:44:32+00:00",
+    "noticeHtml": "Volcano: <b>Katmai</b> (VNUM #312170)<br/>Current Volcano Alert Level: NORMAL"
+   },
+   {
+    "sentUtc": "2026-03-15 01:36:53",
+    "sentUnixtime": 1773538613,
+    "noticeTypeCd": "VAN",
+    "volcCds": "ak17",
+    "noticeIdentifier": "DOI-USGS-AVO-2026-03-15T01:31:03+00:00",
+    "noticeHtml": "Volcano: <b>Atka volcanic complex</b> (VNUM #311160)<br/>Current Volcano Alert Level: ADVISORY<br/>Previous Volcano Alert Level: WATCH"
+   },
+   {
+    "sentUtc": "2026-03-15 01:16:18",
+    "sentUnixtime": 1773537378,
+    "noticeTypeCd": "VAN",
+    "volcCds": "ak17",
+    "noticeIdentifier": "DOI-USGS-AVO-2026-03-15T00:30:32+00:00",
+    "noticeHtml": "Volcano: <b>Atka volcanic complex</b> (VNUM #311160)<br/>Current Volcano Alert Level: WATCH<br/>Previous Volcano Alert Level: NORMAL"
+   },
+   {
+    "sentUtc": "2026-03-11 16:12:35",
+    "sentUnixtime": 1773245555,
+    "noticeTypeCd": "VAN",
+    "volcCds": "ak252",
+    "noticeIdentifier": "DOI-USGS-AVO-2026-03-11T15:53:34+00:00",
+    "noticeHtml": "Volcano: <b>Shishaldin</b> (VNUM #311360)<br/>Current Volcano Alert Level: ADVISORY"
+   },
+   {
+    "sentUtc": "2026-03-11 04:27:24",
+    "sentUnixtime": 1773203244,
+    "noticeTypeCd": "VAN",
+    "volcCds": "hi3",
+    "noticeIdentifier": "DOI-USGS-HVO-2026-03-11T02:35:04+00:00",
+    "noticeHtml": "Volcano: <b>Kilauea</b> (VNUM #332010)<br/>Current Volcano Alert Level: WATCH"
+   },
+   {
+    "sentUtc": "2026-03-11 04:07:19",
+    "sentUnixtime": 1773202039,
+    "noticeTypeCd": "VAN",
+    "volcCds": "hi3",
+    "noticeIdentifier": "DOI-USGS-HVO-2026-03-11T03:39:11+00:00",
+    "noticeHtml": "Volcano: <b>Kilauea</b> (VNUM #332010)<br/>Current Volcano Alert Level: WATCH<br/>Previous Volcano Alert Level: WARNING"
+   },
+   {
+    "sentUtc": "2026-03-10 20:54:24",
+    "sentUnixtime": 1773176064,
+    "noticeTypeCd": "VAN",
+    "volcCds": "hi3",
+    "noticeIdentifier": "DOI-USGS-HVO-2026-03-10T20:46:14+00:00",
+    "noticeHtml": "Volcano: <b>Kilauea</b> (VNUM #332010)<br/>Current Volcano Alert Level: WARNING<br/>Previous Volcano Alert Level: WATCH"
+   },
+   {
+    "sentUtc": "2026-03-10 19:36:10",
+    "sentUnixtime": 1773171370,
+    "noticeTypeCd": "VAN",
+    "volcCds": "hi3",
+    "noticeIdentifier": "DOI-USGS-HVO-2026-03-10T18:39:08+00:00",
+    "noticeHtml": "Volcano: <b>Kilauea</b> (VNUM #332010)<br/>Current Volcano Alert Level: WATCH"
+   },
+   {
+    "sentUtc": "2026-03-09 17:15:00",
+    "sentUnixtime": 1773076500,
+    "noticeTypeCd": "VAN",
+    "volcCds": "ak147",
+    "noticeIdentifier": "DOI-USGS-AVO-2026-03-09T17:02:23+00:00",
+    "noticeHtml": "Volcano: <b>Katmai</b> (VNUM #312170)<br/>Current Volcano Alert Level: NORMAL"
+   }
+  ]
+ }
+}

@@ -1,0 +1,49 @@
+programs/burn-receipts: anchor build && bash scripts/test.sh, after the re-check fixes (2026-10-12)
+     Running unittests src/lib.rs (target/debug/deps/burn_receipts-9296018f248b36b1)
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/end_sink.rs (target/debug/deps/end_sink-ccc9c2d8a5e5f877)
+test result: ok. 10 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.70s
+     Running tests/governance.rs (target/debug/deps/governance-888a6f09050b85f0)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+     Running tests/integration.rs (target/debug/deps/integration-0ac5da24b6f38627)
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.42s
+     Running tests/launchlab.rs (target/debug/deps/launchlab-d219a835abe11775)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+     Running tests/lock_fees.rs (target/debug/deps/lock_fees-cf781529dc163058)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s
+     Running tests/pairs.rs (target/debug/deps/pairs-aa16f82ab35a6ee5)
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.87s
+     Running tests/platform.rs (target/debug/deps/platform-ae26f6ca021889b6)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+     Running tests/recheck3.rs (target/debug/deps/recheck3-c7c668d0a8ea63c1)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+     Running tests/review2.rs (target/debug/deps/review2-12a1cc20e45ec5c5)
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.16s
+     Running tests/review3.rs (target/debug/deps/review3-bf8a3e924eb07019)
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.38s
+     Running tests/review_fixes.rs (target/debug/deps/review_fixes-f83d49a0b6e6f0e1)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.10s
+     Running tests/review_lock.rs (target/debug/deps/review_lock-7eba19fae6bc30bf)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.53s
+     Running tests/review_pair.rs (target/debug/deps/review_pair-1aea7f516ef09caf)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.21s
+     Running tests/review_pair_r2.rs (target/debug/deps/review_pair_r2-30678bb79cd31214)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.68s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (target/debug/deps/pair_curve-d325bee0d474085c)
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/lifecycle.rs (target/debug/deps/lifecycle-3d33e048b0ee54f5)
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.70s
+     Running tests/review_lock.rs (target/debug/deps/review_lock-3d8ac6b30653cb4a)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.12s
+     Running tests/review_pair_r2.rs (target/debug/deps/review_pair_r2-b0c18267e0732978)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.23s
+     Running tests/review_pair_r3.rs (target/debug/deps/review_pair_r3-d3efe69a25602b0e)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.41s
+     Running tests/review_pc1.rs (target/debug/deps/review_pc1-e9dd3ff68e7ec902)
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.34s
+     Running tests/review_pc2.rs (target/debug/deps/review_pc2-75a2e35d6d1aeae3)
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.36s
+     Running tests/review_pc3.rs (target/debug/deps/review_pc3-6f253dc796d53345)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

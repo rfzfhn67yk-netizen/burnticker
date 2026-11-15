@@ -1,0 +1,56 @@
+{
+  "cluster": "devnet",
+  "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
+  "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+  "timeLockSecs": 60,
+  "transactionIndex": "9",
+  "transaction": "2xwbvPTdHRn956X9nSN2aPw7j35MwKb8BGbGgEhAWqfQ",
+  "proposal": "C1QZ7yqWNi31wk9nmP5feCXZivQdcok5MyHq4vFi9wxv",
+  "upgrade": {
+    "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
+    "buffer": "5QPnmmTSRtQh6PR3NjEgWYs6jQ1qZCFc4PtZS4xRzg4h",
+    "spill": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb"
+  },
+  "checks": {
+    "bufferExecutableHash": "b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3",
+    "verifiedBuildTable": "config/burnticker/verified-build.json",
+    "tableHash": "b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3",
+    "tableLibrary": "burn_receipts",
+    "localBuildFile": null,
+    "localBuildExecutableHash": null,
+    "codeBytes": 643313,
+    "bufferAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+    "programUpgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+    "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+    "spill": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+    "spillIs": "a multisig member"
+  },
+  "innerMessageHex": "0100040887a4761a1769c0625e3d36f91d22bd1c168e6aa9baa6b27a7ab126f3ac9113a0afd16ec7a793fe80e63faef41e2d85bd6fc9a58cdcd956ff863ea85bee5ad17193263998caced1a44b8e3d92307751e3ebc7303068b6d04f9f556007ab0f3a84416cdfc5b1dd08ddf7a16e67c62c03d769a23f4d99e305531b7671c94a203a5af4c724054240b72b780686f2798ba9f5ea5083b5afe3faf638299627e901744606a7d517192c5c51218cc94c3d4af17f58daee089ba1fd44e3dbd98a0000000006a7d51718c774c928566398691d5eb68b5eb8a39b4b6d5c73555b210000000002a8f6914e88a1b0e210153ef763ae2b00c2b93d16c124d2c0537a10048000000107070102030405060004000300000000",
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 43735,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf invoke [1]",
+      "Program log: Instruction: VaultTransactionCreate",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: transaction index: 9",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf consumed 27406 of 199850 compute units",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf success",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf invoke [1]",
+      "Program log: Instruction: ProposalCreate",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf consumed 16179 of 172444 compute units",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf success"
+    ]
+  },
+  "signature": "DoYECLM6HrQdq3Qc7ri15reRu2VDWpbsn6k1N6zzZXP2AD2QMH5Vy2pSFwGr4CR14H3zNDC9PouiYpfpdAxB4R8",
+  "next": [
+    "squads-multisig-cli proposal-vote --rpc-url https://api.devnet.solana.com --keypair <member> --multisig-pubkey GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w --transaction-index 9 --action Approve   (threshold members)",
+    "after 60 s: squads-multisig-cli vault-transaction-execute --rpc-url https://api.devnet.solana.com --keypair <member> --multisig-pubkey GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w --transaction-index 9"
+  ]
+}

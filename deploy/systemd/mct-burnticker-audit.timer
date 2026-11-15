@@ -1,0 +1,12 @@
+[Unit]
+Description=Hourly Burnticker audit (audit.json — the badge the platform index and the trust page read)
+
+[Timer]
+OnCalendar=hourly
+# Spread the hour mark a little so the audit never lands on the same second as the keeper's publish; catch up a missed hour after a reboot.
+RandomizedDelaySec=300
+Persistent=true
+Unit=mct-burnticker-audit.service
+
+[Install]
+WantedBy=timers.target

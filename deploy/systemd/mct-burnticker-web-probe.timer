@@ -1,0 +1,12 @@
+[Unit]
+Description=Every 5 minutes: the Burnticker external web check (scripts/service/burnticker-web-probe.sh)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=20
+Persistent=true
+Unit=mct-burnticker-web-probe.service
+
+[Install]
+WantedBy=timers.target

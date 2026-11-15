@@ -1,0 +1,122 @@
+{
+  "case": "x14-end-dated-after-last-reading",
+  "expected": "InvalidRuleEnd",
+  "observed": "InvalidRuleEnd",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR submit-rule-end --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX --date 20261010 --outcome resolved --attester ~/.config/meme-coin-trader/devnet/keeper.json",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6103}]}",
+  "errorLogLines": [
+    "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:135. Error Code: InvalidRuleEnd. Error Number: 6103. Error Message: submit_rule_end: the end date must be a valid date, not in the future, on or after the last reading; outcome resolved or void.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d7"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "submit-rule-end",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "ruleEnd": "7M3KM8DZ3DodaLYHHF1f2s6KA8xAr4zNpxdQx3rbCwUy",
+    "message": "BURNRECEIPTS-END-v1|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|EipCvXoUPGLg3rADZCb2Xq5KHo1E55zxXkc1nZu47RTX|2026-10-10|outcome=resolved|src=60a558c8ab428590c43d2049609c5d987b1e9339d0e260af14d025ab9e28f4a8|proof=0000000000000000000000000000000000000000000000000000000000000000",
+    "instructions": [
+      {
+        "program": "Ed25519SigVerify111111111111111111111111111",
+        "accounts": [],
+        "dataHex": "01003000ffff1000ffff70004201ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a5e2c5a7180ff7a743fa8db045b43ce4f6c8865c3a173d616c903d9d8ec5c472cf2106f32f25ae5d736ab2c53e5072e2ec56dde838aa2fd63abf296c648c4f1c024255524e52454345495054532d454e442d76317c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c4569704376586f5550474c67337241445a4362325871354b486f314535357a78586b63316e5a7534375254587c323032362d31302d31307c6f7574636f6d653d7265736f6c7665647c7372633d363061353538633861623432383539306334336432303439363039633564393837623165393333396430653236306166313464303235616239653238663461387c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+      },
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "submit_rule_end",
+        "accounts": [
+          {
+            "name": "payer",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "name": "config",
+            "pubkey": "76Fv5V7zpXRVApXBUvEHjMJ2zQFDtmbAFzmU2c2vNpCB",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "end_sink",
+            "pubkey": "Ew5pDetb6HDsDBfkakj6e1sTUdL7xgM4TE2BmPTc4YVx",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "rule_end",
+            "pubkey": "7M3KM8DZ3DodaLYHHF1f2s6KA8xAr4zNpxdQx3rbCwUy",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "instructions",
+            "pubkey": "Sysvar1nstructions1111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "event_authority",
+            "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "program",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {
+          "record_date": 20261010,
+          "outcome": 1,
+          "source_url_hash": "60a558c8ab428590c43d2049609c5d987b1e9339d0e260af14d025ab9e28f4a8",
+          "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":6103}]}",
+      "unitsConsumed": 27948,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: SubmitRuleEnd",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/end.rs:135. Error Code: InvalidRuleEnd. Error Number: 6103. Error Message: submit_rule_end: the end date must be a valid date, not in the future, on or after the last reading; outcome resolved or void.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 27798 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d7"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "76Fv5V7zpXRVApXBUvEHjMJ2zQFDtmbAFzmU2c2vNpCB",
+        "kind": "TokenConfig",
+        "state": null
+      },
+      {
+        "address": "2SvevzMCmDnoBvQkkzR7iRpkzD4MKdZjhLhkgg2x7eGy",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "7M3KM8DZ3DodaLYHHF1f2s6KA8xAr4zNpxdQx3rbCwUy",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

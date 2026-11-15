@@ -1,0 +1,17 @@
+[Unit]
+Description=Burnticker external web check (GET the public current-status through Cloudflare, ping BURNTICKER_WEB_HEARTBEAT_URL on a good answer, <url>/fail otherwise) — fired every 5 minutes by mct-burnticker-web-probe.timer
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/meme-coin-trader
+# scripts/service/burnticker-web-probe.sh: one try, no retry loop; from .env.local it reads only the BURNTICKER_WEB_HEARTBEAT_URL line,
+# and never logs the URL. data/web-probe-last.json holds the last outcome for the keeper's ops facts. A refused URL exits 2 (the unit
+# shows failed, bt-unit-failed); a failed probe is reported to the monitor and exits 0.
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/service/burnticker-web-probe.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=TZ=America/Denver
+TimeoutStartSec=120
+Nice=10
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-web-probe.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-web-probe.log

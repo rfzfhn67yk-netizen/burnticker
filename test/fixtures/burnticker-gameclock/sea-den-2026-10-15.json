@@ -1,0 +1,60 @@
+{
+  "_note": "The SEAWIN/DENWIN night of 2026-10-15/16 (ESPN game 2475453), for the game-coin schedule test (test/burntickerGameClock.test.ts). From the live case: TheSportsDB did not answer all night, Polymarket's market resolved to the Broncos, and the keeper's public reading (GET /api/burnticker/v1/tokens/DENWIN, read 2026-10-16) records SEA 14 @ DEN 17. Illustrative, not copied from a provider: the condition id, the TheSportsDB row id and the exact outage window.",
+  "game": {
+    "eventId": "2475453",
+    "league": "nfl",
+    "startsAt": "2026-10-16T00:15:00Z",
+    "date": "2026-10-16",
+    "name": "Seattle Seahawks at Denver Broncos",
+    "completed": true,
+    "state": "post",
+    "detail": "Final",
+    "home": {
+      "abbr": "DEN",
+      "name": "Denver Broncos",
+      "nickname": "Broncos",
+      "score": null,
+      "homeAway": "home",
+      "record": null
+    },
+    "away": {
+      "abbr": "SEA",
+      "name": "Seattle Seahawks",
+      "nickname": "Seahawks",
+      "score": null,
+      "homeAway": "away",
+      "record": null
+    }
+  },
+  "tsdbRow": {
+    "idEvent": "tsdb-2475453",
+    "idLeague": "4391",
+    "dateEvent": "2026-10-16",
+    "strTimestamp": "2026-10-16T00:15:00",
+    "strHomeTeam": "Denver Broncos",
+    "strAwayTeam": "Seattle Seahawks",
+    "intHomeScore": "17",
+    "intAwayScore": "14",
+    "strStatus": "FT",
+    "strEvent": "Denver Broncos vs Seattle Seahawks"
+  },
+  "market": {
+    "conditionId": "0x0000000000000000000000000000000000000000000000000000000002475453",
+    "question": "Seahawks vs. Broncos",
+    "outcomes": [
+      "Broncos",
+      "Seahawks"
+    ],
+    "url": "https://polymarket.com/event/nfl-sea-den-2026-10-15"
+  },
+  "payout": {
+    "resolved": true,
+    "outcome": 0,
+    "resolvedAt": "2026-10-16T05:30:00Z"
+  },
+  "tsdbDown": {
+    "from": "2026-10-16T03:00:00Z",
+    "until": "2026-10-16T15:00:00Z"
+  },
+  "keeperFirstCycle": "2026-10-16T06:15:00Z"
+}

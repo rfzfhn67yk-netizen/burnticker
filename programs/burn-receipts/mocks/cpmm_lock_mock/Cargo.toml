@@ -1,0 +1,25 @@
+# TEST-ONLY stand-in for Raydium's CPMM liquidity-lock program ("Burn & Earn", LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE), whose
+# source is not public (raydium-docs-v1 issue #16). Loaded by the LiteSVM suites AT THE LOCK PROGRAM'S ID so its authority PDA
+# ["lock_cp_authority_seed"] equals the real LOCK_CPMM_AUTHORITY. It implements the two instructions burn_receipts and pair_curve
+# CPI — lock_cp_liquidity and collect_cp_fees — with the discriminators and account orders of @raydium-io/raydium-sdk-v2 0.2.74
+# (src/raydium/cpmm/instruction.ts) and the LockedCpLiquidityState layout read from devnet accounts (256 B: locked_lp_amount @8,
+# claimed @16, unclaimed @24, last_lp @32, last_k u128 @40, recent_epoch @56, pool_id @64, fee_nft_mint @96, owner @128,
+# lp_mint @160). The fee formula is this mock's own (fees = the locked LP's share of k growth); the devnet rehearsal exercises the
+# real program. Never deployed.
+[package]
+name = "cpmm_lock_mock"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+anchor-lang = "=1.2.1"
+anchor-spl = "=1.2.1"
+
+[workspace]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("custom-heap", "custom-panic"))'] }

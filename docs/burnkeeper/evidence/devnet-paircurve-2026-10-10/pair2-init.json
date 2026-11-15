@@ -1,0 +1,127 @@
+{
+  "command": "init-pair",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": false,
+  "plan": {
+    "pair": "3WzEhdXaWZVA8K21rywXzgwK3RktQzPmxsWfZvcDb9fh",
+    "vault": "83awQv1zQxLdSqgeXNRKui8ZqHEzaZiP1sTcVRgAkEGk",
+    "mints": {
+      "a": "3YDPagcYCMggYEEmQNLPpPQK5rWibRD8fE5GdEMVGChg",
+      "b": "EwPkr3SmMurWmX7JX5C9Gca1qvzfdsgtkATWozpjqNTr"
+    },
+    "rulesSha256": {
+      "a": "0a02e54a3fdd061d2226c9544ec55f2dcf07f059fd1b5fc5dda7b2a31b6cb077",
+      "b": "1eb36dd6e408068b9de0f1b4c9f7aad8bd9d97f88bbcec044bc439a3981ce087"
+    },
+    "pairId": "pcva-vs-pcvb-devnet-rehearsal-2-void",
+    "cpConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "createPoolFee": "150000000",
+    "sideCosts": "182258000",
+    "params": {
+      "virtualSolLamports": "300000000",
+      "virtualTokenAmount": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "targetRaiseLamports": "650000000",
+      "minSideShareBps": 3000,
+      "deadline": 1791674154
+    },
+    "burnPools": {
+      "a": "CB3cvXpYHC8SPNiu62wfczbVjrSn5LENVKvUxA5aGZrf",
+      "b": "GhgVRikYbvGEoakZ3uzixjUPr3SEs4BQkzwH5RgsyGHA"
+    }
+  },
+  "steps": {
+    "mintAndConfigA": {
+      "ok": true,
+      "signature": "1E7CWvhwAx2PV8WWNuCf9F5PbiicGRP2rox3x2yGzKMkvXWM87XMVUkKjKBjoZFpyCeKJ2UpE38WviR1i8aYX6g",
+      "error": null,
+      "unitsConsumed": 30440,
+      "txBytes": 882
+    },
+    "mintAndConfigB": {
+      "ok": true,
+      "signature": "MQ7opgx288k9eP4EKtznCCYVNXc1DfJakzZP9r1ay69eDxxWDk3sMsSTCFZau62XP6kVoVAsFzVmw6bsBvvFfjL",
+      "error": null,
+      "unitsConsumed": 30440,
+      "txBytes": 882
+    },
+    "initPair": {
+      "ok": true,
+      "signature": "36AB4aEKN5sAaeA56xhweC5fe5PCU3MFYpndkwfTzoWN2oikU3snfrkYb1VfTborZVuaLyGj6NKRqeDmfnjT6Fr9",
+      "error": null,
+      "unitsConsumed": 109767,
+      "txBytes": 756
+    }
+  },
+  "after": {
+    "pair": "3WzEhdXaWZVA8K21rywXzgwK3RktQzPmxsWfZvcDb9fh",
+    "exists": true,
+    "status": "open",
+    "phase": "open",
+    "deadline": "2026-10-10T23:15:54.000Z",
+    "vault": "83awQv1zQxLdSqgeXNRKui8ZqHEzaZiP1sTcVRgAkEGk",
+    "vaultLamports": 650240,
+    "devWallet": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+    "sides": [
+      {
+        "side": "A",
+        "mint": "3YDPagcYCMggYEEmQNLPpPQK5rWibRD8fE5GdEMVGChg",
+        "supplyRaw": "1000000000000000",
+        "sold": "0",
+        "sol": "0",
+        "burnPool": "CB3cvXpYHC8SPNiu62wfczbVjrSn5LENVKvUxA5aGZrf",
+        "burnPoolLamports": 20000000,
+        "burnFees": "0",
+        "devFees": "0",
+        "trades": 0,
+        "pool": "11111111111111111111111111111111",
+        "poolSol": "0",
+        "poolTokens": "0",
+        "lpSupplyAtCreation": "0",
+        "lpBurned": "0",
+        "tokensBurned": "0",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "11111111111111111111111111111111",
+          "poolVerified": false,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      },
+      {
+        "side": "B",
+        "mint": "EwPkr3SmMurWmX7JX5C9Gca1qvzfdsgtkATWozpjqNTr",
+        "supplyRaw": "1000000000000000",
+        "sold": "0",
+        "sol": "0",
+        "burnPool": "GhgVRikYbvGEoakZ3uzixjUPr3SEs4BQkzwH5RgsyGHA",
+        "burnPoolLamports": 20000000,
+        "burnFees": "0",
+        "devFees": "0",
+        "trades": 0,
+        "pool": "11111111111111111111111111111111",
+        "poolSol": "0",
+        "poolTokens": "0",
+        "lpSupplyAtCreation": "0",
+        "lpBurned": "0",
+        "tokensBurned": "0",
+        "tokenConfig": {
+          "registrationPolicy": 2,
+          "cpmmPool": "11111111111111111111111111111111",
+          "poolVerified": false,
+          "burns": 0,
+          "totalBurned": "0"
+        }
+      }
+    ],
+    "params": {
+      "virtualSol": "300000000",
+      "virtualToken": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "reserve": "206900000000000",
+      "targetRaise": "650000000",
+      "minSideShareBps": 3000
+    }
+  }
+}

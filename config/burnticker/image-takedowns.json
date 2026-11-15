@@ -1,0 +1,5 @@
+{
+  "schema": "burnticker.image-takedowns/v1",
+  "note": "Creator images this site no longer shows (website-15 item 13; the operator page's takedown route). Add a coin's mint address to `mints` and the site shows its generated receipt art instead from the next request. The copy pinned on Arweave is permanent and is not affected.",
+  "mints": []
+}

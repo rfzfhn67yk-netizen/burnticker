@@ -1,0 +1,30 @@
+{
+  "command": "fund-wsol",
+  "dryRun": false,
+  "mint": "5qnxXmetZRcK4rT6WQbbEBru4qhKhEmYdavUSWCGkSbd",
+  "feePda": "6698jnCeAt8KyahrQA83rkBn7WkDsYSmVXj8UX2oPTsJ",
+  "feeWsol": "9MTEq2E7KqhucJuch4Cnvew6BaY8AztAfpf93vgCe39a",
+  "lamports": 30000000,
+  "step": "fund the fee PDA's WSOL",
+  "bytes": 360,
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 4789,
+    "logs": [
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+      "Program log: CreateIdempotent",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 4438 of 403000 compute units",
+      "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+      "Program 11111111111111111111111111111111 invoke [1]",
+      "Program 11111111111111111111111111111111 success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 201 of 398412 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success"
+    ]
+  },
+  "sent": {
+    "signature": "4sKmpj7MfhZvgFZaDBjTmPkpVBdoNpUUhEZb6qVD4THiWwMUoVzpGQDggi1hn53tzBi2DXr2krqQacaPj4sFw7uK",
+    "err": null,
+    "explorer": "https://explorer.solana.com/tx/4sKmpj7MfhZvgFZaDBjTmPkpVBdoNpUUhEZb6qVD4THiWwMUoVzpGQDggi1hn53tzBi2DXr2krqQacaPj4sFw7uK?cluster=devnet"
+  }
+}

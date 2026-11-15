@@ -1,0 +1,18 @@
+{
+  "command": "close",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": false,
+  "pair": "BsoPFos6tdT6NdPUSNf4JAEbD8Wk6bYFxMtMhSzwB2EY",
+  "result": {
+    "ok": true,
+    "signature": "5qx6yvC5c3ad2kAYkj6cA3mrim9vRf46c27EhKPTeXaxSn5VEEMmhEeCj4vBsgq25zCrfApAbs5UUc1LxunpX6qr",
+    "error": null,
+    "unitsConsumed": 30157,
+    "txBytes": 648
+  },
+  "after": {
+    "pair": "BsoPFos6tdT6NdPUSNf4JAEbD8Wk6bYFxMtMhSzwB2EY",
+    "exists": false
+  }
+}

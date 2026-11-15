@@ -1,0 +1,7 @@
+# Mainnet Squads multisig 7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc, vault transaction 3 (6SWS1EC6t9bXt969v4s9k3aLugZvS6m8cbTdZ2o1C15S),
+# proposal GRv3LvxUPfSdZgYmmXqYf74W959pWm3inu7iNgnVN94P: the burn_receipts round-5 upgrade (buffer Fyp2pZYRYkBUZYKdW9YKRL9yXKj4b9GbSgHkvHHdrERc,
+# spill F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P). Read from chain on 2026-10-16 (getSignaturesForAddress on the proposal and the vault
+# transaction; every one succeeded). Times UTC (Denver = UTC−6).
+create + proposal + approve (member A DLxTkuqM…)  4F3T7ybbMt2DNjMycCWikxVLBCcqC5kzJD2ijDJL5bjAp5wxNyj8VtZMSzpb2F2kieJ7PerMKn6X2KHX3g8bJgxs  slot 457461106  2026-10-16T01:54:06Z
+approve (member B)                                3S9eH6WoYUWu9nC4JZyJJGrBGxD8B9YRfp62rh8htTJWYVmH8tb4CFuTiWMh3k6KdsAE83PPr6ZxFvTuyWyYaWRg  slot 457461958  2026-10-16T01:57:11Z
+execute (VaultTransactionExecute → Upgrade)       2u95GqT9W4pxg8GPmbfyWRUrpsjbrnH8ruKCussb9HMX9UkUjFibToW7Z8BmQ1BJzjiixri3R6y6uS2DuciAiFpR  slot 457461970  2026-10-16T01:57:13Z

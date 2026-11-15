@@ -1,0 +1,6 @@
+{
+  "schema": "burnkeeper.burns/prelaunch-v1",
+  "state": "not-launched",
+  "note": "$DEFICIT is not launched: there are no burns, so this list is empty. From the keeper's first cycle after launch this file is the keeper's burns.json (one entry per burn day).",
+  "burns": []
+}

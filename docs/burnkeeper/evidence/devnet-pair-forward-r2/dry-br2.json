@@ -1,0 +1,51 @@
+{
+  "cluster": "devnet",
+  "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
+  "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+  "timeLockSecs": 60,
+  "transactionIndex": "15",
+  "transaction": "7CX8QSjFsqQ79fa2fnRWg3ai8cKaCib973cywptjU7Gh",
+  "proposal": "HQXRv8XatGfGCb1tmXR3981JEJdp2TUi55SSwfW8HkmM",
+  "upgrade": {
+    "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
+    "buffer": "HkSsJCUr8CPn4jZsmZweR5GJoKaT2TzJAgGJhQjhfS8v",
+    "spill": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb"
+  },
+  "checks": {
+    "bufferExecutableHash": "5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87",
+    "verifiedBuildTable": "config/burnticker/verified-build.json",
+    "tableHash": "5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87",
+    "tableLibrary": "burn_receipts",
+    "localBuildFile": "/var/folders/lv/mzvc04r9157dl6v5dmgtp6y40000gn/T/burnticker-verified-build/local-devnet/burn_receipts.so",
+    "localBuildExecutableHash": "5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87",
+    "codeBytes": 749721,
+    "bufferAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+    "programUpgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+    "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+    "spill": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+    "spillIs": "a multisig member"
+  },
+  "innerMessageHex": "0100040887a4761a1769c0625e3d36f91d22bd1c168e6aa9baa6b27a7ab126f3ac9113a0afd16ec7a793fe80e63faef41e2d85bd6fc9a58cdcd956ff863ea85bee5ad17193263998caced1a44b8e3d92307751e3ebc7303068b6d04f9f556007ab0f3a84f8dc36b6d05b3abd58604eac9af61e02d8c3bb2195d14b5c36f29c56828041bff4c724054240b72b780686f2798ba9f5ea5083b5afe3faf638299627e901744606a7d517192c5c51218cc94c3d4af17f58daee089ba1fd44e3dbd98a0000000006a7d51718c774c928566398691d5eb68b5eb8a39b4b6d5c73555b210000000002a8f6914e88a1b0e210153ef763ae2b00c2b93d16c124d2c0537a10048000000107070102030405060004000300000000",
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 44323,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf invoke [1]",
+      "Program log: Instruction: VaultTransactionCreate",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program log: transaction index: 15",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf consumed 27994 of 199850 compute units",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf success",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf invoke [1]",
+      "Program log: Instruction: ProposalCreate",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf consumed 16179 of 171856 compute units",
+      "Program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf success"
+    ]
+  }
+}

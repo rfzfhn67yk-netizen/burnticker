@@ -1,0 +1,202 @@
+{
+ "fetchedAt": "2026-10-13T00:12:24Z",
+ "note": "Real response, captured read-only: this year's wildfire records of 50,000 acres or more in the NIFC WFIGS year-to-date incident service, with only the discovery time and size fields requested.",
+ "url": "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_YearToDate/FeatureServer/0/query?where=IncidentTypeCategory%3D%27WF%27+AND+IncidentSize%3E%3D50000&outFields=FireDiscoveryDateTime%2CIncidentSize&orderByFields=FireDiscoveryDateTime&returnGeometry=false&f=json",
+ "body": {
+  "features": [
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1771348740000,
+     "IncidentSize": 283283
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1773411253000,
+     "IncidentSize": 642029
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1773552955000,
+     "IncidentSize": 129253
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1778787000000,
+     "IncidentSize": 92733
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1782164206000,
+     "IncidentSize": 97464
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1782504900000,
+     "IncidentSize": 107189
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1782594240000,
+     "IncidentSize": 64881
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1782734686000,
+     "IncidentSize": 102007
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784158140000,
+     "IncidentSize": 70821
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784163114000,
+     "IncidentSize": 342923
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784164020000,
+     "IncidentSize": 79200
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784164674000,
+     "IncidentSize": 172906
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784205000000,
+     "IncidentSize": 138293
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784221200000,
+     "IncidentSize": 50224
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784244000000,
+     "IncidentSize": 61380
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784299860000,
+     "IncidentSize": 57594
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784397969000,
+     "IncidentSize": 69355
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784838600000,
+     "IncidentSize": 578637
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784844360000,
+     "IncidentSize": 67071
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784850000000,
+     "IncidentSize": 76443
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784854852000,
+     "IncidentSize": 52000
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784857860000,
+     "IncidentSize": 78903
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784860860000,
+     "IncidentSize": 93972
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784908800000,
+     "IncidentSize": 158027
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784933580000,
+     "IncidentSize": 105854
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1784983200000,
+     "IncidentSize": 308863
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1785100320000,
+     "IncidentSize": 166007
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1785193348000,
+     "IncidentSize": 129742
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1785966960000,
+     "IncidentSize": 55134
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1786228249000,
+     "IncidentSize": 93733
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1787593289000,
+     "IncidentSize": 89989
+    }
+   },
+   {
+    "attributes": {
+     "FireDiscoveryDateTime": 1787613420000,
+     "IncidentSize": 107562.85
+    }
+   }
+  ],
+  "exceededTransferLimit": false
+ }
+}

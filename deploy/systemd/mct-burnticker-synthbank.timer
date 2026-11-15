@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly top-up of the synthetic creator's devnet mint bank (06:00 UTC, three and a half hours before mct-burnticker-synth)
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 UTC
+RandomizedDelaySec=120
+Persistent=true
+Unit=mct-burnticker-synthbank.service
+
+[Install]
+WantedBy=timers.target

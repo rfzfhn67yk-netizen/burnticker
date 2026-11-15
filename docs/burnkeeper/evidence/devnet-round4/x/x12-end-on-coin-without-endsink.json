@@ -1,0 +1,120 @@
+{
+  "case": "x12-end-on-coin-without-endsink",
+  "expected": "AccountNotInitialized|(no EndSink)",
+  "observed": "AccountNotInitialized",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR submit-rule-end --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint 3F13D781BZhEE9r3zyZCCDUprL9xFwRBFMoxvAUWpFPM --date 20261008 --outcome resolved --attester ~/.config/meme-coin-trader/devnet/keeper.json",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":3012}]}",
+  "errorLogLines": [
+    "Program log: AnchorError caused by account: end_sink. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0xbc4"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "submit-rule-end",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "ruleEnd": "FC5Mw9GavvxHxXRdzubgx1KYWWX8QB8qw4XjWJ6FgnNs",
+    "message": "BURNRECEIPTS-END-v1|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|3F13D781BZhEE9r3zyZCCDUprL9xFwRBFMoxvAUWpFPM|2026-10-08|outcome=resolved|src=4c24093ea28077e5fa6b7fbdc899edd82ecdb490aff47c5d35d9842470cbbe36|proof=0000000000000000000000000000000000000000000000000000000000000000",
+    "instructions": [
+      {
+        "program": "Ed25519SigVerify111111111111111111111111111",
+        "accounts": [],
+        "dataHex": "01003000ffff1000ffff70004201ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a500cfd96dfbddf5bedb87ceab83e80feb2a4bcdea0d80cf26408abb2e3f785a80ba0b1240f474b40950b9760eff43b84eda2fbdec4c4d0db956ce5823e114fb004255524e52454345495054532d454e442d76317c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c3346313344373831425a6845453972337a795a4343445570724c397846775242464d6f78764155577046504d7c323032362d31302d30387c6f7574636f6d653d7265736f6c7665647c7372633d346332343039336561323830373765356661366237666264633839396564643832656364623439306166663437633564333564393834323437306362626533367c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+      },
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "submit_rule_end",
+        "accounts": [
+          {
+            "name": "payer",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "name": "config",
+            "pubkey": "GveabaQuevEahnZkVrnH7F9Y2tNCQ34CQfmMn2HSKRdC",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "end_sink",
+            "pubkey": "5eb7S7roCmcTRBukLotMUXrTUyvawQcknbkx5r2MmKCo",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "rule_end",
+            "pubkey": "FC5Mw9GavvxHxXRdzubgx1KYWWX8QB8qw4XjWJ6FgnNs",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "instructions",
+            "pubkey": "Sysvar1nstructions1111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "event_authority",
+            "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "program",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {
+          "record_date": 20261008,
+          "outcome": 1,
+          "source_url_hash": "4c24093ea28077e5fa6b7fbdc899edd82ecdb490aff47c5d35d9842470cbbe36",
+          "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":3012}]}",
+      "unitsConsumed": 14493,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: SubmitRuleEnd",
+        "Program log: AnchorError caused by account: end_sink. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 14343 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0xbc4"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "GveabaQuevEahnZkVrnH7F9Y2tNCQ34CQfmMn2HSKRdC",
+        "kind": "TokenConfig",
+        "state": null
+      },
+      {
+        "address": "FvFHhZD4YgcN18FXJBpUovWmZJiUyaJtvk8BTR9og6Y3",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "FC5Mw9GavvxHxXRdzubgx1KYWWX8QB8qw4XjWJ6FgnNs",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

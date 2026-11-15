@@ -1,0 +1,257 @@
+"use client";
+
+import { tabKeyHandler } from "@/lib/burnticker/tabKeys";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { HostDiagnostics } from "./_components/HostDiagnostics";
+import Link from "next/link";
+import { EmptyState } from "./_components/EmptyState";
+import { CardGrid, ViewCard, SkeletonGrid, ago } from "./_components/CoinCard";
+import { useLaunchAvailability } from "./_components/useLaunchAvailability";
+import { useHome } from "./_components/useHome";
+import { useWatchlist } from "./_components/useWatchlist";
+import { useScrollEdges } from "./_components/useScrollEdges";
+import { WATCH_FORGET, WATCH_NOTE, coinWatchKey, fetchCoinInventory, watchAmbiguous, type CoinInventory } from "@/lib/burnticker/watchlist";
+import { SEASONS_LINKS } from "./_components/nav";
+import { auditBadgeView } from "@/lib/burnticker/auditBadge";
+import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
+import { CARD_MEANINGS, cardViewFromIndex, featuredHeading, featuredLine, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
+import { pairCardTitle } from "@/lib/burnticker/coinPage";
+import { FIRST_PARTY_CARD_IDS, GRID_TABS, NO_DATE_YET, cardMatches, firstPartyCards, gridState, liveCoinsTotal, searchKey, settleDateOf, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
+import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
+import { sharedTickers } from "@/lib/burnticker/coinKey";
+import { rereadDue } from "@/lib/burnticker/rereadCache";
+import { LIST_COPY, PAIR_NO_BURN_YET, PAIR_VS, browserStorage, collapsedLine, groupCoins, pairBurnScore, pairDecidedRowLine, readOpenOnly, withListLines, writeOpenOnly } from "@/lib/burnticker/coinsList";
+
+/**
+ * THE COINS PAGE (/burnticker; list-first since 2026-10-12: Claude site audit 2 item 5, ChatGPT audit 6 A5 and A10, Codex review 5
+ * trader-2). It starts at the Coins heading, the filter tabs and (on phones) the search box; the hero and "How it works" live on the home
+ * page (/) only. Two visibly separate groups: the coins anyone can trade, filtered by the tabs (coinsGrid.ts holds each tab's rule and
+ * its loading, empty, unavailable, stale and error sentences), then "Featured coin and test receipts" ($DEFICIT, the disclosed
+ * rehearsal coin and the devnet rehearsal, home.ts), which the tabs never filter. Every card prints the one field order (cardView.ts).
+ * While the reads are out the grid shows skeleton cards, never placeholder text. One search box per screen: the header's on wider
+ * screens, this page's on phones.
+ */
+interface IndexToken extends IndexCoin { oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; pctOfSupply: number; raised: string | null; threshold: string | null; quote: string | null }
+interface PairSide { ticker: string; name: string; mint?: string; burns: number; burned: string; supply: string; lastBurnAt: string | null }
+interface Index { generatedAt?: string; tokens: IndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSide; b: PairSide }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean } | null; cluster: string; stubs: string[] }
+export interface SeasonsPreview { leagues: number; teamCoins: number; /** HS-5: home.ts seasonsStripLine, made on the server */ line: string; sports: { id: string; label: string; leagues: { id: string; label: string; href: string; coins: number }[] }[] }
+
+const fmt = (s: string) => s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+const readQuery = () => { try { return new URLSearchParams(window.location.search).get("q") ?? ""; } catch { return ""; } };
+
+export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview | null }) {
+  const [ix, setIx] = useState<Index | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [tab, setTab] = useState<GridTab>("new");
+  const [q, setQ] = useState("");
+  const [now, setNow] = useState(() => Date.now());
+  // owner 2026-10-19 (coinsList.ts): "Open only" is off by default and remembered per browser; the retired and void line starts closed
+  const [openOnly, setOpenOnly] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
+  useEffect(() => { setOpenOnly(readOpenOnly(browserStorage())); }, []);
+  const toggleOpenOnly = (on: boolean) => { setOpenOnly(on); writeOpenOnly(browserStorage(), on); };
+  const home = useHome();
+  const searchBox = useRef<HTMLInputElement>(null);
+  // ChatGPT audit 6 item 24: the filter row scrolls sideways on narrow screens; the edge that still has more fades
+  const tabsHint = useScrollEdges<HTMLDivElement>([ix]);
+  // 2026-10-15: a cold host answers 503 "index-loading" with retry-after while it reads the coins; wait and ask again (up to 6 times)
+  useEffect(() => {
+    const once = async (left: number): Promise<void> => {
+      const r = await fetch("/api/burnticker/tokens");
+      if (r.status === 503 && left > 0) {
+        const j = (await r.json().catch(() => null)) as { retryAfterSec?: number } | null;
+        const wait = Math.min(15, Math.max(2, Number(r.headers.get("retry-after") ?? j?.retryAfterSec ?? 5)));
+        await new Promise((res) => setTimeout(res, wait * 1000));
+        return once(left - 1);
+      }
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      setIx(j); setErr(null);
+    };
+    // prelaunch audit 2026-10-18 A-23: the list was read once and, twenty minutes later, called itself out of date although this page had
+    // never asked again. It is read again every REREAD_MS (shorter than the five-minute freshness window) while the tab is visible and
+    // when the visitor comes back to it. A failed repeat keeps the last good list; only then can the stale line show, and it is true.
+    let live = true, busy = false, lastAttempt = 0, haveList = false;
+    const read = (left: number) => {
+      if (busy) return;
+      busy = true; lastAttempt = Date.now();
+      once(left).then(() => { haveList = true; }, (e) => { if (live && !haveList) setErr(String(e.message ?? e)); }).finally(() => { busy = false; });
+    };
+    read(6);
+    const tick = () => { if (live && rereadDue(lastAttempt, Date.now(), document.visibilityState === "visible")) read(1); };
+    const t = setInterval(tick, 15_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { live = false; clearInterval(t); document.removeEventListener("visibilitychange", tick); };
+  }, []);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
+  useEffect(() => { try { const s = sessionStorage.getItem("bt-coins-tab") as GridTab | null; if (s && GRID_TABS.some((x) => x.id === s)) setTab(s); } catch { /* private window */ } }, []);
+  // the header search (?q= on arrival, or an in-place search event) and the phone tab bar's Search (#search focuses the box)
+  useEffect(() => {
+    setQ(readQuery());
+    // website-15 item 5: the header box and this box are one search; the header sends "bt-search" (Enter) and "bt-search-input" (typing)
+    const onSearch = (e: Event) => { setQ(String((e as CustomEvent<string>).detail ?? "")); setTab("new"); };
+    const onInput = (e: Event) => setQ(String((e as CustomEvent<string>).detail ?? ""));
+    const onHash = () => { if (window.location.hash !== "#search") return; const box = searchBox.current && searchBox.current.offsetParent !== null ? searchBox.current : document.getElementById("bt-header-q"); box?.focus(); box?.scrollIntoView({ block: "center" }); };
+    onHash();
+    window.addEventListener("bt-search", onSearch); window.addEventListener("bt-search-input", onInput); window.addEventListener("hashchange", onHash);
+    return () => { window.removeEventListener("bt-search", onSearch); window.removeEventListener("bt-search-input", onInput); window.removeEventListener("hashchange", onHash); };
+  }, []);
+  // typing here updates the header box and the address (?q=), so a reload or a shared link keeps the same search
+  const typeQuery = (v: string) => {
+    setQ(v);
+    try { const u = new URL(window.location.href); if (v.trim()) u.searchParams.set("q", v); else u.searchParams.delete("q"); window.history.replaceState(null, "", u.pathname + u.search + u.hash); } catch { /* ignore */ }
+    window.dispatchEvent(new CustomEvent("bt-search-sync", { detail: v }));
+  };
+  const pick = (t: GridTab) => { setTab(t); try { sessionStorage.setItem("bt-coins-tab", t); } catch { /* ignore */ } };
+
+  const s = searchKey(q);
+  // owner 2026-10-14: the operator's created coins ($DEFICIT) lead the coin list (coinsGrid.ts firstPartyCards); the rest of the
+  // featured cards stay in their own group below
+  const firstParty = (v: CardView) => FIRST_PARTY_CARD_IDS.includes(v.id) && !v.tags.some((t) => t.label === "Not created yet");
+  const featured: CardView[] = useMemo(() => (home.data?.featured ?? []).filter((v) => !firstParty(v) && cardMatches(v, s)), [home.data, s]);
+  const listable = useMemo(() => (ix?.tokens ?? []).filter((t) => t.status !== "expired"), [ix]);
+  // private review 8 F1: follows are by network and mint. Private review 9 F1 (WIRING-AUDIT12): an old ticker follow resolves only against
+  // the COMPLETE inventory of coins (every status, expired ones included), never the listable rows; until it is read nothing migrates
+  const [inventory, setInventory] = useState<CoinInventory | null>(null);
+  useEffect(() => { let live = true; void fetchCoinInventory().then((x) => { if (live) setInventory(x); }); return () => { live = false; }; }, []);
+  const watch = useWatchlist(inventory?.coins ?? null);
+  // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
+  const sharedSet = useMemo(() => sharedTickers(listable), [listable]);
+  const coins = useMemo(() => tabCoins(tab, listable.filter((t) => t.status !== "draft").filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s)), (t) => { const k = coinWatchKey(ix?.cluster, t.mint); return !!k && watch.list.coins.includes(k); }), [listable, tab, s, watch.list.coins, ix?.cluster]);
+  const pairs = useMemo(() => (ix?.pairs ?? []).filter((p) => !s || `${p.a.ticker} ${p.b.ticker} ${p.a.name} ${p.b.name} ${p.seriesTitle ?? ""}`.toLowerCase().includes(s)), [ix, s]);
+  // HS-41: a pair side's listing (its result line), by mint, else by ticker
+  const sideListing = (s: PairSide) => (ix?.tokens ?? []).find((t) => (s.mint ? t.mint === s.mint : t.ticker === s.ticker))?.listing ?? null;
+  const audit = auditBadgeView(ix?.audit ?? null);
+  const launch = useLaunchAvailability();
+  // website-17 wiring item 3: the earned slots lead the public grid in rule order, each tagged with its rule's label; the rest keep their order
+  const slots = home.data?.featuredSlots ?? [];
+  const lead = firstPartyCards(home.data?.featured ?? [], tab, s, (v) => !!v.watchKey && watch.list.coins.includes(v.watchKey));
+  // prelaunch audit 2026-10-18 A-2: a slot belongs to one coin, matched by its mint (a ticker can be shared); an older answer without one by ticker
+  const slotIndex = (t: { ticker: string; mint: string }) => slots.findIndex((x) => (x.mint ? x.mint === t.mint : x.ticker === t.ticker));
+  // owner 2026-10-19 (coinsList.ts): open coins first (the tab's own order, earned slots leading), then the decided coins under their
+  // dividers, then one collapsed line for the retired and void coins. Settled coins are never hidden unless the visitor picks "Open only".
+  const groups = groupCoins(coins, openOnly);
+  const toCards = (list: typeof coins): CardView[] => list.map((t) => { const v0 = withListLines(cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet), t.listing, { now }), v = tab === "next" && v0.nextLine && !settleDateOf(t) ? { ...v0, nextLine: `${NO_DATE_YET} ${v0.nextLine}` } : v0; /* HB-133: an undated coin says so on Next to settle */ const k = v.group === "public" ? slotIndex(t) : -1; return { v: k >= 0 ? { ...v, tags: [{ label: slots[k].label, tone: "featured" as const }, ...v.tags] } : v, k: k < 0 || tab === "next" ? slots.length : k }; })
+    .sort((a, b) => a.k - b.k).map((x) => x.v);
+  const cards: CardView[] = toCards(groups.open);
+  const waitingCards = toCards(groups.decidedWaiting), endedCards = toCards(groups.decidedEnded), closedCards = toCards(groups.closed);
+  // the operator's own created coins first, then the registry's
+  const allcards: CardView[] = [...lead, ...cards];
+  const listedCount = allcards.length + waitingCards.length + endedCards.length + closedCards.length;
+  const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : listedCount, query: q, generatedAt: ix?.generatedAt ?? null, now, featuredMatches: s ? featured.length : 0 });
+  const rule = GRID_TABS.find((t) => t.id === tab)!.rule;
+
+  return (
+    <main className="mx-auto max-w-6xl px-4 py-5 space-y-6">
+      <section className="space-y-3" aria-labelledby="bt-coins-h">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <h1 id="bt-coins-h" className="text-xl font-semibold">Coins</h1>
+          <div ref={tabsHint.ref} onScroll={tabsHint.onScroll} className={`bt-tabs bt-tabs-wrap ${tabsHint.className}`} role="tablist" aria-label="Filter coins" onKeyDown={tabKeyHandler(GRID_TABS.map((t) => t.id), tab, pick, (id) => `coins-tab-${id}`)}>
+            {GRID_TABS.map((t) => <button key={t.id} id={`coins-tab-${t.id}`} type="button" role="tab" aria-selected={tab === t.id} tabIndex={tab === t.id ? 0 : -1} aria-controls="bt-coins-panel" className={`bt-tab${tab === t.id ? " is-active" : ""}`} onClick={() => pick(t.id)}>{t.label}{t.id === "pairs" && ix ? <> <span className="bt-tab-count" aria-label={`${ix.pairs.length} pair${ix.pairs.length === 1 ? "" : "s"}`}>{ix.pairs.length}</span></> : null}</button>)}
+          </div>
+          {/* one search per screen: the header carries it from 640 px up; on phones this box is the search (the tab bar's Search focuses it) */}
+          <input id="search" ref={searchBox} type="search" value={q} onChange={(e) => typeQuery(e.target.value)} placeholder={SEARCH.placeholder} aria-label={SEARCH.label} className="bt-grid-search md:ml-auto w-full md:w-72 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm" />
+        </div>
+        <p className="text-xs text-neutral-500" id="bt-tab-rule">{rule}{tab === "following" ? ` ${WATCH_NOTE}` : ""}{tab !== "pairs" ? " Each coin's curve completes at the raise its creator chose, and the card reads it from the coin's own pool." : ""}</p>
+
+        {tab !== "pairs" && <label className="flex w-fit items-center gap-2 text-xs text-neutral-300" title={LIST_COPY.openOnlyHint}><input type="checkbox" checked={openOnly} onChange={(e) => toggleOpenOnly(e.target.checked)} data-open-only /> {LIST_COPY.openOnly}</label>}
+        <div id="bt-coins-panel" role="tabpanel" aria-describedby="bt-tab-rule" data-grid-state={state.kind}>
+          {tab === "following" && watch.ambiguous.filter((a) => a.kind === "coins").map((a) => (
+            <div key={a.ticker} className="mb-3 rounded-md border border-amber-700/60 p-3 text-xs" role="status" data-watch-ambiguous={a.ticker}>
+              <p>{watchAmbiguous(a.ticker, a.candidates.length)}</p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">{listable.filter((t) => t.ticker.toUpperCase() === a.ticker).map((t) => <ViewCard key={t.mint} v={cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet)} now={now} />)}</div>
+              <button type="button" className="bt-watch mt-2" onClick={() => watch.forget("coins", a.ticker)}>{WATCH_FORGET}</button>
+            </div>
+          ))}
+          {state.kind === "loading" && <SkeletonGrid n={3} label={tab === "pairs" ? "Loading the pairs." : "Loading the coins."} />}
+          {state.kind === "error" && <EmptyState kind="unavailable" body={state.body} details={state.details} />}
+          {state.kind === "unavailable" && <EmptyState kind="unavailable" body={state.body} />}
+          {state.kind === "empty" && <EmptyState compact kind={state.notLaunched ? "not-launched" : "no-activity"} body={state.body}>{state.notLaunched && launch.open && <div className="mt-2"><Link href={tab === "pairs" ? "/burnticker/launch?pair=1" : "/burnticker/launch"} className="underline">{tab === "pairs" ? "Launch a pair" : "Launch the first one"}</Link></div>}</EmptyState>}
+          {state.kind === "results" && <>
+            {state.note && <p className="mb-2 text-xs text-amber-300" role="status">{state.note}</p>}
+            {tab !== "pairs" && <p className="mb-2 text-xs text-neutral-400" data-featured-rules>{FEATURED_RULES_LINE}</p>}
+            {tab !== "pairs" ? (
+              <div className="space-y-4" data-coins-groups>
+                {allcards.length > 0 && <CardGrid cards={allcards} now={now} />}
+                {waitingCards.length > 0 && <section aria-labelledby="bt-decided-waiting" data-list-group="decided-waiting"><h2 id="bt-decided-waiting" className="mb-2 border-t border-neutral-800 pt-3 text-sm font-medium text-neutral-300">{LIST_COPY.decidedWaiting}</h2><CardGrid cards={waitingCards} now={now} /></section>}
+                {endedCards.length > 0 && <section aria-labelledby="bt-decided-ended" data-list-group="decided-ended"><h2 id="bt-decided-ended" className="mb-2 border-t border-neutral-800 pt-3 text-sm font-medium text-neutral-300">{LIST_COPY.decidedEnded}</h2><CardGrid cards={endedCards} now={now} /></section>}
+                {closedCards.length > 0 && <section data-list-group="closed" className="border-t border-neutral-800 pt-3">
+                  <button type="button" className="text-sm text-neutral-300 underline" aria-expanded={showClosed} aria-controls="bt-closed-coins" onClick={() => setShowClosed((x) => !x)}>{collapsedLine(closedCards.length)} <span className="text-neutral-500">{showClosed ? LIST_COPY.hide : LIST_COPY.show}</span></button>
+                  <div id="bt-closed-coins" hidden={!showClosed} className="mt-2"><CardGrid cards={closedCards} now={now} /></div>
+                </section>}
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {pairs.map((p) => (
+                  <Link key={p.pairId} href={`/burnticker/p/${encodeURIComponent(p.pairId)}`} className="bt-coin-card block">
+                    <div className="text-xs text-neutral-500 truncate">{pairCardTitle(p.seriesTitle, p.a.ticker, p.b.ticker)}</div>
+                    <div className="mt-1 flex items-center justify-between gap-2 font-mono">
+                      <span className="text-lg font-semibold">${p.a.ticker}</span>
+                      {/* HS-41 widened (hourly run 14): the burn count only once a side has burned, labelled as burns; "vs" until then */}
+                      {(() => { const sc = pairBurnScore(p.a.burns, p.b.burns); return sc ? <span className="text-2xl tabular-nums" aria-label={sc.label} data-pair-score>{sc.text}</span> : <span className="text-sm text-neutral-500" data-pair-vs>{PAIR_VS}</span>; })()}
+                      <span className="text-lg font-semibold">${p.b.ticker}</span>
+                    </div>
+                    {/* HS-41 (hourly run 7): words, not dashes, and the decided line under a decided pair (coinsList.ts) */}
+                    <div className="mt-1 flex justify-between text-[11px] text-neutral-500"><span>{p.a.lastBurnAt ? `last burn ${ago(p.a.lastBurnAt, now)}` : PAIR_NO_BURN_YET}</span>{pairBurnScore(p.a.burns, p.b.burns) && <span>burns</span>}<span>{p.b.lastBurnAt ? `last burn ${ago(p.b.lastBurnAt, now)}` : PAIR_NO_BURN_YET}</span></div>
+                    {(() => { const d = pairDecidedRowLine({ ticker: p.a.ticker, listing: sideListing(p.a) }, { ticker: p.b.ticker, listing: sideListing(p.b) }, { now }); return d ? <p className="mt-1 text-xs text-neutral-300" data-pair-decided>{d}</p> : null; })()}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </>}
+          {tab === "graduating" && state.kind === "results" && ix?.generatedAt && <p className="mt-2 text-xs text-neutral-500">Curves read at {ix.generatedAt.slice(11, 16)} UTC.</p>}
+        </div>
+      </section>
+
+      {/* A10: demos and rehearsals are a separate group from the coins anyone can trade; the tabs never filter it. Owner 2026-10-14:
+          with $DEFICIT in the list and test coins hidden, a mainnet host has nothing left here, and the group is not shown */}
+      {(!home.data || home.error || featured.length > 0 || (home.data.featured.some((v) => !firstParty(v)) && !!s)) && <section className="space-y-3" aria-labelledby="bt-featured-h" data-group="test">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="bt-featured-h" className="text-lg font-semibold">{featuredHeading(home.data ? home.data.featured.filter((v) => !firstParty(v)) : null)}</h2>
+          <details className="text-xs text-neutral-400"><summary className="cursor-pointer">What the card rows mean</summary>
+            <ul className="mt-1 max-w-xl list-disc space-y-1 pl-4">{Object.values(CARD_MEANINGS).map((m) => <li key={m}>{m}</li>)}</ul>
+          </details>
+        </div>
+        {/* ChatGPT audit 6 item 22: the sentence counts the cards this host serves (cardView.ts featuredLine), never a fixed "two" */}
+        {home.data && featuredLine(home.data.featured) && <p className="text-xs text-neutral-500" data-featured-line>{featuredLine(home.data.featured)}</p>}
+        {home.error ? <EmptyState compact kind="unavailable" body="The featured coins could not be read just now." details={home.error} />
+          : !home.data ? <SkeletonGrid n={3} label="Loading the featured coins." />
+          : featured.length === 0 ? <EmptyState compact kind="no-activity" body={s ? `No featured coin matches "${q.trim()}".` : "No featured coin is listed."} />
+          : <CardGrid cards={featured} now={now} />}
+      </section>}
+
+      <SeasonsStrip seasons={seasons} />
+
+      {ix && ix.tokens.length > 0 && (
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-4 pt-2" aria-label="Platform totals">
+          {[["Live coins", String(liveCoinsTotal(ix.totals.live, home.data?.featured ?? [], ix.tokens.map((t) => t.ticker)))], ["Burns", String(ix.totals.burns)], ["Tokens burned", fmt(ix.totals.burnedTokens)], ["Public audit", audit.text]].map(([k, v]) => (
+            <div key={k} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"><div className="text-xs text-neutral-400">{k}</div><div className={`${k === "Public audit" && audit.tone === "muted" ? "text-sm" : "text-lg"} font-semibold ${k === "Public audit" ? (audit.tone === "ok" ? "text-emerald-400" : audit.tone === "bad" ? "text-red-400" : "text-neutral-400") : ""}`}>{v}</div>{k === "Public audit" && audit.sub && <div className="text-xs text-neutral-500">{audit.sub}</div>}</div>
+          ))}
+        </section>
+      )}
+      {ix && <p className="text-xs text-neutral-500">This site is showing {ix.cluster}. <Link className="underline" href="/burnticker/trust">What the operator can and cannot do</Link></p>}
+      {ix && <HostDiagnostics stubs={ix.stubs} />}
+    </main>
+  );
+}
+
+/** "Follow the season" (review item 15): every league's current season, by sport, with the Seasons pages. Counts only, no ranking. */
+function SeasonsStrip({ seasons }: { seasons: SeasonsPreview | null }) {
+  return (
+    <section className="bt-seasons" aria-labelledby="bt-seasons-h">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="bt-seasons-h" className="text-xl font-semibold">Follow the season</h2>
+        <p className="text-sm">{SEASONS_LINKS.map((l, i) => <span key={l.href}>{i > 0 && " · "}<Link className="underline" href={l.href}>{l.label}</Link></span>)}</p>
+      </div>
+      {!seasons ? <p className="text-sm text-neutral-400">The leagues could not be read just now.</p> : <>
+        <p className="text-sm text-neutral-400">{seasons.line}</p>
+        <dl className="mt-3 space-y-2 text-sm">{seasons.sports.map((sp) => (
+          <div key={sp.id} className="sm:flex sm:gap-4">
+            <dt className="font-medium text-neutral-200 sm:w-28 sm:shrink-0">{sp.label}</dt>
+            <dd className="mt-1 sm:mt-0 flex flex-wrap gap-1.5">{sp.leagues.map((l) => <Link key={l.id} className="bt-tab" href={l.href} aria-label={l.coins > 0 ? `${l.label}, ${l.coins} team coin${l.coins === 1 ? "" : "s"}` : undefined}>{l.label}{l.coins > 0 && <span className="bt-tab-count" aria-hidden="true">{l.coins}</span>}</Link>)}</dd>
+          </div>
+        ))}</dl>
+      </>}
+    </section>
+  );
+}

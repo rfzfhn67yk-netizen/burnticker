@@ -1,0 +1,32 @@
+Creating token HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG under program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+Address:  HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG
+Decimals:  6
+
+Signature: 3Y5Kob7TmhpYz4zY7f1XAbrxzhxtuSkMkX7KSHo9Cu5qg8FbENEyN8DLPvYc5PTyiRvBVdoDEShrcdRFLjr75puC
+
+Creating account Gm3uvsznBNmV7EPcEU9sjNRW6nsvDztd5EbGUfwGbPW9
+
+Signature: 248FjjM5cS93Cr6pTiNxxyrCEpk7cMspGYWxHjvKUErhzyBvR2wGTcRssJ7STA9fEu4BnUFab2tEhrByWNyV873j
+
+Minting 1000000000 tokens
+  Token: HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG
+  Recipient: Gm3uvsznBNmV7EPcEU9sjNRW6nsvDztd5EbGUfwGbPW9
+
+Signature: iihomGRzN9oVGqtNoqNGcRBqiGn5j5UVEjhXpjFCPg4M8AbUrQsLMyFX52GQ9JpjVxS625hzfWG4AVCiAXVkdTY
+
+Updating HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG
+  Current mint: HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb
+  New mint: disabled
+
+Signature: 47eMY48hesWqEK1zSPRogLLtnShYvVchDogxpyLqziZpCp1hadYB5rjbHUsqoo4PJiwTaqHHvdV3fDassiVKtHz3
+
+
+SPL Token Mint
+  Address: HLjqsZb7TTgDtQRHaxbymfao7cyHMH5VmpCKhWmFmnrG
+  Program: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+  Supply: 1000000000000000
+  Decimals: 6
+  Mint authority: (not set)
+  Freeze authority: (not set)
+

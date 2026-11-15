@@ -1,0 +1,119 @@
+{
+  "command": "link-pair",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": true,
+  "mintA": "BNGzZPs8aBuqE53o4yGQ6ZzXUxvvGRzVbcZZrLUKbvnS",
+  "mintB": "2JL9MaSpsPw7B2L1Hj8gmRxiS41Rno1RN4eo4qpyMDQh",
+  "linkA": "4LtB1wNbXF2c8Zvz55PXuN5vxhZieeNFhwTGP6dT1cmT",
+  "linkB": "58fBRf83S3F64FvWgurzW5qxEpETJNXmrmwbC2mjfJ59",
+  "instructions": [
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "link_pair",
+      "accounts": [
+        {
+          "name": "payer",
+          "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "name": "pair",
+          "pubkey": "JBV62vGicfGNpCqvEFLgDjdbh2PoJyJKMUgye5swtN9q",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "config_a",
+          "pubkey": "AEQ7p6fXteAytDaosdyNrA24ivd3YsiRbc99o2XcSeud",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "config_b",
+          "pubkey": "76xMB1DBXnUapoEpMScC5myx3nwE8BPXFojEx7C3veGb",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "link_a",
+          "pubkey": "4LtB1wNbXF2c8Zvz55PXuN5vxhZieeNFhwTGP6dT1cmT",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "link_b",
+          "pubkey": "58fBRf83S3F64FvWgurzW5qxEpETJNXmrmwbC2mjfJ59",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {}
+    }
+  ],
+  "simulation": {
+    "err": "{\"InstructionError\":[1,{\"Custom\":6098}]}",
+    "unitsConsumed": 29802,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: LinkPair",
+      "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/pair.rs:226. Error Code: PairTerminal. Error Number: 6098. Error Message: link_pair: the pair_curve Pair is voided or one of its sides is refunding.",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 29652 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17d2"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "AEQ7p6fXteAytDaosdyNrA24ivd3YsiRbc99o2XcSeud",
+      "kind": "TokenConfig",
+      "state": null
+    },
+    {
+      "address": "d3zBrJG1oDiwZCqSwZLfySTqDzrfmPfRgFgMjDrRJhG",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "76xMB1DBXnUapoEpMScC5myx3nwE8BPXFojEx7C3veGb",
+      "kind": "TokenConfig",
+      "state": null
+    },
+    {
+      "address": "FWSTNH6dhy8aYvpnEfxXPDDKt8B3ZurbeDPwEMVfHmFm",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "4LtB1wNbXF2c8Zvz55PXuN5vxhZieeNFhwTGP6dT1cmT",
+      "kind": "lamports",
+      "state": null
+    },
+    {
+      "address": "58fBRf83S3F64FvWgurzW5qxEpETJNXmrmwbC2mjfJ59",
+      "kind": "lamports",
+      "state": null
+    }
+  ]
+}

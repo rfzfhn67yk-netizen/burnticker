@@ -1,0 +1,27 @@
+{
+  "command": "curve-buy",
+  "dryRun": false,
+  "payer": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+  "launchlabPool": "8etFJShXbrpNmQm16z7ctCQXzyffiB5rJc2yUb8PssR5",
+  "amountBLamports": "300000000",
+  "quotedTokensRaw": "157638234554979",
+  "minTokensRaw": "149756322827230",
+  "quotedAmountBUsed": "300000000",
+  "realBBefore": "356216806",
+  "raise": "1000000000",
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 60832,
+    "tail": [
+      "Program DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6 success",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 118 of 239286 compute units",
+      "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success"
+    ]
+  },
+  "sent": {
+    "signature": "4oyhYHzjwB3kev312iuP19pLPRBqA1akVhf2MyqiDD6AUY4Nhtk5QD1rtzcmm8kVLbC98SSJYZ5JMfUudyxMxXxY",
+    "err": null,
+    "explorer": "https://explorer.solana.com/tx/4oyhYHzjwB3kev312iuP19pLPRBqA1akVhf2MyqiDD6AUY4Nhtk5QD1rtzcmm8kVLbC98SSJYZ5JMfUudyxMxXxY?cluster=devnet"
+  }
+}

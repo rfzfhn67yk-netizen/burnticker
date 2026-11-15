@@ -1,0 +1,24 @@
+{
+  "command": "pair-status",
+  "cluster": "devnet",
+  "mint": "H3KnEmyvaWFuQofo5ZmkcuPHefMCnhYjzXFVHB7PZLCy",
+  "pair_state": 2,
+  "pair_void_by": 0,
+  "pair_after_date": 20261011,
+  "pair_unlinked_at": "0",
+  "link": {
+    "version": 1,
+    "bump": 253,
+    "mint": "H3KnEmyvaWFuQofo5ZmkcuPHefMCnhYjzXFVHB7PZLCy",
+    "pair_mint": "CGp4Qa9wrBD3MfJfPafpxaWiSSwtu8XHwLGbxXg6FboA",
+    "paired": true,
+    "witness": 1,
+    "created_at": "1791746638",
+    "pairing_deadline": "0",
+    "paired_at": "1791746638",
+    "attester_set_hash": "338db32c9e66205e58eb7e30f82ac19832e279e59c11a30c49b9308ada5c246f"
+  },
+  "date": null,
+  "result": null,
+  "view": null
+}

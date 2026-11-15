@@ -1,0 +1,43 @@
+{
+  "readAt": "2026-10-11T05:47:15.893Z",
+  "cluster": "devnet",
+  "note": "read-only: LockedCpLiquidityState @128 (the locker) and the majority-of-lock-account floor that r2 register_fee_key checks",
+  "positions": [
+    {
+      "coin": "$LOCKT (policy 0)",
+      "lockedLiquidity": "79Lqk6qZVAJ9PdvspRgSRJRKsgqRu7LcUjADsFBAwAdS",
+      "locker": "5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq",
+      "expectedLocker": "5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq",
+      "expectedIs": "LaunchLab vault_auth_seed PDA",
+      "lockerMatches": true,
+      "lockedLp": "454311753719",
+      "unclaimedLp": "0",
+      "lpInLockAccount": "454311753719",
+      "majorityOfLockAccount": true
+    },
+    {
+      "coin": "$PCLA (pair 6 A)",
+      "lockedLiquidity": "GzErqbjDKcKh8tWDkX8SzHg5wWeNtivFaPPNJV4yJZaS",
+      "locker": "CoFsdYYkWkVdikQRLTEbuR8o4CQ2uTeohvPiLaUqdEVd",
+      "expectedLocker": "CoFsdYYkWkVdikQRLTEbuR8o4CQ2uTeohvPiLaUqdEVd",
+      "expectedIs": "pair 6 SOL vault",
+      "lockerMatches": true,
+      "lockedLp": "108764443627",
+      "unclaimedLp": "0",
+      "lpInLockAccount": "108764443627",
+      "majorityOfLockAccount": true
+    },
+    {
+      "coin": "$PCLB (pair 6 B)",
+      "lockedLiquidity": "3yf4PqddzC1FZMeo4KSwPDpfe13QGNQzr66rQxR6TFZW",
+      "locker": "CoFsdYYkWkVdikQRLTEbuR8o4CQ2uTeohvPiLaUqdEVd",
+      "expectedLocker": "CoFsdYYkWkVdikQRLTEbuR8o4CQ2uTeohvPiLaUqdEVd",
+      "expectedIs": "pair 6 SOL vault",
+      "lockerMatches": true,
+      "lockedLp": "67434800435",
+      "unclaimedLp": "0",
+      "lpInLockAccount": "67434800435",
+      "majorityOfLockAccount": true
+    }
+  ]
+}

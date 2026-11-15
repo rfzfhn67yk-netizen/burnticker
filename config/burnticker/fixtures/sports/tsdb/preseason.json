@@ -1,0 +1,389 @@
+{
+ "note": "SYNTHETIC TheSportsDB v2 schedule rows, one small season per league family, read by test/burntickerTsdbPreseason.test.ts. Round 500 is TheSportsDB's preseason (checked on its public test key on 2026-10-12 for the NBA); each league has a preseason meeting before the season and one after the last regular game, which must never count. Not real results.",
+ "leagues": {
+  "wnba": {
+   "family": "basketball (pro)",
+   "tsdbLeague": "4516",
+   "body": {
+    "schedule": [
+     {
+      "idEvent": "9100001",
+      "strEvent": "Atlanta Dream vs Chicago Sky",
+      "idLeague": "4516",
+      "strHomeTeam": "Atlanta Dream",
+      "strAwayTeam": "Chicago Sky",
+      "intRound": "500",
+      "intHomeScore": "3",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-03-01T20:00:00",
+      "dateEvent": "2026-03-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100002",
+      "strEvent": "Atlanta Dream vs Chicago Sky",
+      "idLeague": "4516",
+      "strHomeTeam": "Atlanta Dream",
+      "strAwayTeam": "Chicago Sky",
+      "intRound": "1",
+      "intHomeScore": "2",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-04-01T20:00:00",
+      "dateEvent": "2026-04-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100003",
+      "strEvent": "Connecticut Sun vs Atlanta Dream",
+      "idLeague": "4516",
+      "strHomeTeam": "Connecticut Sun",
+      "strAwayTeam": "Atlanta Dream",
+      "intRound": "2",
+      "intHomeScore": "0",
+      "intAwayScore": "2",
+      "strTimestamp": "2026-04-08T20:00:00",
+      "dateEvent": "2026-04-08",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100004",
+      "strEvent": "Chicago Sky vs Atlanta Dream",
+      "idLeague": "4516",
+      "strHomeTeam": "Chicago Sky",
+      "strAwayTeam": "Atlanta Dream",
+      "intRound": "500",
+      "intHomeScore": "5",
+      "intAwayScore": "0",
+      "strTimestamp": "2026-04-15T20:00:00",
+      "dateEvent": "2026-04-15",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     }
+    ]
+   }
+  },
+  "nfl": {
+   "family": "american football (pro)",
+   "tsdbLeague": "4391",
+   "body": {
+    "schedule": [
+     {
+      "idEvent": "9100005",
+      "strEvent": "Arizona Cardinals vs Atlanta Falcons",
+      "idLeague": "4391",
+      "strHomeTeam": "Arizona Cardinals",
+      "strAwayTeam": "Atlanta Falcons",
+      "intRound": "500",
+      "intHomeScore": "3",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-03-01T20:00:00",
+      "dateEvent": "2026-03-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100006",
+      "strEvent": "Arizona Cardinals vs Atlanta Falcons",
+      "idLeague": "4391",
+      "strHomeTeam": "Arizona Cardinals",
+      "strAwayTeam": "Atlanta Falcons",
+      "intRound": "1",
+      "intHomeScore": "2",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-04-01T20:00:00",
+      "dateEvent": "2026-04-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100007",
+      "strEvent": "Baltimore Ravens vs Arizona Cardinals",
+      "idLeague": "4391",
+      "strHomeTeam": "Baltimore Ravens",
+      "strAwayTeam": "Arizona Cardinals",
+      "intRound": "2",
+      "intHomeScore": "0",
+      "intAwayScore": "2",
+      "strTimestamp": "2026-04-08T20:00:00",
+      "dateEvent": "2026-04-08",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100008",
+      "strEvent": "Atlanta Falcons vs Arizona Cardinals",
+      "idLeague": "4391",
+      "strHomeTeam": "Atlanta Falcons",
+      "strAwayTeam": "Arizona Cardinals",
+      "intRound": "500",
+      "intHomeScore": "5",
+      "intAwayScore": "0",
+      "strTimestamp": "2026-04-15T20:00:00",
+      "dateEvent": "2026-04-15",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     }
+    ]
+   }
+  },
+  "usa.1": {
+   "family": "soccer (MLS)",
+   "tsdbLeague": "4346",
+   "body": {
+    "schedule": [
+     {
+      "idEvent": "9100009",
+      "strEvent": "Atlanta United FC vs Austin FC",
+      "idLeague": "4346",
+      "strHomeTeam": "Atlanta United FC",
+      "strAwayTeam": "Austin FC",
+      "intRound": "500",
+      "intHomeScore": "3",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-03-01T20:00:00",
+      "dateEvent": "2026-03-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100010",
+      "strEvent": "Atlanta United FC vs Austin FC",
+      "idLeague": "4346",
+      "strHomeTeam": "Atlanta United FC",
+      "strAwayTeam": "Austin FC",
+      "intRound": "1",
+      "intHomeScore": "2",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-04-01T20:00:00",
+      "dateEvent": "2026-04-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100011",
+      "strEvent": "CF Montréal vs Atlanta United FC",
+      "idLeague": "4346",
+      "strHomeTeam": "CF Montréal",
+      "strAwayTeam": "Atlanta United FC",
+      "intRound": "2",
+      "intHomeScore": "0",
+      "intAwayScore": "2",
+      "strTimestamp": "2026-04-08T20:00:00",
+      "dateEvent": "2026-04-08",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100012",
+      "strEvent": "Austin FC vs Atlanta United FC",
+      "idLeague": "4346",
+      "strHomeTeam": "Austin FC",
+      "strAwayTeam": "Atlanta United FC",
+      "intRound": "500",
+      "intHomeScore": "5",
+      "intAwayScore": "0",
+      "strTimestamp": "2026-04-15T20:00:00",
+      "dateEvent": "2026-04-15",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     }
+    ]
+   }
+  },
+  "eng.1": {
+   "family": "soccer (Europe)",
+   "tsdbLeague": "4328",
+   "body": {
+    "schedule": [
+     {
+      "idEvent": "9100013",
+      "strEvent": "AFC Bournemouth vs Arsenal",
+      "idLeague": "4328",
+      "strHomeTeam": "AFC Bournemouth",
+      "strAwayTeam": "Arsenal",
+      "intRound": "500",
+      "intHomeScore": "3",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-03-01T20:00:00",
+      "dateEvent": "2026-03-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100014",
+      "strEvent": "AFC Bournemouth vs Arsenal",
+      "idLeague": "4328",
+      "strHomeTeam": "AFC Bournemouth",
+      "strAwayTeam": "Arsenal",
+      "intRound": "1",
+      "intHomeScore": "2",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-04-01T20:00:00",
+      "dateEvent": "2026-04-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100015",
+      "strEvent": "Aston Villa vs AFC Bournemouth",
+      "idLeague": "4328",
+      "strHomeTeam": "Aston Villa",
+      "strAwayTeam": "AFC Bournemouth",
+      "intRound": "2",
+      "intHomeScore": "0",
+      "intAwayScore": "2",
+      "strTimestamp": "2026-04-08T20:00:00",
+      "dateEvent": "2026-04-08",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100016",
+      "strEvent": "Arsenal vs AFC Bournemouth",
+      "idLeague": "4328",
+      "strHomeTeam": "Arsenal",
+      "strAwayTeam": "AFC Bournemouth",
+      "intRound": "500",
+      "intHomeScore": "5",
+      "intAwayScore": "0",
+      "strTimestamp": "2026-04-15T20:00:00",
+      "dateEvent": "2026-04-15",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     }
+    ]
+   }
+  },
+  "cfb": {
+   "family": "college football",
+   "tsdbLeague": "4479",
+   "body": {
+    "schedule": [
+     {
+      "idEvent": "9100017",
+      "strEvent": "Abilene Christian Wildcats vs Adams State Grizzlies",
+      "idLeague": "4479",
+      "strHomeTeam": "Abilene Christian Wildcats",
+      "strAwayTeam": "Adams State Grizzlies",
+      "intRound": "500",
+      "intHomeScore": "3",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-03-01T20:00:00",
+      "dateEvent": "2026-03-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100018",
+      "strEvent": "Abilene Christian Wildcats vs Adams State Grizzlies",
+      "idLeague": "4479",
+      "strHomeTeam": "Abilene Christian Wildcats",
+      "strAwayTeam": "Adams State Grizzlies",
+      "intRound": "1",
+      "intHomeScore": "2",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-04-01T20:00:00",
+      "dateEvent": "2026-04-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100019",
+      "strEvent": "Adrian Bulldogs vs Abilene Christian Wildcats",
+      "idLeague": "4479",
+      "strHomeTeam": "Adrian Bulldogs",
+      "strAwayTeam": "Abilene Christian Wildcats",
+      "intRound": "2",
+      "intHomeScore": "0",
+      "intAwayScore": "2",
+      "strTimestamp": "2026-04-08T20:00:00",
+      "dateEvent": "2026-04-08",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100020",
+      "strEvent": "Adams State Grizzlies vs Abilene Christian Wildcats",
+      "idLeague": "4479",
+      "strHomeTeam": "Adams State Grizzlies",
+      "strAwayTeam": "Abilene Christian Wildcats",
+      "intRound": "500",
+      "intHomeScore": "5",
+      "intAwayScore": "0",
+      "strTimestamp": "2026-04-15T20:00:00",
+      "dateEvent": "2026-04-15",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     }
+    ]
+   }
+  },
+  "mcbb": {
+   "family": "college basketball",
+   "tsdbLeague": "4607",
+   "body": {
+    "schedule": [
+     {
+      "idEvent": "9100021",
+      "strEvent": "Abilene Christian Wildcats vs Air Force Falcons",
+      "idLeague": "4607",
+      "strHomeTeam": "Abilene Christian Wildcats",
+      "strAwayTeam": "Air Force Falcons",
+      "intRound": "500",
+      "intHomeScore": "3",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-03-01T20:00:00",
+      "dateEvent": "2026-03-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100022",
+      "strEvent": "Abilene Christian Wildcats vs Air Force Falcons",
+      "idLeague": "4607",
+      "strHomeTeam": "Abilene Christian Wildcats",
+      "strAwayTeam": "Air Force Falcons",
+      "intRound": "1",
+      "intHomeScore": "2",
+      "intAwayScore": "1",
+      "strTimestamp": "2026-04-01T20:00:00",
+      "dateEvent": "2026-04-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100023",
+      "strEvent": "Akron Zips vs Abilene Christian Wildcats",
+      "idLeague": "4607",
+      "strHomeTeam": "Akron Zips",
+      "strAwayTeam": "Abilene Christian Wildcats",
+      "intRound": "2",
+      "intHomeScore": "0",
+      "intAwayScore": "2",
+      "strTimestamp": "2026-04-08T20:00:00",
+      "dateEvent": "2026-04-08",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     },
+     {
+      "idEvent": "9100024",
+      "strEvent": "Air Force Falcons vs Abilene Christian Wildcats",
+      "idLeague": "4607",
+      "strHomeTeam": "Air Force Falcons",
+      "strAwayTeam": "Abilene Christian Wildcats",
+      "intRound": "500",
+      "intHomeScore": "5",
+      "intAwayScore": "0",
+      "strTimestamp": "2026-04-15T20:00:00",
+      "dateEvent": "2026-04-15",
+      "strTime": "20:00:00",
+      "strStatus": "FT"
+     }
+    ]
+   }
+  }
+ }
+}

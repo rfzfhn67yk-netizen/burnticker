@@ -1,0 +1,44 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>D2 avatar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600&display=block" rel="stylesheet">
+<link rel="stylesheet" href="statement.css">
+<style>
+  html,body{margin:0;width:800px;height:800px;overflow:hidden;background:var(--desk)}
+  body{position:relative}
+  .desk{position:absolute;inset:0;background:radial-gradient(110% 90% at 40% 20%,#333332,#242423 70%)}
+  .sheet{left:92px;top:60px;width:640px;height:820px;transform:rotate(-1.2deg);padding:52px 40px 0 58px;box-sizing:border-box}
+  .ticker{font-size:112px;margin-left:-5px}
+  .kicker{font-size:15px;margin-top:10px;white-space:nowrap}
+  .tbl{margin-top:34px;font-size:16px}
+  .tbl td{padding:11px 0 9px}
+  .stamp{left:290px;top:470px;transform:rotate(-8deg);font-size:64px;padding:8px 18px 4px}
+</style></head>
+<body>
+<div class="desk"></div>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="stampink" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="2" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="7" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.2 1.2" result="mask"/>
+    <feComposite in="d" in2="mask" operator="in"/>
+  </filter>
+  <filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" stitchTiles="stitch"/></filter>
+</svg>
+<div class="sheet">
+  <svg class="grain" width="100%" height="100%"><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="punch" style="left:18px;top:200px"></div><div class="punch" style="left:18px;top:600px"></div>
+  <div class="ticker">$DEFICIT</div>
+  <div class="kicker">Daily statement · Debt to the Penny · 2026-10-08</div>
+  <table class="tbl">
+    <tr><td class="k">Total public debt outstanding</td><td class="dots"></td><td class="v">38,411,206,558,942.17</td></tr>
+    <tr class="muted"><td class="k">Prior business day</td><td class="dots"></td><td class="v">38,389,922,445,934.62</td></tr>
+    <tr><td class="k">Change</td><td class="dots"></td><td class="v">+21,284,113,007.55</td></tr>
+    <tr class="muted"><td class="k">Unit</td><td class="dots"></td><td class="v">1,000,000,000.00</td></tr>
+    <tr><td class="k">Units</td><td class="dots"></td><td class="v">21</td></tr>
+    <tr class="total"><td class="k">Burn ($DEFICIT)</td><td class="dots"></td><td class="v">2,100,000</td></tr>
+  </table>
+  <div class="stamp">Burned<small>on-chain · 5xQm7…kR7a</small></div>
+</div>
+</body></html>

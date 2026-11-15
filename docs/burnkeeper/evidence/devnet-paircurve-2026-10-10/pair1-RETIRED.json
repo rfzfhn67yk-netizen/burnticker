@@ -1,0 +1,17 @@
+{
+  "pair": "5etkAGzWxEsyUcVwWNA8hVCfH4cKcsqCBo6FiW7RRfGh",
+  "owner": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
+  "dataLength": 888,
+  "layoutAtDeploy": "888 B = 8 + 880 (first pair_curve build, deployed 2026-10-10 17:06 Denver)",
+  "layoutNow": "946 B = 8 + 938 (fa8627a4 and later)",
+  "status": 1,
+  "statusName": "graduated",
+  "vault": "71yLtEPJDg8JbtZMDT5wSTcKFLaAgiCrH2TmJ8zkNKiw",
+  "vaultLamports": 650240,
+  "simulatedClaimWithTheUpgradedProgram": {
+    "err": "{\"InstructionError\":[0,{\"Custom\":3003}]}",
+    "anchorError": "Program log: AnchorError caused by account: pair. Error Code: AccountDidNotDeserialize. Error Number: 3003. Error Message: Failed to deserialize the account."
+  },
+  "readAt": "2026-10-11T02:03:50.433Z",
+  "verdict": "RETIRED: the upgraded program cannot deserialize this Pair (its account is 58 bytes shorter than the new layout). Its two pools stay registered in burn_receipts (which reads only the first 236 bytes) and keep trading on Raydium; nothing is owed by pair_curve (vault at its rent minimum + 0 accrual at upgrade time). Kept as a record; never used again."
+}

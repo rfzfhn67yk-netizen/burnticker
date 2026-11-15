@@ -1,0 +1,23 @@
+BURN_RECEIPTS_LOCALNET=1 BURNKEEPER_EXECUTION=program BURN_RECEIPTS_LOCALNET_LAYOUT=r3 BURN_RECEIPTS_LOCALNET_SO=<the deployed round-3 source, localnet build> node --test test/burnReceiptsLocalnet.test.ts
+  ✔ vault mode: init before the mint exists → attested readings → crankAll burns, carries the shortfall, writes memo v1 (3388.900042ms)
+  ✖ buyback mode: LaunchLab-shaped migration (CPMM pool, creator = fee PDA, LP locked) → register → crank defers until the pool has TWAP history (8141.552ms)
+  ✔ KEEPER, vault mode: executeProgramPending attests the readings with the keeper key, cranks crank_vault, and records the program's facts (5487.933375ms)
+  ✖ KEEPER, buyback: no pool → waits; register_pool → claims best-effort, check_pool_health, then the crank DEFERS (TwapUnavailable) and the ledger records a wait, not an error (7708.382834ms)
+  ✔ KEEPER, quorum 2 with two local keys: shared-message readings fit a legacy transaction, the program counts both keys, the crank burns (5475.70925ms)
+  ﹣ END SINKS: an EndSink pinned at initialize_token → quorum-signed RESOLVED end (once) → later readings refused → forward_on_end refuses a flagship that is not live and any other target; a VOID end forwards not
+  ✖ ADMIN CLI (scripts/burnreceipts-admin.mts): initialize-token dry run decodes the instruction, prints the pinned rules sha and the resulting TokenConfig; --send with test key files creates it; verify-platform-pins p
+✖ burn_receipts on a local validator (TypeScript client end to end) (31507.990708ms)
+ℹ tests 7
+ℹ suites 1
+ℹ pass 3
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 31777.277875
+✖ failing tests:
+✖ buyback mode: LaunchLab-shaped migration (CPMM pool, creator = fee PDA, LP locked) → register → crank defers until the pool has TWAP history (8141.552ms)
+  AssertionError [ERR_ASSERTION]: register_pool: FeeKeyNotRegistered
+✖ KEEPER, buyback: no pool → waits; register_pool → claims best-effort, check_pool_health, then the crank DEFERS (TwapUnavailable) and the ledger records a wait, not an error (7708.382834ms)
+✖ ADMIN CLI (scripts/burnreceipts-admin.mts): initialize-token dry run decodes the instruction, prints the pinned rules sha and the resulting TokenConfig; --send with test key files creates it; verify-platform-pins pas
+  AssertionError [ERR_ASSERTION]: refusing: config/burnkeeper/deficit.rules.json names mint AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj, not oapfTk8FG2np1vSoGANkbijWiQApHZMFAytSdCoass9

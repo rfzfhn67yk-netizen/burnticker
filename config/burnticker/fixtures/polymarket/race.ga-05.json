@@ -1,0 +1,131 @@
+{
+ "note": "Gamma /events?tag_slug=midterms (offset 200), the GA-05 race only, frozen 2026-10-10: the live miss where \"oscars\" matched the candidate John Oscar Salvesen (R). Slimmed; no prices.",
+ "event": {
+  "id": "191429",
+  "slug": "ga-05-house-election-winner",
+  "title": "GA-05 House Election Winner",
+  "closed": false,
+  "endDate": "2026-11-04T04:59:00Z",
+  "description": "This market will resolve according to the party of the candidate who wins the GA-05 congressional district seat in the U.S. House of Representatives in the 2026 midterm elections. The midterm elections will take place on November 3, 2026.\n\n\u200bA candidate's party will be determined by their ballot-listed or otherwise identifiable affiliation with that party at the time all of the 2026 House elections are conclusively called by this market's resolution sources. A candidate without a ballot-listed affiliation to either the Democrat or Republican parties will be considered a member of one of these parties based on the party with which they most recently expressed their intent to caucus at the time all of the House elections are conclusively called by this market's resolution sources.\n\nThis market will resolve based on the result of the election as indicated by a consensus of credible reporting. If there is ambiguity, this market will resolve based solely on the official results as reported by the United States government, specifically the Federal Election Commission (https://www.fec.gov/).",
+  "tags": [
+   {
+    "slug": "politics",
+    "label": "Politics"
+   },
+   {
+    "slug": "elections",
+    "label": "Elections"
+   },
+   {
+    "slug": "nov-4-elections",
+    "label": "Nov 4 Elections"
+   },
+   {
+    "slug": "midterms",
+    "label": "Midterms"
+   },
+   {
+    "slug": "house-elections",
+    "label": "House Elections"
+   },
+   {
+    "slug": "georgia-midterm",
+    "label": "Georgia Midterm"
+   },
+   {
+    "slug": "us-presidential-election",
+    "label": "US Election"
+   }
+  ],
+  "markets": [
+   {
+    "id": "1283192",
+    "conditionId": "0x298b88deb34fe5ce98f36a10669deda8d7969befac9693172aaf5580caa34388",
+    "question": "Will the Republican Party win the GA-05 House seat?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-11-04T04:59:00Z",
+    "negRisk": true,
+    "groupItemTitle": "John Oscar Salvesen (R)"
+   },
+   {
+    "id": "1283193",
+    "conditionId": "0x44ed7efb899fb00b5e06bd75766349bf9b24beeed57c0146c8fff7b9ef294227",
+    "question": "Will the Democratic Party win the GA-05 House seat?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "closed": false,
+    "active": true,
+    "endDate": "2026-11-04T04:59:00Z",
+    "negRisk": true,
+    "groupItemTitle": "Nikema Williams (D)"
+   },
+   {
+    "id": "1283194",
+    "conditionId": "0x93be7b54bab4c2dd7a2f48bd49b7d180a18975825196743619e6c2fb5e288ae8",
+    "question": "Will another party win the GA-05 House seat?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "closed": false,
+    "active": false,
+    "endDate": "2026-11-03T00:00:00Z",
+    "negRisk": true,
+    "groupItemTitle": "Other"
+   },
+   {
+    "id": "1283195",
+    "conditionId": "0x9d3217d456534058760d38a93ed61da2e499cb8e667c90c98a4c0c3cf07f1049",
+    "question": "Will A win the GA-05 House seat?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "closed": false,
+    "active": false,
+    "endDate": "2026-11-03T00:00:00Z",
+    "negRisk": true,
+    "groupItemTitle": "A"
+   },
+   {
+    "id": "1283196",
+    "conditionId": "0x323ca6b35ef66db7572705de5499e2ec2faecbfce71f4f1f464cc16d7dc4cf72",
+    "question": "Will B win the GA-05 House seat?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "closed": false,
+    "active": false,
+    "endDate": "2026-11-03T00:00:00Z",
+    "negRisk": true,
+    "groupItemTitle": "B"
+   },
+   {
+    "id": "1283197",
+    "conditionId": "0xcdc5cb0b71dcf37e7fa66dc122d03a54cbcbdba39531ca4bed0b3526348f1aa5",
+    "question": "Will C win the GA-05 House seat?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "closed": false,
+    "active": false,
+    "endDate": "2026-11-03T00:00:00Z",
+    "negRisk": true,
+    "groupItemTitle": "C"
+   },
+   {
+    "id": "1283198",
+    "conditionId": "0x1ab5943b7ff2c96f90e5dbf06395fb6e88a15ac4134ca3af0e21affc72424f16",
+    "question": "Will D win the GA-05 House seat?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "closed": false,
+    "active": false,
+    "endDate": "2026-11-03T00:00:00Z",
+    "negRisk": true,
+    "groupItemTitle": "D"
+   },
+   {
+    "id": "1283199",
+    "conditionId": "0x6d8d9992c37c2292c88431fb31f51b2aa6ae85e2882dc91d9eb2536cf43e05c4",
+    "question": "Will E win the GA-05 House seat?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "closed": false,
+    "active": false,
+    "endDate": "2026-11-03T00:00:00Z",
+    "negRisk": true,
+    "groupItemTitle": "E"
+   }
+  ]
+ }
+}

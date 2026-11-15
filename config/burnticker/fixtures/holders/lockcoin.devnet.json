@@ -1,0 +1,102 @@
+{
+ "note": "The devnet LaunchLab lock-rehearsal coin's holders (docs/burnkeeper/evidence/devnet-lock-2026-10-10/launchlab-launch.json), read-only from the public devnet endpoint: the mint account, getTokenAccounts (mintAddress style) and getProgramAccounts (dataSlice owner+amount). Used by test/burntickerHolders.test.ts.",
+ "network": "devnet",
+ "fetchedAt": "2026-10-12T18:54:55Z",
+ "mint": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+ "getAccountInfo": {
+  "context": {
+   "apiVersion": "4.4.0-beta.0",
+   "slot": 510360755
+  },
+  "value": {
+   "data": [
+    "AAAAAEm8YvuJsLZyaJyZdRcypsp02nNVLi3/Vw9u1OfsqjGu0c1AHCiNAwAGAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+    "base64"
+   ],
+   "executable": false,
+   "lamports": 1066800,
+   "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+   "rentEpoch": 18446744073709551615,
+   "space": 82
+  }
+ },
+ "getTokenAccounts": {
+  "params": {
+   "mintAddress": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+   "limit": 1000
+  },
+  "result": {
+   "total": 2,
+   "limit": 1000,
+   "token_accounts": [
+    {
+     "address": "2i9t5maMQA8sykMA8Dh4RsJ8D2yub7TtXgQeFCLAJ7sM",
+     "mint": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+     "amount": 668644666012079,
+     "owner": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+     "frozen": false,
+     "delegate": null,
+     "delegated_amount": 0,
+     "close_authority": null,
+     "extensions": null
+    },
+    {
+     "address": "9mCJMUoYowen8ef4F9A9uDyUSssUw4PJLjC4CTjmjSr1",
+     "mint": "CxX5PH8Awsxvs2nrzXfmq2T91Cr6t1EMvEDhMs18hkou",
+     "amount": 330983676337186,
+     "owner": "CXniRufdq5xL8t8jZAPxsPZDpuudwuJSPWnbcD5Y5Nxq",
+     "frozen": false,
+     "delegate": null,
+     "delegated_amount": 0,
+     "close_authority": null,
+     "extensions": null
+    }
+   ],
+   "cursor": "9mCJMUoYowen8ef4F9A9uDyUSssUw4PJLjC4CTjmjSr1"
+  }
+ },
+ "getProgramAccounts": [
+  {
+   "account": {
+    "data": [
+     "npBb5n2Q1AKd1KpgYeZerinVXfWK8r6jp6cflv8ecVGvccz3IGACAA==",
+     "base64"
+    ],
+    "executable": false,
+    "lamports": 1488440,
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   },
+   "pubkey": "2i9t5maMQA8sykMA8Dh4RsJ8D2yub7TtXgQeFCLAJ7sM"
+  },
+  {
+   "account": {
+    "data": [
+     "q1OrdyckyvC2oVDVXOLIzzAuUaGur8rFQoyadDPZ9yoiXHQkBy0BAA==",
+     "base64"
+    ],
+    "executable": false,
+    "lamports": 1488440,
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   },
+   "pubkey": "9mCJMUoYowen8ef4F9A9uDyUSssUw4PJLjC4CTjmjSr1"
+  },
+  {
+   "account": {
+    "data": [
+     "Sbxi+4mwtnJonJl1FzKmynTac1UuLf9XD27U5+yqMa4AAAAAAAAAAA==",
+     "base64"
+    ],
+    "executable": false,
+    "lamports": 1488440,
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "rentEpoch": 18446744073709551615,
+    "space": 165
+   },
+   "pubkey": "FYvvWfs4pNU7AQmcsHJtdvu142SV7DSgM3Q3vW36cEUJ"
+  }
+ ]
+}

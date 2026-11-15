@@ -1,0 +1,17 @@
+:root{--paper:#e9e9df;--ink:#15302a;--gold:#b8923f;--dark:#0f1a17}
+.paper{position:absolute;inset:0;background:
+  radial-gradient(120% 80% at 70% 20%, rgba(255,255,255,.35), transparent 60%), var(--paper)}
+.grain{position:absolute;inset:0;opacity:.07;mix-blend-mode:multiply;pointer-events:none}
+/* engraved hatch frame: fine parallel strokes, then a gold hairline inside it */
+.frame{position:absolute;pointer-events:none;
+  background:repeating-linear-gradient(45deg, var(--ink) 0 0.8px, transparent 0.8px 3.4px);opacity:.55;}
+.frame.hz{background:repeating-linear-gradient(0deg, var(--ink) 0 0.8px, transparent 0.8px 3.4px)}
+.hair{position:absolute;border:1px solid var(--gold);pointer-events:none}
+.sc{font-family:'Playfair Display SC',serif;font-weight:700;color:var(--ink)}
+.num{font-family:'Playfair Display',serif;font-variant-numeric:oldstyle-nums tabular-nums;color:var(--ink);
+  text-shadow:0.6px 0.6px 0 rgba(255,255,255,.65)}
+.ital{font-family:'Playfair Display',serif;font-style:italic;color:var(--ink)}
+.cartouche{position:absolute;background:var(--ink);box-shadow:inset 0 0 0 3px var(--paper), inset 0 0 0 4px var(--gold)}
+.cartouche span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--gold);
+  font-family:'Playfair Display SC',serif;font-weight:700}
+.burn{position:absolute;pointer-events:none}

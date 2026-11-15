@@ -1,0 +1,16 @@
+{
+  "command": "lock",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "CUVutu3wjP74ic1RxVhgHYevAmrCLgq6aAd3d9gNLWYi",
+  "side": "A",
+  "feeNftMint": "8shUfopKAjiDd51U2mQdzDqNWiVibLSPKbSC86frAQVb",
+  "result": {
+    "ok": true,
+    "signature": null,
+    "error": null,
+    "unitsConsumed": 158245,
+    "txBytes": 946
+  }
+}

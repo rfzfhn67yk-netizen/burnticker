@@ -1,0 +1,25 @@
+{
+  "command": "graduate",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "5etkAGzWxEsyUcVwWNA8hVCfH4cKcsqCBo6FiW7RRfGh",
+  "side": "A",
+  "pool": "HxSR844GVUQ42nXatLoJjxkaDCcUZvqYuBBuoaDt4MwK",
+  "result": {
+    "ok": false,
+    "signature": null,
+    "error": "NotReadyToGraduate",
+    "unitsConsumed": 22415,
+    "txBytes": 1061,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN invoke [1]",
+      "Program log: Instruction: Graduate",
+      "Program log: AnchorError thrown in programs/pair_curve/src/instructions/graduate.rs:96. Error Code: NotReadyToGraduate. Error Number: 6016. Error Message: graduation needs the combined raise at target and each side at its minimum share.",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN consumed 22265 of 599850 compute units",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN failed: custom program error: 0x1780"
+    ]
+  }
+}

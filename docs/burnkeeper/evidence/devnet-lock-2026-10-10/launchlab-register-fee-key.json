@@ -1,0 +1,132 @@
+{
+  "command": "register-fee-key",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": false,
+  "pool": "AKRxMfAjMjP4ZFPKtUw6R13Gi8KczYWiKua6t5acEsoQ",
+  "feeNftMint": "D6ZTNvkuaM8RH8QRBf3dvnWBPoneXshAprLDiJ8Y1TbX",
+  "feeKeys": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+  "positions": [
+    {
+      "lockedLiquidity": "79Lqk6qZVAJ9PdvspRgSRJRKsgqRu7LcUjADsFBAwAdS",
+      "feeNftMint": "D6ZTNvkuaM8RH8QRBf3dvnWBPoneXshAprLDiJ8Y1TbX",
+      "lockedLp": "454862616521",
+      "heldByFeeKeys": true
+    }
+  ],
+  "instructions": [
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "register_fee_key",
+      "accounts": [
+        {
+          "name": "payer",
+          "pubkey": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+          "signer": true,
+          "writable": true
+        },
+        {
+          "name": "config",
+          "pubkey": "7ZjCmiGzZMCKf4wuwzgQFmJWMhrQ1s9NHP1uwnL1DAso",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "fee_key",
+          "pubkey": "26rU845tC6Rrr7HARwS2xFiTMKgJMdWu9hUZQ6uQR4Wq",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "fee_keys",
+          "pubkey": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "pool_state",
+          "pubkey": "AKRxMfAjMjP4ZFPKtUw6R13Gi8KczYWiKua6t5acEsoQ",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "fee_nft_mint",
+          "pubkey": "D6ZTNvkuaM8RH8QRBf3dvnWBPoneXshAprLDiJ8Y1TbX",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "fee_nft_account",
+          "pubkey": "4rkMGyj1XoBNV2gG5arEPG2XRQBsGRMruGpMVjR7ZqiK",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "locked_liquidity",
+          "pubkey": "79Lqk6qZVAJ9PdvspRgSRJRKsgqRu7LcUjADsFBAwAdS",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {}
+    }
+  ],
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 35770,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: RegisterFeeKey",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 1573 of 367396 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 35620 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "26rU845tC6Rrr7HARwS2xFiTMKgJMdWu9hUZQ6uQR4Wq",
+      "kind": "lamports",
+      "state": {
+        "lamports": 2306320
+      }
+    }
+  ],
+  "sent": {
+    "signature": "rWL8aX6VeoPW68G3abjZgWJeJPcws22ozWqRsV66pjp4VsKoZpuWST5KehE2dWaDMnHPNx8sk8BLM1PmJWUDGTJ",
+    "err": null
+  },
+  "accountsAfterSend": [
+    {
+      "address": "26rU845tC6Rrr7HARwS2xFiTMKgJMdWu9hUZQ6uQR4Wq",
+      "kind": "lamports",
+      "state": {
+        "lamports": 2306320
+      }
+    }
+  ]
+}

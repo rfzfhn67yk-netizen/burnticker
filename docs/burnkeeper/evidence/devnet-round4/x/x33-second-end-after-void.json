@@ -1,0 +1,123 @@
+{
+  "case": "x33-second-end-after-void",
+  "expected": "already in use",
+  "observed": "system_program Custom(0) \"already in use\" (RuleEnd PDA exists)",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR submit-rule-end --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint 7UH16o8Fdqq33kHMUpDaSHbmevjG1r8DmiHWYp4cqptm --date 20261009 --outcome resolved --attester ~/.config/meme-coin-trader/devnet/keeper.json",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":0}]}",
+  "errorLogLines": [
+    "Allocate: account Address { address: 6d3MtQmtfQ5x5h2nUkj1msQQn8Bq75whXipNW8DdFEQ8, base: None } already in use",
+    "Program 11111111111111111111111111111111 failed: custom program error: 0x0",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x0"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "submit-rule-end",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "ruleEnd": "6d3MtQmtfQ5x5h2nUkj1msQQn8Bq75whXipNW8DdFEQ8",
+    "message": "BURNRECEIPTS-END-v1|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|7UH16o8Fdqq33kHMUpDaSHbmevjG1r8DmiHWYp4cqptm|2026-10-09|outcome=resolved|src=daefd436e5a17780277d385b47bb12ea9858be653c6f04838f62112a3d59aefd|proof=0000000000000000000000000000000000000000000000000000000000000000",
+    "instructions": [
+      {
+        "program": "Ed25519SigVerify111111111111111111111111111",
+        "accounts": [],
+        "dataHex": "01003000ffff1000ffff70004201ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a59f0de52051070ac286365af087eabe1d85af8f14b9a6e299900f14f28afe10f2bdeb945fce4357cd2befb1673b179356eba45793d5a57b4674ee209376243e014255524e52454345495054532d454e442d76317c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c37554831366f384664717133336b484d557044615348626d65766a47317238446d694857597034637170746d7c323032362d31302d30397c6f7574636f6d653d7265736f6c7665647c7372633d646165666434333665356131373738303237376433383562343762623132656139383538626536353363366630343833386636323131326133643539616566647c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+      },
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "submit_rule_end",
+        "accounts": [
+          {
+            "name": "payer",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "name": "config",
+            "pubkey": "e122WNmA3kSBUvKXBMXKEKz7xxhxmokPASzbCXy57pX",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "end_sink",
+            "pubkey": "5262oZ2HV81TY6P19TfopwJ5XefHjRsZCaCh8u8dvZWD",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "rule_end",
+            "pubkey": "6d3MtQmtfQ5x5h2nUkj1msQQn8Bq75whXipNW8DdFEQ8",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "instructions",
+            "pubkey": "Sysvar1nstructions1111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "event_authority",
+            "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "program",
+            "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {
+          "record_date": 20261009,
+          "outcome": 1,
+          "source_url_hash": "daefd436e5a17780277d385b47bb12ea9858be653c6f04838f62112a3d59aefd",
+          "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":0}]}",
+      "unitsConsumed": 16894,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: SubmitRuleEnd",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Allocate: account Address { address: 6d3MtQmtfQ5x5h2nUkj1msQQn8Bq75whXipNW8DdFEQ8, base: None } already in use",
+        "Program 11111111111111111111111111111111 failed: custom program error: 0x0",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 16744 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x0"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "e122WNmA3kSBUvKXBMXKEKz7xxhxmokPASzbCXy57pX",
+        "kind": "TokenConfig",
+        "state": null
+      },
+      {
+        "address": "DJUJE18pyGk1ihgukkD3mGTsCV9S1q1VeJfkBgfshU2Q",
+        "kind": "lamports",
+        "state": null
+      },
+      {
+        "address": "6d3MtQmtfQ5x5h2nUkj1msQQn8Bq75whXipNW8DdFEQ8",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

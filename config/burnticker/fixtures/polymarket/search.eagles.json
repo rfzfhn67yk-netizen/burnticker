@@ -1,0 +1,868 @@
+{
+ "fetchedAt": "2026-10-10T17:00:56Z",
+ "note": "public-search body; each event's markets pruned to the moneyline-shaped question plus up to 3 others (values verbatim)",
+ "gamma": {
+  "url": "https://gamma-api.polymarket.com/public-search?q=eagles&limit_per_type=10&events_status=active&keep_closed_markets=0",
+  "body": {
+   "events": [
+    {
+     "id": "1027875",
+     "slug": "nfl-dal-phi-2026-10-27",
+     "ticker": "nfl-dal-phi-2026-10-27",
+     "title": "Cowboys vs. Eagles",
+     "closed": false,
+     "active": true,
+     "endDate": "2026-10-27T00:15:00Z",
+     "startDate": "2026-09-15T12:00:51Z",
+     "negRisk": false,
+     "tags": [
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "450",
+       "slug": "nfl",
+       "label": "NFL (All)"
+      },
+      {
+       "id": "100639",
+       "slug": "games",
+       "label": "Games"
+      }
+     ],
+     "markets": [
+      {
+       "id": "4584357",
+       "question": "Cowboys vs. Eagles",
+       "conditionId": "0xcabe86f531002c79e680777d7570a668a4dc27c26ac05a26649b998605995684",
+       "questionID": "0x2ccd950c3bf0fa0cf1ec6f683be4aa62babac611e7ad2ee04946ef3488b88f1c",
+       "slug": "nfl-dal-phi-2026-10-27",
+       "outcomes": "[\"Cowboys\", \"Eagles\"]",
+       "outcomePrices": "[\"0.325\", \"0.675\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-27T00:15:00Z",
+       "startDate": "2026-09-15T12:00:51Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com/scores",
+       "negRisk": false,
+       "sportsMarketType": "moneyline",
+       "bestBid": 0.11,
+       "bestAsk": 0.54,
+       "lastTradePrice": 0.1
+      },
+      {
+       "id": "4586934",
+       "question": "Spread: Cowboys (-1.5)",
+       "conditionId": "0xb61f5fc32707a5509525b4611fe2b4301d87dae51e9b4334f35fbf518236475f",
+       "questionID": "0x1a689c70bb3c3f6494539809281122460d666912d1c7de7cc10bd82f119d4a0c",
+       "slug": "nfl-dal-phi-2026-10-27-spread-away-1pt5",
+       "outcomes": "[\"Cowboys\", \"Eagles\"]",
+       "outcomePrices": "[\"0.335\", \"0.665\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-27T00:15:00Z",
+       "startDate": "2026-09-15T16:01:29Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com/scores",
+       "negRisk": false,
+       "sportsMarketType": "spreads",
+       "groupItemTitle": "Spread -1.5",
+       "bestBid": 0.08,
+       "bestAsk": 0.59
+      },
+      {
+       "id": "4586937",
+       "question": "Spread: Cowboys (-2.5)",
+       "conditionId": "0x2fded60aa3720a32ebce94762a4c12700d529f5ac01ef53d240a0cf615c007a5",
+       "questionID": "0xe5f5088b4a3c60360c455ce56f108db89aadc5c3eaeb7bfb93b07a45c296f036",
+       "slug": "nfl-dal-phi-2026-10-27-spread-away-2pt5",
+       "outcomes": "[\"Cowboys\", \"Eagles\"]",
+       "outcomePrices": "[\"0.305\", \"0.695\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-27T00:15:00Z",
+       "startDate": "2026-09-15T16:02:27Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com/scores",
+       "negRisk": false,
+       "sportsMarketType": "spreads",
+       "groupItemTitle": "Spread -2.5",
+       "bestBid": 0.05,
+       "bestAsk": 0.56
+      },
+      {
+       "id": "4586940",
+       "question": "Spread: Cowboys (-3.5)",
+       "conditionId": "0xdc3bcaa542d682ecbc81a07c2308cd3c46a4c18d06cda17d062ca1cc23b26511",
+       "questionID": "0x7a698cba9db7cced8a9839e60b8b07d044883deda5e57facef63cf6330a65d37",
+       "slug": "nfl-dal-phi-2026-10-27-spread-away-3pt5",
+       "outcomes": "[\"Cowboys\", \"Eagles\"]",
+       "outcomePrices": "[\"0.275\", \"0.725\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-27T00:15:00Z",
+       "startDate": "2026-09-15T16:01:44Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com/scores",
+       "negRisk": false,
+       "sportsMarketType": "spreads",
+       "groupItemTitle": "Spread -3.5",
+       "bestBid": 0.02,
+       "bestAsk": 0.53
+      }
+     ],
+     "resolutionSource": "https://www.nfl.com/scores",
+     "_marketsInSource": 280
+    },
+    {
+     "id": "1085834",
+     "slug": "ere-goa-spa-2026-10-10",
+     "ticker": "ere-goa-spa-2026-10-10",
+     "title": "Go Ahead Eagles vs. Sparta Rotterdam",
+     "closed": false,
+     "active": true,
+     "endDate": "2026-10-10T14:30:00Z",
+     "startDate": "2026-09-26T14:30:10Z",
+     "negRisk": true,
+     "tags": [
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "100639",
+       "slug": "games",
+       "label": "Games"
+      },
+      {
+       "id": "100350",
+       "slug": "soccer",
+       "label": "Soccer"
+      },
+      {
+       "id": "101735",
+       "slug": "ere",
+       "label": "Eredivisie"
+      }
+     ],
+     "markets": [
+      {
+       "id": "4981604",
+       "question": "Will Go Ahead Eagles win on 2026-10-10?",
+       "conditionId": "0xec4f1fee7c5deb427a5593a069a0d48e97848b3df3ae406c324e481aab6d1076",
+       "questionID": "0x8d4088e0f294e2ebd2a4eef7a161b42e4e326e399610cdfe98a0dba9c551cf00",
+       "slug": "ere-goa-spa-2026-10-10-goa",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.0005\", \"0.9995\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-10T14:30:00Z",
+       "startDate": "2026-09-26T14:30:10Z",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "resolutionSource": "https://eredivisie.nl/competitie/speelschema",
+       "negRisk": true,
+       "sportsMarketType": "moneyline",
+       "groupItemTitle": "Go Ahead Eagles",
+       "bestAsk": 0.001,
+       "lastTradePrice": 0.009
+      },
+      {
+       "id": "4981605",
+       "question": "Will Go Ahead Eagles vs. Sparta Rotterdam end in a draw?",
+       "conditionId": "0x4bff60c436c1976ca56d6e56ffe0f79086634a0b3c2e75e7fb4e1109c54527cd",
+       "questionID": "0x8d4088e0f294e2ebd2a4eef7a161b42e4e326e399610cdfe98a0dba9c551cf01",
+       "slug": "ere-goa-spa-2026-10-10-draw",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.9995\", \"0.0005\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-10T14:30:00Z",
+       "startDate": "2026-09-26T14:30:10Z",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "resolutionSource": "https://eredivisie.nl/competitie/speelschema",
+       "negRisk": true,
+       "sportsMarketType": "moneyline",
+       "groupItemTitle": "Draw (Go Ahead Eagles vs. Sparta Rotterdam)",
+       "bestBid": 0.999,
+       "bestAsk": 1,
+       "lastTradePrice": 0.999
+      },
+      {
+       "id": "4981606",
+       "question": "Will Sparta Rotterdam win on 2026-10-10?",
+       "conditionId": "0x169a96bb8ab085fa0fb8d10d2b2814e6606cbb94c8b5e661450a2abbec972e23",
+       "questionID": "0x8d4088e0f294e2ebd2a4eef7a161b42e4e326e399610cdfe98a0dba9c551cf02",
+       "slug": "ere-goa-spa-2026-10-10-spa",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.0005\", \"0.9995\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-10T14:30:00Z",
+       "startDate": "2026-09-26T14:30:10Z",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "resolutionSource": "https://eredivisie.nl/competitie/speelschema",
+       "negRisk": true,
+       "sportsMarketType": "moneyline",
+       "groupItemTitle": "Sparta Rotterdam",
+       "bestAsk": 0.001,
+       "lastTradePrice": 0.019
+      }
+     ],
+     "resolutionSource": "https://eredivisie.nl/competitie/speelschema",
+     "_marketsInSource": 3
+    },
+    {
+     "id": "941330",
+     "slug": "nfl-phi-jax-2026-10-11",
+     "ticker": "nfl-phi-jax-2026-10-11",
+     "title": "Eagles vs. Jaguars",
+     "closed": false,
+     "active": true,
+     "endDate": "2026-10-11T13:30:00Z",
+     "startDate": "2026-08-31T12:00:45Z",
+     "negRisk": false,
+     "tags": [
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "450",
+       "slug": "nfl",
+       "label": "NFL (All)"
+      },
+      {
+       "id": "100639",
+       "slug": "games",
+       "label": "Games"
+      }
+     ],
+     "markets": [
+      {
+       "id": "4024655",
+       "question": "Eagles vs. Jaguars",
+       "conditionId": "0xc2cf94d904ba94a2d446c7fcda06fb3e62f0b3708ab0d1519b2904e84a1fb96b",
+       "questionID": "0x9fe9a2617e04409dd048204ddb2c0c9817cdaa8593bd3b918a4bd56155672745",
+       "slug": "nfl-phi-jax-2026-10-11",
+       "outcomes": "[\"Eagles\", \"Jaguars\"]",
+       "outcomePrices": "[\"0.235\", \"0.765\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-11T13:30:00Z",
+       "startDate": "2026-08-31T12:00:45Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com/scores",
+       "negRisk": false,
+       "sportsMarketType": "moneyline",
+       "bestBid": 0.23,
+       "bestAsk": 0.24,
+       "lastTradePrice": 0.24
+      },
+      {
+       "id": "4061665",
+       "question": "Spread: Eagles (-0.5)",
+       "conditionId": "0x3ef77f3c8e6d2032eeb2ff290ac6c793341121c6fde7aca3b75b047451d66bb6",
+       "questionID": "0x192b95133739007cbe9e1250e4868aef26efdc8782f69986bb3a8704f41e8fa7",
+       "slug": "nfl-phi-jax-2026-10-11-spread-away-0pt5",
+       "outcomes": "[\"Eagles\", \"Jaguars\"]",
+       "outcomePrices": "[\"0.23\", \"0.77\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-11T13:30:00Z",
+       "startDate": "2026-09-01T16:01:56Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com/scores",
+       "negRisk": false,
+       "sportsMarketType": "spreads",
+       "groupItemTitle": "Spread -0.5",
+       "bestBid": 0.22,
+       "bestAsk": 0.24
+      },
+      {
+       "id": "4061666",
+       "question": "Spread: Eagles (-1.5)",
+       "conditionId": "0xc85ce4d2d475e7917010e213f26ebc94f23e01c5a2b4ce5425c542807e0e3dcf",
+       "questionID": "0xc77ce9e21b044e3ae8156b723aeafcf3c99b93f417ef17be79c803bc5769e365",
+       "slug": "nfl-phi-jax-2026-10-11-spread-away-1pt5",
+       "outcomes": "[\"Eagles\", \"Jaguars\"]",
+       "outcomePrices": "[\"0.215\", \"0.785\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-11T13:30:00Z",
+       "startDate": "2026-09-01T16:01:57Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com/scores",
+       "negRisk": false,
+       "sportsMarketType": "spreads",
+       "groupItemTitle": "Spread -1.5",
+       "bestBid": 0.2,
+       "bestAsk": 0.23
+      },
+      {
+       "id": "4061667",
+       "question": "Spread: Eagles (-2.5)",
+       "conditionId": "0x8eb8482b96e2b131f9ab6dac29ae10d5c22493e8973d29ac744fc747e2425706",
+       "questionID": "0x9e897db630694f9e3f1e00c8d07f57370bda98d87fb37dbff4267d60984edc2b",
+       "slug": "nfl-phi-jax-2026-10-11-spread-away-2pt5",
+       "outcomes": "[\"Eagles\", \"Jaguars\"]",
+       "outcomePrices": "[\"0.215\", \"0.785\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-11T13:30:00Z",
+       "startDate": "2026-09-01T16:01:59Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com/scores",
+       "negRisk": false,
+       "sportsMarketType": "spreads",
+       "groupItemTitle": "Spread -2.5",
+       "bestBid": 0.21,
+       "bestAsk": 0.22,
+       "lastTradePrice": 0.24
+      }
+     ],
+     "resolutionSource": "https://www.nfl.com/scores",
+     "_marketsInSource": 308
+    },
+    {
+     "id": "629435",
+     "slug": "kbo-kt-han-2026-06-30",
+     "ticker": "kbo-kt-han-2026-06-30",
+     "title": "KBO: KT Wiz vs. Hanwha Eagles",
+     "closed": false,
+     "active": true,
+     "endDate": "2026-07-07T09:30:00Z",
+     "startDate": "2026-06-24T13:01:54.616237Z",
+     "negRisk": false,
+     "tags": [
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "100639",
+       "slug": "games",
+       "label": "Games"
+      },
+      {
+       "id": "678",
+       "slug": "baseball",
+       "label": "baseball"
+      },
+      {
+       "id": "102668",
+       "slug": "kbo",
+       "label": "KBO"
+      }
+     ],
+     "markets": [
+      {
+       "id": "2666696",
+       "question": "KBO: KT Wiz vs. Hanwha Eagles",
+       "conditionId": "0x0e3e1db94339bb0a6f9eee0af501b390d748b48c7f116c056337e42bcd3b9cad",
+       "questionID": "0xbec67a078d848e8e1fb4d31ff852872ca6d599c0e1ccbdf16b8d48a7f1d655e5",
+       "slug": "kbo-kt-han-2026-06-30",
+       "outcomes": "[\"KT Wiz\", \"Hanwha Eagles\"]",
+       "outcomePrices": "[\"0.558\", \"0.442\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-07-07T09:30:00Z",
+       "startDate": "2026-06-24T13:01:54.616237Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.koreabaseball.com/",
+       "negRisk": false,
+       "sportsMarketType": "moneyline",
+       "bestBid": 0.502,
+       "bestAsk": 0.614,
+       "lastTradePrice": 0.614
+      }
+     ],
+     "resolutionSource": "https://www.koreabaseball.com/",
+     "_marketsInSource": 1
+    },
+    {
+     "id": "859195",
+     "slug": "kbo-lg-han-2026-08-22",
+     "ticker": "kbo-lg-han-2026-08-22",
+     "title": "KBO: LG Twins vs. Hanwha Eagles",
+     "closed": false,
+     "active": true,
+     "endDate": "2026-08-29T10:00:00Z",
+     "startDate": "2026-08-16T13:00:15Z",
+     "negRisk": false,
+     "tags": [
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "100639",
+       "slug": "games",
+       "label": "Games"
+      },
+      {
+       "id": "678",
+       "slug": "baseball",
+       "label": "baseball"
+      },
+      {
+       "id": "102668",
+       "slug": "kbo",
+       "label": "KBO"
+      }
+     ],
+     "markets": [
+      {
+       "id": "3632964",
+       "question": "KBO: LG Twins vs. Hanwha Eagles",
+       "conditionId": "0xb0fe0cfa4a4ced47a41c0ec27237e65aa86c9f6a795fffd54a3541fd2203f5e3",
+       "questionID": "0x9c85b347542bfed6309f3167d8880c8d73ec7f9bcba6635bde904699d351c09c",
+       "slug": "kbo-lg-han-2026-08-22",
+       "outcomes": "[\"LG Twins\", \"Hanwha Eagles\"]",
+       "outcomePrices": "[\"0.1005\", \"0.8995\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-08-29T10:00:00Z",
+       "startDate": "2026-08-16T13:00:15Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.koreabaseball.com/",
+       "negRisk": false,
+       "sportsMarketType": "moneyline",
+       "bestBid": 0.001,
+       "bestAsk": 0.2,
+       "lastTradePrice": 0.2
+      }
+     ],
+     "resolutionSource": "https://www.koreabaseball.com/",
+     "_marketsInSource": 1
+    },
+    {
+     "id": "912449",
+     "slug": "pro-football-philadelphia-eagles-2026-win-total",
+     "ticker": "pro-football-philadelphia-eagles-2026-win-total",
+     "title": "Pro Football: Eagles 2026 Win Total",
+     "closed": false,
+     "active": true,
+     "endDate": "2027-02-16T04:59:00Z",
+     "startDate": "2026-08-25T21:38:53Z",
+     "negRisk": false,
+     "tags": [
+      {
+       "id": "450",
+       "slug": "nfl",
+       "label": "NFL (All)"
+      },
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "10",
+       "slug": "football",
+       "label": "football"
+      },
+      {
+       "id": "105610",
+       "slug": "nfl-win-totals",
+       "label": "win totals"
+      },
+      {
+       "id": "102169",
+       "slug": "hide-from-new",
+       "label": "Hide From New"
+      }
+     ],
+     "markets": [
+      {
+       "id": "3887797",
+       "question": "Will the Philadelphia Eagles have more than 8.5 wins during the 2026 NFL season?",
+       "conditionId": "0xcb7d38102c3aabcfbbacebfb988b879c7268a4b49554c5d8a7b934c417dd6f2d",
+       "questionID": "0x58fd441bd89ccaa50f49c22ed7deedfe84b6bc3535150660f4d489c683f140a1",
+       "slug": "will-the-philadelphia-eagles-have-more-than-8pt5-wins-during-the-2026-nfl-season",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.56\", \"0.44\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2027-02-16T04:59:00Z",
+       "startDate": "2026-08-25T21:38:53Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com",
+       "negRisk": false,
+       "groupItemTitle": "8.5+ Wins",
+       "bestBid": 0.55,
+       "bestAsk": 0.57,
+       "lastTradePrice": 0.34
+      },
+      {
+       "id": "3887798",
+       "question": "Will the Philadelphia Eagles have more than 9.5 wins during the 2026 NFL season?",
+       "conditionId": "0x3cf81f93bc8219b6d61a9a5d3de23e8dba104ec40c9909f12e09bbf96407f1cc",
+       "questionID": "0x363fd1492a4b6144b6962f37ca82813601e45a6d5d18dcb684de175b713bbd5e",
+       "slug": "will-the-philadelphia-eagles-have-more-than-9pt5-wins-during-the-2026-nfl-season",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.385\", \"0.615\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2027-02-16T04:59:00Z",
+       "startDate": "2026-08-25T21:38:53Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com",
+       "negRisk": false,
+       "groupItemTitle": "9.5+ Wins",
+       "bestBid": 0.38,
+       "bestAsk": 0.39,
+       "lastTradePrice": 0.37
+      },
+      {
+       "id": "3887799",
+       "question": "Will the Philadelphia Eagles have more than 10.5 wins during the 2026 NFL season?",
+       "conditionId": "0x78d1ba8003ddd24bf424b8d8f36176eba97a1618705cae9278376ccde75e6c9b",
+       "questionID": "0x8eb5b51f24ab9c5acbe0e66b32a6f993b81022dbb90b6e53733404a34d19888f",
+       "slug": "will-the-philadelphia-eagles-have-more-than-10pt5-wins-during-the-2026-nfl-season",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.255\", \"0.745\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2027-02-16T04:59:00Z",
+       "startDate": "2026-08-25T21:38:55Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.nfl.com",
+       "negRisk": false,
+       "groupItemTitle": "10.5+ Wins",
+       "bestBid": 0.24,
+       "bestAsk": 0.27,
+       "lastTradePrice": 0.22
+      }
+     ],
+     "resolutionSource": "https://www.nfl.com",
+     "_marketsInSource": 5
+    },
+    {
+     "id": "1137700",
+     "slug": "ahl-abb-col-2026-10-11",
+     "ticker": "ahl-abb-col-2026-10-11",
+     "title": "AHL: Abbotsford Canucks vs. Colorado Eagles",
+     "closed": false,
+     "active": true,
+     "endDate": "2026-10-11T00:05:00Z",
+     "startDate": "2026-10-05T15:30:11Z",
+     "negRisk": false,
+     "tags": [
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "100639",
+       "slug": "games",
+       "label": "Games"
+      },
+      {
+       "id": "100088",
+       "slug": "hockey",
+       "label": "Hockey"
+      },
+      {
+       "id": "102907",
+       "slug": "ahl",
+       "label": "AHL"
+      }
+     ],
+     "markets": [
+      {
+       "id": "5329723",
+       "question": "AHL: Abbotsford Canucks vs. Colorado Eagles",
+       "conditionId": "0x81e8bd6b549229b7085b4e6d5c16cdc6de8a55c65a24aa62737d786d24594805",
+       "questionID": "0x71c98e5bdcbe4912cf8d0a42ef94e24b770c4cadf652d94d3fabb5267974a10b",
+       "slug": "ahl-abb-col-2026-10-11",
+       "outcomes": "[\"Abbotsford Canucks\", \"Colorado Eagles\"]",
+       "outcomePrices": "[\"0.515\", \"0.485\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-11T00:05:00Z",
+       "startDate": "2026-10-05T15:30:11Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://theahl.com/stats/schedule",
+       "negRisk": false,
+       "sportsMarketType": "moneyline",
+       "bestBid": 0.5,
+       "bestAsk": 0.53,
+       "lastTradePrice": 0.6
+      }
+     ],
+     "resolutionSource": "https://theahl.com/stats/schedule",
+     "_marketsInSource": 1
+    },
+    {
+     "id": "731782",
+     "slug": "pro-football-eagles-vspt-giants-season-series-winner",
+     "ticker": "pro-football-eagles-vspt-giants-season-series-winner",
+     "title": "Pro Football: Eagles vs. Giants Season Series Winner",
+     "closed": false,
+     "active": true,
+     "endDate": "2027-01-27T04:59:00Z",
+     "startDate": "2026-07-22T05:39:12.764055Z",
+     "negRisk": true,
+     "tags": [
+      {
+       "id": "450",
+       "slug": "nfl",
+       "label": "NFL (All)"
+      },
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "10",
+       "slug": "football",
+       "label": "football"
+      },
+      {
+       "id": "105741",
+       "slug": "season-series",
+       "label": "Season Series"
+      }
+     ],
+     "markets": [
+      {
+       "id": "3026059",
+       "question": "Will the Eagles win the season series against the Giants during the 2026-27 NFL regular season?",
+       "conditionId": "0x38b2e62386ac4a466438b903460cedb3dec595b354bf0e526f58a1db3e7a1d74",
+       "questionID": "0x6472398b2e77644f7633c2cab2bd5b698d83eb4f7c8e69b92cc2d9022df24400",
+       "slug": "will-the-eagles-win-the-season-series-against-the-giants-during-the-2026-27-nfl-regular-season-20260717194035937",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.505\", \"0.495\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2027-01-27T04:59:00Z",
+       "startDate": "2026-07-22T05:39:12.764055Z",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "resolutionSource": "",
+       "negRisk": true,
+       "sportsMarketType": "moneyline",
+       "groupItemTitle": "Eagles",
+       "bestBid": 0.26,
+       "bestAsk": 0.75,
+       "lastTradePrice": 0.45
+      },
+      {
+       "id": "3026060",
+       "question": "Will the Giants win the season series against the Eagles during the 2026-27 NFL regular season?",
+       "conditionId": "0x037f9f5bf66e90879d9e3c0324b9d0f5eb35d55856f7758a1eac7790bcc73e72",
+       "questionID": "0x6472398b2e77644f7633c2cab2bd5b698d83eb4f7c8e69b92cc2d9022df24401",
+       "slug": "will-the-giants-win-the-season-series-against-the-eagles-during-the-2026-27-nfl-regular-season-20260717194035938",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.237\", \"0.763\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2027-01-27T04:59:00Z",
+       "startDate": "2026-07-22T05:39:15.74957Z",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "resolutionSource": "",
+       "negRisk": true,
+       "sportsMarketType": "moneyline",
+       "groupItemTitle": "Giants",
+       "bestBid": 0.003,
+       "bestAsk": 0.471,
+       "lastTradePrice": 0.006
+      },
+      {
+       "id": "3026061",
+       "question": "Will the season series between the Eagles and Giants end in a tie during the 2026-27 NFL regular season?",
+       "conditionId": "0x28db5a6136a26c10609836797a894c0eae0750bb6d8e39327533ae19f6c5953b",
+       "questionID": "0x6472398b2e77644f7633c2cab2bd5b698d83eb4f7c8e69b92cc2d9022df24402",
+       "slug": "will-the-season-series-between-the-eagles-and-giants-end-in-a-tie-during-the-2026-27-nfl-regular-season-20260717194035939",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.585\", \"0.415\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2027-01-27T04:59:00Z",
+       "startDate": "2026-07-22T05:39:21.930803Z",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "resolutionSource": "",
+       "negRisk": true,
+       "sportsMarketType": "moneyline",
+       "groupItemTitle": "Tie",
+       "bestBid": 0.26,
+       "bestAsk": 0.91,
+       "lastTradePrice": 0.37
+      }
+     ],
+     "resolutionSource": "",
+     "_marketsInSource": 3
+    },
+    {
+     "id": "731809",
+     "slug": "pro-football-cowboys-vspt-eagles-season-series-winner",
+     "ticker": "pro-football-cowboys-vspt-eagles-season-series-winner",
+     "title": "Pro Football: Cowboys vs. Eagles Season Series Winner",
+     "closed": false,
+     "active": true,
+     "endDate": "2027-01-27T04:59:00Z",
+     "startDate": "2026-07-22T05:43:34.904311Z",
+     "negRisk": true,
+     "tags": [
+      {
+       "id": "450",
+       "slug": "nfl",
+       "label": "NFL (All)"
+      },
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "10",
+       "slug": "football",
+       "label": "football"
+      },
+      {
+       "id": "105741",
+       "slug": "season-series",
+       "label": "Season Series"
+      }
+     ],
+     "markets": [
+      {
+       "id": "3026112",
+       "question": "Will the Cowboys win the season series against the Eagles during the 2026-27 NFL regular season?",
+       "conditionId": "0x945604628e1138a78ef9c3b5b8fbaa4541ed10a6e381d1cb15e42c0cb77f27f0",
+       "questionID": "0x09b9768912cdb8fe5bb1c09eb4455a3b9232c0b84e20c2570fbf070126488900",
+       "slug": "will-the-cowboys-win-the-season-series-against-the-eagles-during-the-2026-27-nfl-regular-season-20260717194034838",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.215\", \"0.785\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2027-01-27T04:59:00Z",
+       "startDate": "2026-07-22T05:43:34.904311Z",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "resolutionSource": "",
+       "negRisk": true,
+       "sportsMarketType": "moneyline",
+       "groupItemTitle": "Cowboys",
+       "bestBid": 0.21,
+       "bestAsk": 0.22,
+       "lastTradePrice": 0.2
+      },
+      {
+       "id": "3026113",
+       "question": "Will the Eagles win the season series against the Cowboys during the 2026-27 NFL regular season?",
+       "conditionId": "0xf98841a5e146c6ca05325793386d961fb8951319f84ea716d463fba980a094cd",
+       "questionID": "0x09b9768912cdb8fe5bb1c09eb4455a3b9232c0b84e20c2570fbf070126488901",
+       "slug": "will-the-eagles-win-the-season-series-against-the-cowboys-during-the-2026-27-nfl-regular-season-20260717194034839",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.51\", \"0.49\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2027-01-27T04:59:00Z",
+       "startDate": "2026-07-22T05:43:44.819175Z",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "resolutionSource": "",
+       "negRisk": true,
+       "sportsMarketType": "moneyline",
+       "groupItemTitle": "Eagles",
+       "bestBid": 0.22,
+       "bestAsk": 0.8,
+       "lastTradePrice": 0.3
+      },
+      {
+       "id": "3026114",
+       "question": "Will the season series between the Cowboys and Eagles end in a tie during the 2026-27 NFL regular season?",
+       "conditionId": "0xfd0a5c318419442a89570d2ccd8b5638f9d336d1a31936df5a02da529823d732",
+       "questionID": "0x09b9768912cdb8fe5bb1c09eb4455a3b9232c0b84e20c2570fbf070126488902",
+       "slug": "will-the-season-series-between-the-cowboys-and-eagles-end-in-a-tie-during-the-2026-27-nfl-regular-season-20260717194034840",
+       "outcomes": "[\"Yes\", \"No\"]",
+       "outcomePrices": "[\"0.27\", \"0.73\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2027-01-27T04:59:00Z",
+       "startDate": "2026-07-22T05:43:46.804273Z",
+       "resolvedBy": "0x69c47De9D4D3Dad79590d61b9e05918E03775f24",
+       "resolutionSource": "",
+       "negRisk": true,
+       "sportsMarketType": "moneyline",
+       "groupItemTitle": "Tie",
+       "bestBid": 0.11,
+       "bestAsk": 0.43,
+       "lastTradePrice": 0.37
+      }
+     ],
+     "resolutionSource": "",
+     "_marketsInSource": 3
+    },
+    {
+     "id": "796002",
+     "slug": "kbo-kiw-han-2026-08-08",
+     "ticker": "kbo-kiw-han-2026-08-08",
+     "title": "KBO: Kiwoom Heroes vs. Hanwha Eagles",
+     "closed": false,
+     "active": true,
+     "endDate": "2026-10-11T05:00:00Z",
+     "startDate": "2026-08-04T13:00:18Z",
+     "negRisk": false,
+     "tags": [
+      {
+       "id": "1",
+       "slug": "sports",
+       "label": "Sports"
+      },
+      {
+       "id": "100639",
+       "slug": "games",
+       "label": "Games"
+      },
+      {
+       "id": "678",
+       "slug": "baseball",
+       "label": "baseball"
+      },
+      {
+       "id": "102668",
+       "slug": "kbo",
+       "label": "KBO"
+      }
+     ],
+     "markets": [
+      {
+       "id": "3336007",
+       "question": "KBO: Kiwoom Heroes vs. Hanwha Eagles",
+       "conditionId": "0x01076ed2e31fdff63e31c01548279f32493716644a7d8c2a289ba792ddbcf552",
+       "questionID": "0x97b4845b16b0cbaeec675ec7f574db5f90f2497f2a0cd6c53ff0d785e0b8f6b1",
+       "slug": "kbo-kiw-han-2026-08-08",
+       "outcomes": "[\"Kiwoom Heroes\", \"Hanwha Eagles\"]",
+       "outcomePrices": "[\"0.664\", \"0.336\"]",
+       "closed": false,
+       "active": true,
+       "endDate": "2026-10-11T05:00:00Z",
+       "startDate": "2026-08-04T13:00:18Z",
+       "resolvedBy": "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+       "resolutionSource": "https://www.koreabaseball.com/",
+       "negRisk": false,
+       "sportsMarketType": "moneyline",
+       "bestBid": 0.35,
+       "bestAsk": 0.978,
+       "lastTradePrice": 0.998
+      }
+     ],
+     "resolutionSource": "https://www.koreabaseball.com/",
+     "_marketsInSource": 1
+    }
+   ],
+   "pagination": {
+    "hasMore": true,
+    "totalResults": 69
+   }
+  }
+ }
+}

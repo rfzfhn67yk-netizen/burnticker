@@ -1,0 +1,42 @@
+{
+  "_comment": "Automatic SOL top-ups for the Burnticker operations wallets (src/lib/burnticker/ops/topUp.ts; docs/burnticker/deploy.md, section 'Which wallets hold SOL and who refills them'). The platform keeper's own key is the one wallet the owner feeds by hand; the keeper refills every wallet below from it, once per cycle, whenever a wallet is below its floor, up to its fill level. One hard limit holds for all of them together: dailyCeilingLamports (below). Amounts are in lamports (1 SOL = 1,000,000,000 lamports). Nothing here is a secret.",
+  "signer": {
+    "_comment": "The keeper key never gives away the SOL it needs for its own fees: it refills nothing below floorLamports plus the day's expected fees (baseFeesPerDayLamports + live coins x feesPerCoinPerDayLamports, which is one Reading account's rent of 2,937,120 lamports and two 5,000-lamport transaction fees). When it is short, bt-keeper-balance-low asks the owner to bring it to refillToLamports plus whatever the wallets need.",
+    "floorLamports": 100000000,
+    "refillToLamports": 500000000,
+    "feesPerCoinPerDayLamports": 2947120,
+    "baseFeesPerDayLamports": 2000000
+  },
+  "uploadPayerWallet": {
+    "_comment": "The SOL in the upload wallet itself (BURNTICKER_UPLOAD_PAYER). It pays the fee of each Irys funding transaction.",
+    "enabled": true,
+    "floorLamports": 10000000,
+    "fillLamports": 30000000
+  },
+  "irys": {
+    "_comment": "The upload wallet's prepaid balance on the Irys node, which pays every Arweave pin. Floor: floorDays of daily snapshots at the live Irys rate plus the metadata and image pins of the last 7 days of launches at that daily pace; fill: the same for fillDays. Both are kept between minLamports and maxLamports. imageBytes is the largest creator image the site accepts (2 MB).",
+    "enabled": true,
+    "floorDays": 7,
+    "fillDays": 30,
+    "minLamports": 5000000,
+    "maxLamports": 50000000,
+    "metadataBytes": 4096,
+    "imageBytes": 2097152
+  },
+  "deficitKeeper": {
+    "_comment": "The $DEFICIT keeper's key, found by its role in config/burnticker/operator.json for the keeper's cluster. It pays the $DEFICIT reading rent and crank fees.",
+    "enabled": true,
+    "operatorRole": "keeper",
+    "floorLamports": 30000000,
+    "fillLamports": 60000000
+  },
+  "drainStop": {
+    "_comment": "Not a limit on a healthy wallet (HB-108, hourly audit run 8). A wallet that needed a top-up this many times inside windowHours is treated as draining (a leaked key or a bug): the keeper stops refilling that one wallet, pushes bt-top-up-draining with the amounts, and stays stopped (HB-180: the stop is latched, it does not resume on its own) until the operator runs scripts/ops/top-up.mts --clear-drain <target>. A wallet that spends normally needs one top-up every few days.",
+    "count": 3,
+    "windowHours": 6
+  },
+  "_noticeComment": "Not a limit. When a Denver day's top-ups from the keeper key are above what this many launches would cost, ops.json and the daily summary say so, and nothing is stopped. One launch is the metadata pin (2,210 lamports for 4 KB) plus the image pin (56,561 lamports for 2 MB) at the Irys rate of 2026-10-19, plus the keeper key's first reading for the coin (2,947,120 lamports): 3,005,891 lamports. 50 launches plus 30 days of 100 KB snapshots (2,698 lamports each) is about 0.150 SOL. The keeper computes the mark again from the live Irys rate each cycle.",
+  "noticeLaunchesPerDay": 50,
+  "_dailyCeilingComment": "HB-180: the most the keeper key sends to all the operations wallets together in one UTC day (500,000,000 lamports = 0.5 SOL). The first transfer that would pass it is refused, every top-up stops until 00:00 UTC and bt-top-up-ceiling is pushed. BURNTICKER_TOP_UP_MAX_SOL_PER_DAY (in SOL) overrides it on a host.",
+  "dailyCeilingLamports": 500000000
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Every 15 minutes: the Burnticker clone watch (src/lib/burnticker/ops/cloneWatch.ts)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+RandomizedDelaySec=60
+Persistent=true
+Unit=mct-burnticker-clonewatch.service
+
+[Install]
+WantedBy=timers.target

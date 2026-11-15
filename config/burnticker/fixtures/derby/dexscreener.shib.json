@@ -1,0 +1,142 @@
+{
+ "fetchedAt": "2026-10-10T21:50:00Z",
+ "source": "https://api.dexscreener.com/latest/dex/tokens/0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+ "note": "trimmed: first six pairs",
+ "body": {
+  "schemaVersion": "1.0.0",
+  "pairs": [
+   {
+    "chainId": "pulsechain",
+    "dexId": "pulsex",
+    "pairAddress": "0xe11Ae46AA5200984d59FF54F3b2c7Ff6AC6EF749",
+    "baseToken": {
+     "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+     "name": "SHIBA INU",
+     "symbol": "SHIB"
+    },
+    "quoteToken": {
+     "address": "0xA1077a294dDE1B09bB078844df40758a5D0f9a27",
+     "name": "Wrapped Pulse",
+     "symbol": "WPLS"
+    },
+    "priceUsd": "0.0000001079",
+    "liquidity": {
+     "usd": 21760.37,
+     "base": 100768755335,
+     "quote": 1143638334
+    },
+    "marketCap": 107966342
+   },
+   {
+    "chainId": "ethereum",
+    "dexId": "shibaswap",
+    "pairAddress": "0xCF6dAAB95c476106ECa715D48DE4b13287ffDEAa",
+    "baseToken": {
+     "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+     "name": "SHIBA INU",
+     "symbol": "SHIB"
+    },
+    "quoteToken": {
+     "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+     "name": "Wrapped Ether",
+     "symbol": "WETH"
+    },
+    "priceUsd": "0.000005469",
+    "liquidity": {
+     "usd": 2925162.61,
+     "base": 267402191127,
+     "quote": 583.1394
+    },
+    "marketCap": 5469226299
+   },
+   {
+    "chainId": "ethereum",
+    "dexId": "uniswap",
+    "pairAddress": "0x811beEd0119b4AfCE20D2583EB608C6F7AF1954f",
+    "baseToken": {
+     "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+     "name": "SHIBA INU",
+     "symbol": "SHIB"
+    },
+    "quoteToken": {
+     "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+     "name": "Wrapped Ether",
+     "symbol": "WETH"
+    },
+    "priceUsd": "0.000005470",
+    "liquidity": {
+     "usd": 605870.14,
+     "base": 55377287723,
+     "quote": 120.7653
+    },
+    "marketCap": 5470017434
+   },
+   {
+    "chainId": "ethereum",
+    "dexId": "uniswap",
+    "pairAddress": "0x2F62f2B4c5fcd7570a709DeC05D68EA19c82A9ec",
+    "baseToken": {
+     "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+     "name": "SHIBA INU",
+     "symbol": "SHIB"
+    },
+    "quoteToken": {
+     "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+     "name": "Wrapped Ether",
+     "symbol": "WETH"
+    },
+    "priceUsd": "0.000005466",
+    "liquidity": {
+     "usd": 321106.25,
+     "base": 46516973921,
+     "quote": 26.6386
+    },
+    "marketCap": 5466313188
+   },
+   {
+    "chainId": "ethereum",
+    "dexId": "uniswap",
+    "pairAddress": "0x5764a6F2212D502bC5970f9f129fFcd61e5D7563",
+    "baseToken": {
+     "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+     "name": "SHIBA INU",
+     "symbol": "SHIB"
+    },
+    "quoteToken": {
+     "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+     "name": "Wrapped Ether",
+     "symbol": "WETH"
+    },
+    "priceUsd": "0.000005501",
+    "liquidity": {
+     "usd": 257793.82,
+     "base": 25364434153,
+     "quote": 47.1427
+    },
+    "marketCap": 5501216630
+   },
+   {
+    "chainId": "ethereum",
+    "dexId": "shibaswap",
+    "pairAddress": "0x98C2b0681d8BF07767826eA8BD3b11b0Ca421631",
+    "baseToken": {
+     "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+     "name": "SHIBA INU",
+     "symbol": "SHIB"
+    },
+    "quoteToken": {
+     "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+     "name": "Tether USD",
+     "symbol": "USDT"
+    },
+    "priceUsd": "0.000005470",
+    "liquidity": {
+     "usd": 38501.13,
+     "base": 3519118772,
+     "quote": 19250
+    },
+    "marketCap": 5469913593
+   }
+  ]
+ }
+}

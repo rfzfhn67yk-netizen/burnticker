@@ -1,0 +1,26 @@
+/* Seven-segment display built from boxes. --w/--h size a digit, --t is segment thickness. Unlit segments stay faintly
+   visible (the ghost you see on a real LED board); lit segments are a dot matrix of LEDs, not a flat fill. */
+.seg7{display:flex;align-items:flex-end;--w:60px;--h:108px;--t:calc(var(--w) * .17);--gap:calc(var(--w) * .28);
+  --lit:#ff3b2e;--litdot:#ff6a5c;--off:#2a100d;}
+.seg7.amber{--lit:#ffb000;--litdot:#ffd166;--off:#2a1e08}
+.d{position:relative;width:var(--w);height:var(--h);margin-right:var(--gap);flex:none}
+.d .s{position:absolute;background:var(--off)}
+.d .s.on{background:var(--lit);
+  background-image:radial-gradient(circle at 50% 50%, var(--litdot) 0 22%, var(--lit) 30% 46%, rgba(0,0,0,.25) 56%, transparent 60%);
+  background-size:calc(var(--t) * .55) calc(var(--t) * .55);}
+/* horizontals */
+.d .a,.d .g,.d .dd{left:calc(var(--t) * .55);right:calc(var(--t) * .55);height:var(--t);
+  clip-path:polygon(0 50%, calc(var(--t) * .5) 0, calc(100% - var(--t) * .5) 0, 100% 50%, calc(100% - var(--t) * .5) 100%, calc(var(--t) * .5) 100%)}
+.d .a{top:0}.d .g{top:calc(50% - var(--t) / 2)}.d .dd{bottom:0}
+/* verticals */
+.d .b,.d .c,.d .e,.d .f{width:var(--t);height:calc(50% - var(--t) * .6);
+  clip-path:polygon(50% 0, 100% calc(var(--t) * .5), 100% calc(100% - var(--t) * .5), 50% 100%, 0 calc(100% - var(--t) * .5), 0 calc(var(--t) * .5))}
+.d .f,.d .b{top:calc(var(--t) * .55)}.d .e,.d .c{bottom:calc(var(--t) * .55)}
+.d .f,.d .e{left:0}.d .b,.d .c{right:0}
+/* punctuation */
+.d.comma{width:calc(var(--t) * .9)}
+.d.comma .s{left:0;bottom:calc(var(--t) * -.9);width:calc(var(--t) * .9);height:calc(var(--t) * 1.5);clip-path:polygon(0 0,100% 0,100% 55%,30% 100%,0 100%)}
+.d.dot{width:calc(var(--t) * .9)}
+.d.dot .s{left:0;bottom:0;width:calc(var(--t) * .9);height:calc(var(--t) * .9)}
+/* dollar: an S with a bar through it */
+.d .bar{position:absolute;left:calc(50% - var(--t) * .18);top:calc(var(--t) * -.6);bottom:calc(var(--t) * -.6);width:calc(var(--t) * .36)}

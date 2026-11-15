@@ -1,0 +1,72 @@
+{
+  "command": "init-pair",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": false,
+  "plan": {
+    "pair": "5VvJ6iBpg9vYWUbtePFktC7kZxLZYPXfF6M3dj5vJBcT",
+    "vault": "4y4B8boPRCkUvoheSMLwGPXAe73EAtmaCJ72bc4KQxBT",
+    "mints": {
+      "a": "Eqtt76kf5WTiQk3zp6gnkJ8k9qsp8Fv95QvvGfTDeShr",
+      "b": "J3XZTDfhGvch7Zjuu3Md1Q8sRnT1TPy2fQeVyFiZrU1a"
+    },
+    "rulesSha256": {
+      "a": "440f3336a59568b31cf2287940bb9a6e6eadc337bc3b689e0235075f81b6e47b",
+      "b": "b628f02a8c2ab9c02c5ada3b24bb71212c218862a4829daba0ec6eea203aca7d"
+    },
+    "pairId": "pcua-vs-pcub-devnet-pf-r2-7",
+    "cpConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "createPoolFee": "150000000",
+    "sideCosts": "182258000",
+    "params": {
+      "virtualSolLamports": "300000000",
+      "virtualTokenAmount": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "targetRaiseLamports": "500000000",
+      "minSideShareBps": 4000,
+      "deadline": 1791741336
+    },
+    "burnPools": {
+      "a": "BLGpVFDctHFFPYBTbqNfAY9Es5haPFj3TJuNa8UdYvbM",
+      "b": "i2quada5agAsofbBBWN3zv274U274j4yHm6uXRpSxs6"
+    }
+  },
+  "steps": {
+    "mintAndConfigA": {
+      "ok": true,
+      "signature": "2hauQ5JKvM1XvJPH8nExuJ3VAyTPAYAQhaqsGRmXL5UsbYvc5ZX9ddyLGptSR1vL2nDSe4m38fh2ZsJZMwkxc5UM",
+      "error": null,
+      "unitsConsumed": 48727,
+      "txBytes": 886
+    },
+    "mintAndConfigB": {
+      "ok": true,
+      "signature": "2dTM65neDW2FvJfp81TCw8P3HLpovThGrTDx61onLeqgWS5H9SUx4v9Bn8QRwzK6rU5Kwu2YTyi5dMNyy2MLyQR",
+      "error": null,
+      "unitsConsumed": 47227,
+      "txBytes": 886
+    },
+    "initPair": {
+      "ok": false,
+      "signature": null,
+      "error": "InvalidParams",
+      "unitsConsumed": 102036,
+      "txBytes": 756,
+      "logs": [
+        "Program log: Initialize the associated token account",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [3]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 544114 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [3]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 233 of 541651 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 15010 of 556124 compute units",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+        "Program log: AnchorError thrown in programs/pair_curve/src/instructions/init_pair.rs:112. Error Code: InvalidParams. Error Number: 6003. Error Message: pair parameters out of range (virtual reserves, curve supply, reserve, share, target or deadline).",
+        "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN consumed 101886 of 599850 compute units",
+        "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN failed: custom program error: 0x1773"
+      ]
+    }
+  },
+  "after": null
+}

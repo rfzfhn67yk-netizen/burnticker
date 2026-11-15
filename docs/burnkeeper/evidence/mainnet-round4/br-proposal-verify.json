@@ -1,0 +1,50 @@
+{
+  "cluster": "mainnet",
+  "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
+  "index": "1",
+  "transaction": "4pisg6TQZnMVe2Z6bpJA7LqcQXEB1PE5aeHKa2Cjuiwa",
+  "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+  "creator": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ",
+  "vaultIndex": 0,
+  "lookupTables": 0,
+  "numSigners": 1,
+  "numWritableSigners": 1,
+  "numWritableNonSigners": 4,
+  "instructions": [
+    {
+      "program": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "dataHex": "03000000",
+      "accounts": [
+        "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
+        "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "7MaATzdMcWVMYrZ8cdmnkbPE8NGwbVwoRB5Fvv2iJkiQ",
+        "F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P",
+        "SysvarRent111111111111111111111111111111111",
+        "SysvarC1ock11111111111111111111111111111111",
+        "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
+      ],
+      "kind": "BPFLoaderUpgradeable::Upgrade",
+      "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
+      "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "buffer": "7MaATzdMcWVMYrZ8cdmnkbPE8NGwbVwoRB5Fvv2iJkiQ",
+      "spill": "F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P",
+      "authority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+      "bufferExecutableHash": "d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae",
+      "bufferCodeBytes": 826369,
+      "bufferAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+      "bufferLamports": 4198868921
+    }
+  ],
+  "problems": [],
+  "proposal": {
+    "address": "FWT9JYP8U7sZVAEJbnvGQhhMdHwiumpQXV1TchDPemRa",
+    "status": "Active",
+    "statusAt": "2026-10-12T21:39:30.000Z",
+    "approved": [
+      "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ"
+    ],
+    "rejected": [],
+    "cancelled": []
+  },
+  "verdict": "matches"
+}

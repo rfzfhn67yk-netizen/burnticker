@@ -1,0 +1,20 @@
+# TEST-ONLY stand-in for Raydium LaunchLab's `claim_creator_fee` (LaunchLab's source is not public, so it cannot be built as a
+# fixture). Loaded by the LiteSVM suite at LaunchLab's program id. It enforces the SDK's account contract (order, signer/writable
+# flags, PDAs, discriminator) and pays the creator vault's WSOL to the recipient — nothing else. Never deployed.
+[package]
+name = "launchlab_mock"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+anchor-lang = "=1.2.1"
+anchor-spl = "=1.2.1"
+
+[workspace]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("custom-heap", "custom-panic"))'] }

@@ -1,0 +1,96 @@
+{
+ "fetchedAt": "2026-10-10T02:50:00Z",
+ "url": "https://api.fda.gov/drug/drugsfda.json?search=submissions.submission_type:ORIG+AND+submissions.submission_status:AP+AND+submissions.submission_status_date:[20260901+TO+20261009]&limit=1000",
+ "note": "DERIVED (semantics-verify, 2026-10-12, website-20 item 107): the record of openfda.json (read 2026-10-10) with meta.results.total set to the records kept, so the per-record ORIG count parses as one complete page. Not a live read: the live read pages up to 1,000 records and is refused when the publisher lists more.",
+ "body": {
+  "meta": {
+   "disclaimer": "Do not rely on openFDA to make decisions regarding medical care. While we make every effort to ensure that data is accurate, you should assume all results are unvalidated. We may limit or otherwise restrict your access to the API in line with our Terms of Service.",
+   "terms": "https://open.fda.gov/terms/",
+   "license": "https://open.fda.gov/license/",
+   "last_updated": "2026-10-09",
+   "results": {
+    "skip": 0,
+    "limit": 1000,
+    "total": 1
+   }
+  },
+  "results": [
+   {
+    "submissions": [
+     {
+      "submission_type": "ORIG",
+      "submission_number": "1",
+      "submission_status": "AP",
+      "submission_status_date": "20260903",
+      "review_priority": "STANDARD",
+      "submission_class_code": "TYPE 5",
+      "submission_class_code_description": "Type 5 - New Formulation or New Manufacturer",
+      "application_docs": [
+       {
+        "id": "86767",
+        "url": "https://www.accessdata.fda.gov/drugsatfda_docs/appletter/2026/220613Orig1s000ltr.pdf",
+        "date": "20260903",
+        "type": "Letter"
+       },
+       {
+        "id": "87170",
+        "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2026/220613Orig1s000lbl.pdf",
+        "date": "20260908",
+        "type": "Label"
+       }
+      ]
+     }
+    ],
+    "application_number": "NDA220613",
+    "sponsor_name": "HANDA ONCOL",
+    "products": [
+     {
+      "product_number": "003",
+      "reference_drug": "Yes",
+      "brand_name": "OMCAZIO",
+      "active_ingredients": [
+       {
+        "name": "CABOZANTINIB LAURYLSULFATE",
+        "strength": "EQ 34.5MG BASE"
+       }
+      ],
+      "reference_standard": "Yes",
+      "dosage_form": "CAPSULE",
+      "route": "ORAL",
+      "marketing_status": "Prescription"
+     },
+     {
+      "product_number": "001",
+      "reference_drug": "Yes",
+      "brand_name": "OMCAZIO",
+      "active_ingredients": [
+       {
+        "name": "CABOZANTINIB LAURYLSULFATE",
+        "strength": "EQ 11.5MG BASE"
+       }
+      ],
+      "reference_standard": "No",
+      "dosage_form": "CAPSULE",
+      "route": "ORAL",
+      "marketing_status": "Prescription"
+     },
+     {
+      "product_number": "002",
+      "reference_drug": "Yes",
+      "brand_name": "OMCAZIO",
+      "active_ingredients": [
+       {
+        "name": "CABOZANTINIB LAURYLSULFATE",
+        "strength": "EQ 23MG BASE"
+       }
+      ],
+      "reference_standard": "No",
+      "dosage_form": "CAPSULE",
+      "route": "ORAL",
+      "marketing_status": "Prescription"
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,21 @@
+/* Split-flap tiles. Each character sits in its own cell: a top flap and a bottom flap with a hinge gap between them,
+   side pins at the hinge, and real (flat) shading — no glow, no blur. Set --w/--h on a .row to size its tiles. */
+.row{display:flex;gap:calc(var(--w) * .11);--w:30px;--h:42px;--fs:calc(var(--h) * .78)}
+.tile{position:relative;width:var(--w);height:var(--h);border-radius:calc(var(--w) * .08);overflow:hidden;
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 2px 3px rgba(0,0,0,.6);
+  font-family:'Oswald',sans-serif;font-weight:500;font-size:var(--fs);color:#ece8dc;text-transform:uppercase;}
+.tile.amber{color:#f2a60f}
+.tile .top,.tile .bot,.tile .flap{position:absolute;left:0;right:0;height:50%;overflow:hidden;}
+.tile .top{top:0;background:linear-gradient(#2c2c2b,#222221);border-radius:calc(var(--w) * .08) calc(var(--w) * .08) 0 0}
+.tile .bot{bottom:0;background:linear-gradient(#1d1d1c,#141413);border-radius:0 0 calc(var(--w) * .08) calc(var(--w) * .08)}
+.tile .top span,.tile .bot span,.tile .flap span{position:absolute;left:0;right:0;height:var(--h);line-height:var(--h);text-align:center;}
+.tile .top span,.tile .flap span{top:0}
+.tile .bot span{top:calc(var(--h) * -.5)}
+.tile .hinge{position:absolute;left:0;right:0;top:calc(50% - 1px);height:2px;background:#050505;z-index:3}
+.tile .hinge:before,.tile .hinge:after{content:"";position:absolute;top:-2px;width:calc(var(--w) * .12);height:6px;background:#0a0a0a;border-radius:1px}
+.tile .hinge:before{left:0}.tile .hinge:after{right:0}
+/* mid-flip: the old character's top flap has fallen two thirds of the way; the new top is already showing behind it */
+.tile .flap{top:0;transform-origin:50% 100%;transform:perspective(220px) rotateX(-78deg);
+  background:linear-gradient(#171716,#0f0f0e);color:#b9b5a9;z-index:2;border-radius:calc(var(--w) * .08) calc(var(--w) * .08) 0 0;
+  box-shadow:0 2px 2px rgba(0,0,0,.6)}
+.tile .flap span{transform:scaleY(1)}

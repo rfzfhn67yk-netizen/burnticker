@@ -1,0 +1,18 @@
+
+[33m👀 You're about to execute a vault transaction, please review the details:[0m
+
+RPC Cluster URL:   https://api.devnet.solana.com
+Program ID:        SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf
+Your Public Key:       HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb
+
+⚙️ Config Parameters
+Multisig Key:       GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w
+Transaction Index:       24
+
+Do you want to proceed? [y/N] [?25l[2KDo you want to proceed? yes
+[?25h
+⠁ Sending transaction...                                                        [2K⠉ Sending transaction...                                                        [2K⠙ Sending transaction...                                                        [2K⠚ Sending transaction...                                                        [2K⠒ Sending transaction...                                                        [2K⠂ Sending transaction...                                                        [2K⠂ Sending transaction...                                                        [2K⠒ Sending transaction...                                                        [2K⠲ Sending transaction...                                                        [2K⠴ Sending transaction...                                                        [2K⠤ Sending transaction...                                                        [2K⠄ Sending transaction...                                                        [2K⠄ Sending transaction...                                                        [2K⠤ Sending transaction...                                                        Transaction confirmed: [32m2E1cPAojQV8wBvYeNpoijisTsKPWoUfQERJJCp6XARowd34FycS8sM7uXvTEiZtxeh4wzs6AXknutLzeoYNNbvzh[0m
+
+
+✅ Executed Vault Transaction. Signature: [32m2E1cPAojQV8wBvYeNpoijisTsKPWoUfQERJJCp6XARowd34FycS8sM7uXvTEiZtxeh4wzs6AXknutLzeoYNNbvzh[0m
+[2K

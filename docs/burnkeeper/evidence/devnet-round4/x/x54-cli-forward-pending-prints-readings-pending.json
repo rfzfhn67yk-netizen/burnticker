@@ -1,0 +1,19 @@
+{
+  "case": "x54-cli-forward-pending-prints-readings-pending",
+  "expected": "client plan status readings-pending, exit 1, nothing simulated",
+  "observed": "plan.status readings-pending (exit 1)",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR forward-on-end --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint iJhkwouWchLzuXiwHsJsZRoARHXnPQxN7U5As28khNg",
+  "simulationErr": null,
+  "errorLogLines": [],
+  "stderr": [],
+  "output": {
+    "command": "forward-on-end",
+    "cluster": "devnet",
+    "mint": "iJhkwouWchLzuXiwHsJsZRoARHXnPQxN7U5As28khNg",
+    "plan": {
+      "status": "readings-pending"
+    }
+  }
+}

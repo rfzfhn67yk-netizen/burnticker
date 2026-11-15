@@ -1,0 +1,43 @@
+{
+  "command": "init-pair",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "plan": {
+    "pair": "5etkAGzWxEsyUcVwWNA8hVCfH4cKcsqCBo6FiW7RRfGh",
+    "vault": "71yLtEPJDg8JbtZMDT5wSTcKFLaAgiCrH2TmJ8zkNKiw",
+    "mints": {
+      "a": "4ZVjkQrD8CYN2BR4xecJW7J85zEou9QzbS2xtT7nkogV",
+      "b": "5R5DZ4QCzkikXv1e8qUMti68bbHZMHTkSBKPbTLdMoPB"
+    },
+    "rulesSha256": {
+      "a": "33d3465b1f410b29b57e4df479a56d1b0f331bea34197b1a3920eaefa9b2f4f7",
+      "b": "345afddd0b4b0824e7cb6c4a87c5f9855dc8c2b0232d0dba0f57996ec664664a"
+    },
+    "pairId": "pca-vs-pcb-devnet-rehearsal-1",
+    "cpConfig": "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
+    "createPoolFee": "150000000",
+    "sideCosts": "182258000",
+    "params": {
+      "virtualSolLamports": "300000000",
+      "virtualTokenAmount": "1073000000000000",
+      "curveSupply": "793100000000000",
+      "targetRaiseLamports": "650000000",
+      "minSideShareBps": 3000,
+      "deadline": 1791760136
+    },
+    "burnPools": {
+      "a": "2ugbGdy541mGmzMknCtNNhPzErg2xkpM1pe6h9NKkGtZ",
+      "b": "7BntzppqSMGHhrY3aH5Q3W4eXXQT6fCHf2aB85qq2hG9"
+    }
+  },
+  "steps": {
+    "mintAndConfigA": {
+      "ok": true,
+      "signature": null,
+      "error": null,
+      "unitsConsumed": 30248,
+      "txBytes": 881
+    }
+  }
+}

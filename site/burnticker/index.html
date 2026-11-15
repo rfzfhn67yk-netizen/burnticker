@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burnticker: memecoins that burn on real-world results</title>
+<meta name="description" content="Memecoins that burn on real-world results. Every burn leaves a receipt. Each coin locks one rule tied to a public result, and anyone can check each burn's receipt in the browser.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100e">
+<meta property="og:title" content="Burnticker: memecoins that burn on real-world results">
+<meta property="og:description" content="Memecoins that burn on real-world results. Every burn leaves a receipt that anyone can check in the browser.">
+<meta property="og:image" content="https://burnticker.com/burnticker/brand/og-544200bcce.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://burnticker.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Burnticker">
+<meta name="twitter:image" content="https://burnticker.com/burnticker/brand/og-544200bcce.jpg">
+<link rel="canonical" href="https://burnticker.com/">
+<link rel="alternate" type="application/rss+xml" title="Burnticker burn receipts" href="/api/burnticker/feeds/receipts.rss">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@BurnTicker">
+<link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
+<link rel="apple-touch-icon" href="brand/avatar.png">
+<!-- one theme preference with the app (site audit #6): the same boot script as the app layout (src/app/burnticker/_components/theme.ts) -->
+<script>(function(){try{var t=localStorage.getItem('bt-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();</script>
+<style>
+/* shared tokens: site/burnticker/status and fallback copy this block verbatim (test/burntickerTrustOps.test.ts) */
+:root{
+  --bg:#12100e;--panel:#1b1815;--panel2:#24201c;--line:#2d2925;--ink:#f2eee4;--dim:#aba395;--muted:#8b8478;
+  --amber:#ffb000;--ember:#ff4d1f;--amber-ink:#12100e;--ok:#5ad38f;--tape:#141418;--violet:#9b84e6;
+  --mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+/* dark is the default whatever the OS prefers (review item 17, 2026-10-12); the header switch turns on the paper theme */
+:root[data-theme="light"]{--bg:#f2eee4;--panel:#e9e4d7;--panel2:#e2dccf;--line:#d3ccbc;--ink:#1b1916;--dim:#4d473f;--muted:#6b645a;--amber:#8f5400;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1a6a40;--tape:#111114;--violet:#5b3fa3}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);overflow-x:hidden}
+a{color:var(--amber);text-decoration:none}a:hover{text-decoration:underline}
+.mono,code,pre{font-family:var(--mono)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+.muted{color:var(--muted)}.dim{color:var(--dim)}
+h2{font:700 .82rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin:0 0 14px}
+h2::before{content:"▮ ";color:var(--ember)}
+section{padding:44px 0;border-top:1px solid var(--line)}
+section.lead{border-top:0}
+.okmark{color:var(--ok)}
+.small{font-size:.86rem}
+.lede{font-size:1.1rem;color:var(--dim);max-width:62ch;margin:0 0 22px}
+
+/* the home page's own rules (website-10, 2026-10-12): the app's home, rendered statically — one-line hero, How it works, the coin
+   grid from GET /api/burnticker/home in the one card order (src/lib/burnticker/cardView.ts), Follow the season, a short status */
+section{padding:22px 0;border-top:0}
+a{color:var(--violet)}
+.hero{padding-top:22px}
+.hero h1{font:700 clamp(1.6rem,5vw,2.8rem)/1.08 var(--mono);letter-spacing:-.01em;margin:0;text-transform:uppercase;overflow-wrap:anywhere}
+.hero .sub{font:700 clamp(1rem,2.6vw,1.25rem)/1.3 var(--mono);color:var(--violet);margin:8px 0 0}
+.how{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+@media (min-width:760px){.how{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.how li{border:1px dashed var(--line);border-radius:10px;padding:12px}
+/* website-15 item 14: each step is a disclosure. Wide screens keep all three open and show no chevron; at 768 px and under they start
+   closed with a visible chevron, the title plus one line of the body shows, and a tap opens the whole step across the row */
+.how-d summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:default}.how-d summary::-webkit-details-marker{display:none}
+.how-chev,.how-line{display:none}.how-b{margin-top:4px}
+.how-n{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#f2eee4;color:#1b1916;font:700 .85rem/1 var(--mono)}
+.how-t{font:700 .82rem/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 4px}
+.how-x{margin:0;font-size:.88rem;color:var(--dim)}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px;margin:0 0 12px}
+.head h2{margin:0}
+.grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:640px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1000px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.card{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:12px;min-width:0}
+.card.featured{border-color:color-mix(in srgb,var(--violet) 60%,var(--line))}
+.card .top{display:flex;gap:12px}
+.card .img{width:64px;height:64px;border-radius:6px;object-fit:cover;flex:0 0 auto;background:#f2eee4}
+.card .noimg{width:64px;height:64px;flex:0 0 auto;border-radius:4px;background:#f2eee4;color:#1b1916;display:flex;align-items:center;justify-content:center;font:700 .66rem/1 var(--mono);overflow:hidden}
+.card h3{margin:4px 0 0;font:600 1rem/1.25 var(--sans)}
+.card h3 a{color:var(--ink)}
+.card .tk{font:400 .9rem var(--mono);color:var(--dim)}
+.card .note{margin:4px 0 0;font-size:.78rem;color:var(--dim)}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{display:inline-block;font:700 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:3px 6px;border-radius:3px;border:1px solid var(--line);color:var(--dim)}
+.tag.featured{color:#fff;background:#5b3fa3;border-color:#5b3fa3}.tag.rehearsal{color:var(--sh-scorch);border-color:var(--sh-scorch)}.tag.devnet{border-style:dashed}.tag.grad{color:#fff;background:#5b3fa3;border-color:#5b3fa3}
+.rows{margin:12px 0 0;display:grid;gap:7px;font-size:.84rem}
+.rows>div{display:grid;grid-template-columns:6.2rem 1fr;gap:8px}
+.rows dt{font:700 .68rem/1.6 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.rows dd{margin:0;min-width:0}
+/* coin card status (2026-10-18): the status sentence and the one number stay in view; the rows sit behind "Details" (the app's
+   CoinCard.tsx). Long names and numbers wrap so a card fits a 375 px phone. */
+.card{overflow-wrap:anywhere}
+.card .status{margin:10px 0 0;font-size:.875rem;line-height:1.4}
+.card .stat{margin:6px 0 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:.84rem}
+.card .stat-l{font:700 .68rem/1.6 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.card .stat-v{min-width:0;font-variant-numeric:tabular-nums}
+.card .details{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+.card .details>summary{cursor:pointer;font:700 .68rem/1.6 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);min-height:24px}
+.card .details>summary:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+.rows>div{grid-template-columns:6.2rem minmax(0,1fr)}
+@media (max-width:400px){.rows>div{grid-template-columns:5.4rem minmax(0,1fr)}}
+/* website-15 item 7: the reason behind a dash, on tap, click or keyboard focus */
+.why{position:relative;display:inline-block}.why-btn{font:inherit;color:inherit;background:none;border:0;padding:0 2px;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+/* audit 7 item 21: a 44 px hit area on the reason control without growing the row */
+.why-btn{position:relative}.why-btn::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
+.why-mark{display:inline-block;margin-left:3px;min-width:1.1em;height:1.1em;line-height:1.05em;border-radius:99px;border:1px solid var(--line);font:700 .62rem/1.05em var(--mono,monospace);text-align:center;color:var(--dim);vertical-align:1px}
+.why-tip{display:none;position:absolute;z-index:20;left:0;top:calc(100% + 4px);width:max-content;max-width:min(18rem,80vw);padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg,#12100e);color:inherit;font-size:.75rem;line-height:1.35;white-space:normal}
+.why-tip.open,.why-btn:focus-visible+.why-tip{display:block}@media (hover:hover){.why:hover .why-tip{display:block}}
+@media (max-width:640px){.why{display:inline}.why-tip{position:static;width:auto;max-width:none;margin-top:4px}}
+.bar{display:block;height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:4px}
+.bar span{display:block;height:100%;background:#c8873a}.bar span.done{background:#5b3fa3}
+.foot{margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
+.btn{display:inline-block;font:700 .78rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:9px 12px}
+.trade{margin-top:10px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:.8rem}.trade a:not(.btn){text-decoration:underline;color:var(--muted)}
+.btn:hover{text-decoration:none;border-color:var(--violet)}
+.btn.off{opacity:.5;cursor:not-allowed}
+.mint{margin:8px 0 0;font-size:.7rem;color:var(--muted);overflow-wrap:anywhere}
+.skel{border:1px solid var(--line);border-radius:10px;height:230px;background:var(--panel)}
+@media (prefers-reduced-motion:no-preference){.skel{animation:pulse 1.4s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.5}}
+.seasons p{color:var(--dim);margin:0 0 10px;max-width:72ch}
+.seasons .links{display:flex;flex-wrap:wrap;gap:6px 14px}
+.cs{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:.92rem;color:var(--dim)}.cs ul{margin:0;padding-left:18px}.cs li{margin:0 0 4px}.cs .cs-head{font:700 .72rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}.cs .cs-meta{margin:8px 0 0;font:.74rem/1.4 var(--mono);color:var(--muted);overflow-wrap:anywhere}.cs button{margin-top:8px;font:600 .85rem var(--sans);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer}
+.cs .bars span{display:block;height:10px;border-radius:4px;background:var(--line);margin:0 0 8px}
+/* website-13 (2026-10-12): the platform strip, the one-line status, the receipt-style identity, the full card rows, and the phone layout
+   that puts the first card in the first screen (the three steps collapse to their titles under 640 px) */
+.stats-wrap{padding:12px 16px 0}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0}
+.stats>div{border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.stats dt{font:700 .62rem/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.stats dd{margin:2px 0 0;font:700 1.05rem/1.2 var(--mono);color:var(--ink);overflow-wrap:anywhere}
+.stats-note{margin:6px 0 0;font-size:.74rem;color:var(--muted)}
+.stat-skel{display:inline-block;width:3.5em;height:.8em;border-radius:3px;background:var(--line)}.stat-skel.wide{width:min(32rem,80%)}
+.status-line{margin:0;font-size:.9rem;color:var(--dim)}
+.how-more{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;margin-top:10px;font-size:.86rem}
+.how-wrap+section{margin-top:18px} /* audit 6 item 22: room between "What these words mean" and the featured cards */
+.terms summary{cursor:pointer;color:var(--violet)}
+.terms dl{margin:8px 0 0;display:grid;gap:6px;max-width:62ch}
+.terms dl>div{display:grid;grid-template-columns:9rem 1fr;gap:8px}
+.terms dt{font-weight:600}.terms dd{margin:0;color:var(--dim)}
+.card .noimg{flex-direction:column;gap:2px}
+.card .noimg .ni-top{font-size:6px;letter-spacing:.14em;color:#5a5248}
+.card .noimg .ni-in{font:700 1.5rem/1 var(--mono)}
+.card .noimg .ni-tk{font-size:.55rem;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* website-14: two paths on arrival, the progress strip on cards, the follow toggle, the Following and Next results strips */
+.paths{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0 0}
+.path{display:block;border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);background:var(--panel)}
+.path:hover{text-decoration:none;border-color:var(--violet)}
+.path-create{border-color:color-mix(in srgb,var(--violet) 60%,var(--line))}
+.path-t{display:block;font:700 .82rem/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.path-x{display:block;margin-top:3px;font-size:.8rem;color:var(--dim)}
+.walk{margin:8px 0 0;font-size:.84rem;color:var(--dim)}
+/* audit 10 item 23: the site launch record's one sentence beside the create path while creator launches are closed */
+.path-status{grid-column:2;margin:0;font-size:.78rem;line-height:1.35;color:var(--dim)}.path-status[hidden]{display:none}
+.prog{list-style:none;margin:0;padding:0;display:flex;gap:3px;max-width:9rem}
+.prog li{flex:1 1 0;height:6px;border-radius:99px;background:var(--line)}
+.prog li.done{background:#5b3fa3}.prog li.current{background:transparent;box-shadow:inset 0 0 0 2px #c8873a}.prog li.na{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
+.prog-now{display:block;margin-top:4px;font-size:.78rem}
+.prog-next{display:block;margin-top:2px;font-size:.74rem;color:var(--dim)}
+.follow{margin-left:auto;font:700 .7rem/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);background:transparent;border:1px solid var(--line);border-radius:4px;padding:6px 8px;cursor:pointer}
+.follow[aria-pressed="true"]{color:var(--ink);border-color:var(--violet)}
+.strip{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+@media (min-width:760px){.strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.strip li{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);font-size:.86rem;min-width:0}
+.strip .st-h{font-weight:600}.strip .st-x{display:block;margin-top:3px;color:var(--dim);font-size:.8rem}
+.st-tag{display:inline-block;margin-right:6px;font:700 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:3px 6px;border-radius:3px;border:1px solid var(--line);color:var(--dim)}
+@media (max-width:768px){
+  .how-d summary{flex-wrap:wrap;gap:4px 6px;cursor:pointer}
+  .how-chev{display:inline-block;margin-left:auto;width:8px;height:8px;border-right:2px solid var(--dim);border-bottom:2px solid var(--dim);transform:rotate(45deg);transition:transform .15s}
+  .how-d[open] .how-chev{transform:rotate(-135deg)}
+  .how-line{display:block;flex:1 0 100%;font-size:.74rem;line-height:1.35;color:var(--dim);text-transform:none;letter-spacing:0} /* audit 6 item 22: the whole line, never "Each coin…" */
+  .how-d[open] .how-line{display:none}
+  .how li:has(.how-d[open]){grid-column:1/-1}
+  .how-b .how-x{font-size:.82rem}
+}
+@media (max-width:639px){
+  .paths{gap:6px;margin-top:10px}.path{padding:8px 10px}.path-t{font-size:.74rem}.path-x{font-size:.72rem;line-height:1.35}.walk{font-size:.78rem;margin-top:6px}
+  .hero{padding-top:14px}
+  .how{grid-template-columns:1fr;gap:6px} /* QA pass 9 item 42: at phone width the three steps stack, one per row, each title and its line in full */
+  .how li{padding:8px}
+  .how-t{font-size:.7rem;margin:0}
+  .how-n{width:20px;height:20px;font-size:.72rem}
+  section{padding:14px 0}
+  .stats dd{font-size:.95rem}
+  .stats-note{display:none} /* website-15 item 15: the figures say "(devnet)" themselves; the first card stays in the first screen */
+  .terms dl>div{grid-template-columns:1fr;gap:0}
+}
+</style>
+<!-- site-shell:css:begin -->
+<style>@font-face{font-family:"Courier Prime";font-style:normal;font-weight:400;font-display:swap;src:url("/fonts/courier-prime-400-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Courier Prime";font-style:normal;font-weight:700;font-display:swap;src:url("/fonts/courier-prime-700-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:300 700;font-display:swap;src:url("/fonts/space-grotesk-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+
+:root{--sh-bg:#12100e;--sh-counter:#1b1815;--sh-line:#2d2925;--sh-ink:#f2eee4;--sh-dim:#aba395;--sh-paper:#f2eee4;--sh-paper-ink:#1b1916;--sh-paper-dim:#5a5248;--sh-stamp:#9b84e6;--sh-stamp-solid:#5b3fa3;--sh-scorch:#c8873a;
+  --sh-mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sh-sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif}
+:root[data-theme="light"]{--sh-bg:#f2eee4;--sh-counter:#e9e4d7;--sh-line:#d3ccbc;--sh-ink:#1b1916;--sh-dim:#4d473f;--sh-paper:#fbf9f4;--sh-stamp:#5b3fa3;--sh-scorch:#8a5a24}
+.sh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sh-skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--sh-paper);color:var(--sh-paper-ink);padding:6px 10px;font-family:var(--sh-mono)}.sh-skip:focus{left:8px}
+.sh-header{position:sticky;top:0;z-index:40;background:var(--sh-bg);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
+.sh-row{max-width:72rem;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px}
+.sh-brand{display:flex;align-items:center;gap:10px;color:var(--sh-ink);text-decoration:none;flex:0 0 auto}
+.sh-mark{width:34px;height:34px;border-radius:50%;display:block;box-shadow:0 0 0 1px var(--sh-line)}
+.sh-word{font:700 1.08rem/1 var(--sh-mono);letter-spacing:.16em}
+.sh-nav{display:none;align-items:center;gap:6px;margin-left:12px} /* private review 8: room between the wordmark, the links and Learn at 1440 */
+.sh-nav a,.sh-learn>summary{font:700 .8rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none;padding:9px 10px;border-radius:4px;white-space:nowrap;cursor:pointer;list-style:none}
+.sh-learn>summary::-webkit-details-marker{display:none}
+.sh-ext{font-size:.7em;margin-left:3px;opacity:.7}
+.sh-nav a:hover,.sh-learn>summary:hover{color:var(--sh-ink);background:var(--sh-counter)}
+.sh-nav a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 -2px 0 var(--sh-stamp);border-radius:0}
+.sh-learn{position:relative}
+.sh-learn-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:50;display:grid;min-width:210px;padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.sh-learn-menu a{text-transform:none;letter-spacing:.02em;font:600 .9rem/1.2 var(--sh-sans);padding:10px}
+.sh-search{flex:1 1 auto;min-width:0;display:none}
+.sh-search input{width:100%;max-width:26rem;font:.9rem var(--sh-sans);color:var(--sh-ink);background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:6px;padding:9px 12px}
+.sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.sh-launch{display:inline-block;font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
+.sh-wallet,.sh-ghost{font:700 .76rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
+.sh-wallet{display:none;color:var(--sh-ink);border-color:var(--sh-stamp);text-decoration:none}.sh-wallet:hover{background:var(--sh-stamp-solid);border-color:var(--sh-stamp-solid);color:#fff}.sh-ghost{cursor:pointer}
+.sh-menu-wallet{margin:6px 0 0;padding:10px;border-top:1px dashed var(--sh-line);font:.8rem/1.4 var(--sh-sans);color:var(--sh-dim)}.sh-menu-wallet a{display:inline;padding:0;color:var(--sh-ink);text-decoration:underline}
+.sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
+.sh-menu>summary::-webkit-details-marker{display:none}
+.sh-menu{position:relative}
+.sh-menu-links{position:absolute;right:0;top:calc(100% + 6px);z-index:50;display:grid;gap:2px;min-width:210px;max-width:calc(100vw - 32px);padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px}
+.sh-menu-links a{color:var(--sh-ink);text-decoration:none;padding:11px 10px;border-radius:6px;font:600 .92rem var(--sh-sans)}
+.sh-ticker{border-top:1px dashed var(--sh-line);font:.78rem/1.3 var(--sh-mono);color:var(--sh-dim);overflow-x:auto;white-space:nowrap;scrollbar-width:none;padding:7px 16px;min-height:31px}
+.sh-ticker::-webkit-scrollbar{display:none}
+.sh-ticker a{color:var(--sh-ink);text-decoration:none;margin-right:22px}.sh-ticker a:hover{text-decoration:underline}
+.sh-ticker .sh-net{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-scorch)}
+.sh-ticker-skel{display:inline-block;width:min(420px,70%);height:10px;border-radius:4px;background:var(--sh-line)}
+.sh-ticker .sh-kind{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-dim)}
+.sh-modal{max-width:min(28rem,calc(100vw - 32px));background:var(--sh-counter);color:var(--sh-ink);border:1px solid var(--sh-line);border-radius:10px;padding:20px;font-family:var(--sh-sans)}
+.sh-modal::backdrop{background:rgba(0,0,0,.6)}
+.sh-modal h2{font:700 1rem/1.3 var(--sh-mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
+.sh-modal-row{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
+.sh-footer{margin-top:48px;padding:0 16px 40px;font-family:var(--sh-mono)}
+.sh-slip{position:relative;max-width:34rem;margin:0 auto;background:var(--sh-paper);color:var(--sh-paper-ink);font-size:.86rem;line-height:1.5;padding:26px 22px 22px;transform:rotate(-.6deg);box-shadow:0 10px 28px rgba(0,0,0,.35),0 1px 0 rgba(0,0,0,.25);background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px)}
+.sh-slip::before,.sh-slip::after{content:"";position:absolute;left:0;right:0;height:10px;background-repeat:repeat-x;background-size:14px 10px}
+.sh-slip::before{top:-10px;background-image:conic-gradient(from 135deg at 50% 0,var(--sh-paper) 90deg,transparent 0)}
+.sh-slip::after{bottom:-10px;background-image:conic-gradient(from -45deg at 50% 100%,var(--sh-paper) 90deg,transparent 0)}
+.sh-slip p{margin:0 0 8px}
+.sh-slip-title{text-align:center;font-weight:700;font-size:1.35rem;letter-spacing:.22em}
+.sh-slip-never{text-align:center;font-weight:700}
+.sh-slip-dim{color:var(--sh-paper-dim);font-size:.8rem}
+.sh-rows{margin:0;display:grid;gap:6px}.sh-rows>div{display:grid;grid-template-columns:6.5rem 1fr;gap:10px}.sh-rows dt{font-weight:700;letter-spacing:.08em}.sh-rows dd{margin:0;overflow-wrap:anywhere}
+.sh-rule{border-top:2px dashed color-mix(in srgb,var(--sh-paper-ink) 70%,transparent);margin:12px 0}
+.sh-slip a{color:var(--sh-paper-ink);text-decoration:underline;text-underline-offset:2px}.sh-slip a:hover{color:var(--sh-stamp-solid)}
+.sh-slip-links{display:flex;flex-wrap:wrap;gap:6px 14px}
+.sh-slip-end{margin:14px 0 0!important;text-align:center;font-size:.72rem;letter-spacing:.18em;color:var(--sh-paper-dim)}
+.sh-tabbar{display:none}
+a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--sh-stamp);outline-offset:2px}
+@media (min-width:640px){.sh-search{display:block}.sh-wallet{display:inline-block}}
+@media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}.sh-actions{margin-left:8px}}
+@media (max-width:899px){
+  body{padding-bottom:calc(62px + env(safe-area-inset-bottom) + 12px)}
+  .sh-tabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--sh-bg);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
+  .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;min-width:44px;font:700 12px/1 var(--sh-mono);letter-spacing:.03em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
+  .sh-tabbar a span:first-child{display:block;line-height:0}
+  .sh-icon{width:20px;height:20px;display:block}
+  .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
+}
+.sh-ticker.more-end{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent)}
+.sh-ticker.more-start{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px);mask-image:linear-gradient(90deg,transparent,#000 40px)}
+.sh-ticker.more-start.more-end{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent)}
+@media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
+@media (max-width:479px){.sh-word{display:none}}
+@media (max-width:480px){.sh-slip{transform:none;padding:24px 16px 18px}.sh-rows>div{grid-template-columns:1fr;gap:0}}
+@media (prefers-reduced-motion:reduce){.sh-slip{transform:none}} /* audit 7 item 18: the wordmark returns only where the header tools fit beside it (no overflow at 401 to 479 px) */
+</style>
+<!-- site-shell:css:end -->
+</head>
+<body>
+<!-- site-shell:header:begin -->
+<a class="sh-skip" href="#main">Skip to content</a>
+<header class="sh-header">
+  <div class="sh-row">
+    <a class="sh-brand" href="/" aria-label="Burnticker home"><img src="/brand/favicon.png" width="34" height="34" alt="" class="sh-mark"><span class="sh-word">BURNTICKER</span></a>
+    <nav class="sh-nav" aria-label="Burnticker" data-site-nav="header">
+      <a href="/burnticker">Coins</a>
+      <a href="/burnticker/leagues">Seasons</a>
+      <a href="/burnticker/launch" data-launch-link>Launch</a>
+      <details class="sh-learn"><summary>Learn<span aria-hidden="true" class="sh-ext">▾</span></summary>
+        <div class="sh-learn-menu" data-site-nav="learn">
+          <a href="/burnticker/about">How it works</a>
+          <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/verify-yourself">Verify it yourself</a>
+          <a href="/burnticker/operator">Who runs this</a>
+          <a href="/whitepaper.html">Whitepaper</a>
+          <a href="/burnticker/docs">Docs and API</a>
+          <a href="/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="/burnticker/changelog">Changelog</a>
+          <a href="/burnticker/incidents">Incidents</a>
+          <a href="/burnticker/bounty">Bounty</a>
+          <a href="/burnticker/terms">Terms</a>
+          <a href="/burnticker/privacy">Privacy</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+        </div>
+      </details>
+    </nav>
+    <form class="sh-search" role="search" action="/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
+    <div class="sh-actions">
+      <a class="sh-launch" href="/burnticker/launch" data-launch-button>Launch a coin</a>
+      <a class="sh-wallet" href="/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet</a>
+      <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
+      <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
+        <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
+          <a href="/burnticker">Coins</a>
+          <a href="/burnticker/leagues">Seasons</a>
+          <a href="/burnticker/launch" data-launch-link>Launch</a>
+          <a href="/burnticker/about">How it works</a>
+          <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/verify-yourself">Verify it yourself</a>
+          <a href="/burnticker/operator">Who runs this</a>
+          <a href="/whitepaper.html">Whitepaper</a>
+          <a href="/burnticker/docs">Docs and API</a>
+          <a href="/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="/burnticker/changelog">Changelog</a>
+          <a href="/burnticker/incidents">Incidents</a>
+          <a href="/burnticker/bounty">Bounty</a>
+          <a href="/burnticker/terms">Terms</a>
+          <a href="/burnticker/privacy">Privacy</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+          <p class="sh-menu-wallet">A wallet is only needed for Your coins. <a href="/burnticker/me?connect=1" data-wallet-button>Connect wallet</a></p>
+        </nav>
+      </details>
+    </div>
+  </div>
+  <div class="sh-ticker" data-activity tabindex="0" aria-label="Latest activity on chain"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest activity.</span></div>
+</header>
+<dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
+  <h2 id="sh-launch-closed-h">Launching a coin</h2>
+  <p data-launch-sentence>Checking whether creator launches are open on this site.</p>
+  <p>You can still look through the coins and check a real receipt.</p>
+  <p class="sh-modal-row"><a class="sh-launch" href="/burnticker">See the coins</a> <button type="button" class="sh-ghost" data-modal-close>Close</button></p>
+</dialog>
+<!-- site-shell:header:end -->
+
+<main id="main" tabindex="-1">
+  <!-- the platform strip (Claude site audit 2 item 8): numbers from GET /api/burnticker/home, "0" when there are none -->
+  <section class="wrap stats-wrap" aria-label="Platform totals">
+    <dl class="stats" data-stats aria-live="polite">
+      <div><dt>Tokens burned, all coins</dt><dd data-stat="burned"><span class="stat-skel" aria-hidden="true"></span></dd></div>
+      <div><dt>Burns</dt><dd data-stat="burns"><span class="stat-skel" aria-hidden="true"></span></dd></div>
+      <div><dt>Receipts verified</dt><dd data-stat="verified"><span class="stat-skel" aria-hidden="true"></span></dd></div>
+    </dl>
+    <p class="stats-note" data-stats-note>These figures count burns on mainnet.</p>
+  </section>
+<!-- site-shell:hero:begin -->
+<section class="hero wrap" aria-labelledby="hero-h">
+  <p class="sub kicker" data-hero-kicker>Memecoins with an expiration date.</p>
+  <h1 id="hero-h">Memecoins that burn on real-world results.</h1>
+  <p class="sub">Every burn leaves a receipt.</p>
+  <div class="paths" data-two-paths>
+    <a class="path path-explore" href="/burnticker"><span class="path-t">Explore coins</span><span class="path-x">See every coin, its rule and its receipts, and follow coins in this browser without a wallet.</span></a>
+    <a class="path path-create" href="/burnticker/launch" data-launch-button data-create-path aria-describedby="create-status"><span class="path-t" data-create-label>Launch a coin</span><span class="path-x" data-create-text>Pick a public result, lock one rule, then review every detail.</span></a>
+    <p class="path-status" id="create-status" data-create-status role="status" hidden></p>
+  </div>
+  <p class="walk"><a href="/burnticker/how-a-burn-works">Watch how a burn works</a>. A real devnet burn, taken apart step by step.</p>
+</section>
+<section class="wrap how-wrap" aria-label="How it works">
+  <ol class="how">
+    <li><details class="how-d" open><summary><span class="how-n" aria-hidden="true">1</span><span class="how-t">One locked rule</span><span class="how-chev" aria-hidden="true"></span><span class="how-line" aria-hidden="true">Each coin names one public result.</span></summary><div class="how-b"><p class="how-x">Each coin names one public result, such as a game score or the national debt figure. The rule is locked when the coin launches.</p></div></details></li>
+    <li><details class="how-d" open><summary><span class="how-n" aria-hidden="true">2</span><span class="how-t">The result settles</span><span class="how-chev" aria-hidden="true"></span><span class="how-line" aria-hidden="true">When the result is published, the coin's own fees pay for its burn.</span></summary><div class="how-b"><p class="how-x">When the result is published, fees from trading the coin buy back some of it from its pool.</p><p class="how-x how-pre" data-prerequisite>Before the first burn, the curve must raise the amount its creator chose (24, 40, 60 or 85 SOL) from buyers, the coin must move to its Raydium pool, and that pool must be registered and verified by the burn program.</p></div></details></li>
+    <li><details class="how-d" open><summary><span class="how-n" aria-hidden="true">3</span><span class="how-t">Burned, with a receipt</span><span class="how-chev" aria-hidden="true"></span><span class="how-line" aria-hidden="true">Everything bought is burned, and the transaction is the receipt.</span></summary><div class="how-b"><p class="how-x">Everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it.</p></div></details></li>
+  </ol>
+  <div class="how-more"><a href="/burnticker/about">Read how it works in full</a><details class="terms"><summary>What these words mean</summary><dl>
+    <div><dt>Memecoin</dt><dd>A speculative crypto token built around a theme.</dd></div>
+    <div><dt>Burn</dt><dd>Tokens the program destroys for good. It never takes tokens from anyone's wallet.</dd></div>
+    <div><dt>Receipt</dt><dd>The burn's transaction and the source reading behind it, so anyone can check the burn.</dd></div>
+    <div><dt>Settles</dt><dd>The source has published its final result for that period.</dd></div>
+    <div><dt>Trading fees</dt><dd>A small amount collected each time someone trades the coin.</dd></div>
+    <div><dt>Pool</dt><dd>The coin and SOL held by a trading program so that trades can happen.</dd></div>
+    <div><dt>Curve</dt><dd>A new coin's first trading stage. When buyers have put in the full raise, the coin graduates to its own Raydium pool.</dd></div>
+    <div><dt>Mint</dt><dd>The coin's unique address. A reserved address does not mean the coin exists yet.</dd></div>
+    <div><dt>Mainnet and devnet</dt><dd>Mainnet is the real Solana network, where transactions use real SOL. Devnet is a practice network whose tokens have no money value.</dd></div>
+    <div><dt>SOL and Raydium</dt><dd>SOL is Solana's own coin, used for fees and deposits. Raydium is the outside Solana trading service these coins trade on.</dd></div>
+  </dl></details></div>
+</section>
+<!-- site-shell:hero:end -->
+
+  <section class="wrap" id="coins" aria-labelledby="coins-h">
+    <div class="head"><h2 id="coins-h">Featured coin</h2><a href="/burnticker">Browse coins</a></div>
+    <p class="small muted" data-featured-line></p>
+    <div class="grid" data-featured aria-live="polite">
+      <div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div>
+    </div>
+    <p class="small"><a href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> or read the <a href="/whitepaper.html">whitepaper</a>.</p>
+  </section>
+
+  <!-- website-14 (product idea 7): the coins this browser follows; kept in localStorage, never sent anywhere -->
+  <section class="wrap" id="following" aria-labelledby="following-h" hidden data-following>
+    <div class="head"><h2 id="following-h">Following</h2><a href="/burnticker">All coins</a></div>
+    <ul class="strip" data-following-list></ul>
+    <p class="small muted">Your follows stay in this browser. No wallet is needed.</p>
+  </section>
+
+  <!-- website-14 (product idea 3): the next result each coin waits for, from GET /api/burnticker/home (upcoming.ts) -->
+  <section class="wrap" id="next-results" aria-labelledby="next-h">
+    <div class="head"><h2 id="next-h">Next results</h2><a href="/burnticker/upcoming">All next results</a></div>
+    <ul class="strip" data-next-results aria-live="polite"><li><span class="stat-skel wide" aria-hidden="true"></span></li></ul>
+  </section>
+
+  <section class="wrap seasons" id="seasons" aria-labelledby="seasons-h">
+      <!-- door2:begin -->
+      <div class="head"><h2 id="seasons-h">Follow the season</h2></div>
+      <p>Each league gets one scoreboard per season, from the Argentine Primera to the WNBA. A board ranks that league's team coins by their receipts. Rivalries and the Burn Derby keep a running count of burns.</p>
+      <p class="ex">The 25 leagues cover baseball, basketball, football, hockey and soccer. When a league's season ends, the coin with the most receipts is named its champion. Season titles are for the scoreboard only. There are no prizes.</p>
+      <p class="links"><a class="go" href="/burnticker/leagues">Leagues</a> <a href="/burnticker/rivalries">Scoreboards</a> <a href="/burnticker/derby">Burn Derby</a></p>
+      <!-- door2:end -->
+  </section>
+
+  <!-- the one-line status (Claude site audit 2 item 9), from current-status.json through GET /api/burnticker/home; the full record is on Trust -->
+  <section class="wrap" id="status" aria-label="Current status">
+    <p class="status-line" data-status-line aria-live="polite"><span class="stat-skel wide" aria-hidden="true"></span></p>
+  </section>
+</main>
+
+<!-- site-shell:footer:begin -->
+<footer class="sh-footer" id="disclosure">
+  <div class="sh-slip">
+    <p class="sh-slip-title">BURNTICKER</p>
+    <div class="sh-rule"></div>
+    <p class="sh-slip-never">Nothing is ever won. Things are only burned.</p>
+    <p><b>*** NOT ADVICE ***</b> Memecoins are speculative and can go to zero. Burnticker coins pay nothing and promise nothing. A coin's rule says what its supply does when a public result settles, never what its price does. Nothing on this site is investment advice.</p>
+    <p>Burnticker and its coins are not affiliated with any team, league, candidate, agency or market. If a page and the chain disagree, the chain is right.</p>
+    <p class="sh-slip-dim">The rules read public sources such as the U.S. Treasury, BLS, the National Weather Service, MLB, the NHL, the NBA, TheSportsDB, the FEC, JPL, Wikimedia and Polymarket. None of them is affiliated with any coin or endorses one.</p>
+    <p data-legal-line>Read the <a href="/burnticker/terms">terms of use</a> and the <a href="/burnticker/privacy">privacy page</a>.</p>
+    <div class="sh-rule"></div>
+    <dl class="sh-rows">
+      <div><dt>OPERATOR</dt><dd><span data-operator-line>Operated by one independent operator (United States) — contact: contact@burnticker.com</span> <a href="/burnticker/trust">What the operator controls</a></dd></div>
+      <div><dt>DEV FEE</dt><dd><span data-fee-line>Burnticker takes 0.25% of curve volume. After graduation, every coin pays 1.25% per swap (Raydium fee tier 14): about 0.98% to the burn pool, 0.13% to the operator and 0.15% to Raydium. LaunchLab moves a graduating coin into a pool on the platform's current fee tier, which is 14; coins made before 19 October 2026 recorded tier 9 when they were created and pay 1.25% all the same. Coin-vs-coin pair pools use their own split, shown on the pair page.</span> <a href="/burnticker/fees/ledger">The fee ledger</a></dd></div>
+      <div><dt>API</dt><dd><a href="/api/burnticker/v1">/api/burnticker/v1</a> · <a href="/burnticker/docs">Docs</a></dd></div>
+    </dl>
+    <div class="sh-rule"></div>
+    <nav class="sh-slip-links" aria-label="Footer" data-site-nav="footer">
+      <a href="/burnticker">Coins</a>
+      <a href="/burnticker/leagues">Seasons</a>
+      <a href="/burnticker/launch" data-launch-link>Launch</a>
+      <a href="/burnticker/about">How it works</a>
+      <a href="/burnticker/trust">Trust</a>
+      <a href="/burnticker/verify-yourself">Verify it yourself</a>
+      <a href="/burnticker/operator">Who runs this</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/burnticker/docs">Docs and API</a>
+      <a href="/burnticker/how-burns-settle">How burns are settled</a>
+      <a href="/burnticker/changelog">Changelog</a>
+      <a href="/burnticker/incidents">Incidents</a>
+      <a href="/burnticker/bounty">Bounty</a>
+      <a href="/burnticker/terms">Terms</a>
+      <a href="/burnticker/privacy">Privacy</a>
+      <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+    </nav>
+    <p class="sh-slip-end">— KEEP THIS RECEIPT —</p>
+  </div>
+</footer>
+<nav class="sh-tabbar" aria-label="Burnticker sections" data-site-nav="tabs">
+  <a href="/burnticker" aria-label="Coins, the list of every coin"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4h7v7H4z"/><path d="M13 4h7v7h-7z"/><path d="M4 13h7v7H4z"/><path d="M13 13h7v7h-7z"/></svg></span><span>Coins</span></a>
+  <a href="/burnticker#search" aria-label="Search coins"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z"/><path d="M15.5 15.5 20 20"/></svg></span><span>Search</span></a>
+  <a href="/burnticker/launch" aria-label="Launch a coin"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span><span>Launch</span></a>
+  <a href="/burnticker/leagues" aria-label="Seasons and league scoreboards"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 7h14"/><path d="M15 3l4 4-4 4"/><path d="M19 17H5"/><path d="M9 13l-4 4 4 4"/></svg></span><span>Seasons</span></a>
+  <a href="/burnticker/about" aria-label="Learn how it works"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h12v17l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></span><span>Learn</span></a>
+</nav>
+<!-- site-shell:footer:end -->
+<!-- site-shell:age-core:begin -->
+<script>
+window.btCardAge = function cardAge(iso, now) {
+  if (!iso) return null;
+  var plural = function (n, unit) { return n + " " + unit + (n === 1 ? "" : "s"); };
+  var day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (day) {
+    var then = new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]));
+    var today = new Date(now); today.setHours(0, 0, 0, 0);
+    if (!isFinite(then.getTime()) || !isFinite(today.getTime())) return null;
+    var days = Math.round((today.getTime() - then.getTime()) / 86400000);
+    return days < 1 ? "under a day" : plural(days, "day");
+  }
+  var ms = now - Date.parse(iso);
+  if (!isFinite(ms)) return null;
+  if (ms < 3600000) return "under an hour";
+  var h = Math.floor(ms / 3600000), d = Math.floor(h / 24);
+  return d >= 1 ? plural(d, "day") : plural(h, "hour");
+};
+</script>
+<!-- site-shell:age-core:end -->
+<script>
+// website-15 item 14: the three steps start closed at 768 px and under (title, one line and a chevron; a tap opens one), open on wider
+// screens, where the summary does not toggle
+(function () {
+  if (typeof document === "undefined" || !window.matchMedia) return;
+  var narrow = window.matchMedia("(max-width: 768px)");
+  var ds = document.querySelectorAll(".how-d");
+  function apply() { for (var i = 0; i < ds.length; i++) { if (narrow.matches) ds[i].removeAttribute("open"); else ds[i].setAttribute("open", ""); } }
+  apply();
+  for (var i = 0; i < ds.length; i++) ds[i].querySelector("summary").addEventListener("click", function (e) { if (!narrow.matches) e.preventDefault(); });
+  if (narrow.addEventListener) narrow.addEventListener("change", apply);
+})();
+// website-15 item 7: a value not read is a dash button; its reason opens under it on tap, click or keyboard focus and is the button's
+// description for screen readers (the app's Why.tsx does the same). Never printed inline after the value.
+// coin card status (2026-10-18): `noMark` leaves out the "?" mark after a worded label ("Not read yet"); the dotted label is the button
+window.btWhy = function (label, why, name, noMark) {
+  window.btWhyN = (window.btWhyN || 0) + 1;
+  var w = document.createElement("span"); w.className = "why";
+  var b = document.createElement("button"); b.type = "button"; b.className = "why-btn"; var id = "why-" + window.btWhyN;
+  b.setAttribute("aria-describedby", id); b.setAttribute("aria-expanded", "false");
+  if (!label || label === "\u2014") b.setAttribute("aria-label", name || "Not available");
+  if (label) { var l = document.createElement("span"); l.textContent = label; if (label === "\u2014") l.setAttribute("aria-hidden", "true"); b.appendChild(l); }
+  if (!noMark) { var m = document.createElement("span"); m.className = "why-mark"; m.setAttribute("aria-hidden", "true"); m.textContent = "?"; b.appendChild(m); }
+  var t = document.createElement("span"); t.className = "why-tip"; t.id = id; t.setAttribute("role", "tooltip"); t.textContent = why;
+  function set(o) { t.classList.toggle("open", o); b.setAttribute("aria-expanded", o ? "true" : "false"); }
+  b.addEventListener("click", function () { set(!t.classList.contains("open")); });
+  b.addEventListener("blur", function () { set(false); });
+  b.addEventListener("keydown", function (e) { if (e.key === "Escape") set(false); });
+  w.appendChild(b); w.appendChild(t); return w;
+};
+(function () {
+  // ONE READ OF GET /api/burnticker/home for this page: the coin grid, the platform strip and the status line here, and the activity
+  // line in the shell script below (it reuses window.btHome).
+  if (typeof document === "undefined" || typeof document.querySelector !== "function" || !window.fetch) return;
+  window.btHome = window.btHome || fetch("/api/burnticker/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+})();
+(function () {
+  // THE LOCAL WATCHLIST (website-14, product idea 7): the same key and shape as src/lib/burnticker/watchlist.ts. It lives in this browser
+  // only; nothing here sends it anywhere. Every read and write is wrapped, so blocked storage is an empty list. Since private review 8 F1
+  // a follow is a coin key, "<network>:<mint>" with the mint's case kept (the API's watchKey); old ticker follows stay in `legacy` until
+  // the app resolves them, and this page never guesses which coin an old ticker meant.
+  var KEY = "bt-watch-v1", KEY_RE = /^(mainnet|devnet):[1-9A-HJ-NP-Za-km-z]{32,44}$/, TICKER_RE = /^[A-Z0-9]{2,12}$/;
+  function strs(x) { return Array.isArray(x) ? x.filter(function (s) { return typeof s === "string"; }) : []; }
+  function keys(x) { return strs(x).filter(function (s) { return KEY_RE.test(s); }); }
+  function tick(x) { return strs(x).map(function (s) { return s.toUpperCase(); }).filter(function (s) { return TICKER_RE.test(s); }); }
+  function read() {
+    try { var j = JSON.parse(localStorage.getItem(KEY) || "{}"), l = j.legacy || {};
+      return { coins: keys(j.coins), results: keys(j.results), legacy: { coins: tick(l.coins).concat(tick(j.coins)), results: tick(l.results).concat(tick(j.results)) } };
+    } catch (e) { return { coins: [], results: [], legacy: { coins: [], results: [] } }; }
+  }
+  function write(w) { try { localStorage.setItem(KEY, JSON.stringify(w)); } catch (e) { /* private window */ } try { window.dispatchEvent(new CustomEvent("bt-watch")); } catch (e) { /* old browser */ } }
+  window.btWatch = {
+    read: read,
+    has: function (kind, k) { return read()[kind].indexOf(k) >= 0; },
+    toggle: function (kind, k) { if (!KEY_RE.test(k)) return; var w = read(), i = w[kind].indexOf(k); if (i >= 0) w[kind].splice(i, 1); else w[kind].push(k); write(w); }
+  };
+})();
+(function () {
+  // THE COIN GRID (website-10, 2026-10-12; the full field set since website-13): the featured cards from GET /api/burnticker/home, in
+  // the one card order the app prints (src/lib/burnticker/cardView.ts CARD_ROWS: image, name, ticker, badge, rule, next result, curve,
+  // market cap, holders, age, burned, receipt). A field not read prints a dash with its reason. Skeleton cards until the answer
+  // arrives; a failed read says so in plain words. Nothing is typed here.
+  if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
+  var grid = document.querySelector("[data-featured]");
+  if (!grid || !window.btHome) return;
+  var LABELS = { progress: "Progress", rule: "Rule", nextSettle: "Next result", curve: "Curve", mcap: "Market cap", holders: "Holders", age: "Age", burned: "Burned" };
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function cellNode(c, label) {
+    if (c.text === null) return window.btWhy(label || "Not read yet", c.why || "This site has no reading for this field.", null, true);
+    var s = el("span", "", c.text); if (c.why) s.title = c.why;
+    return s;
+  }
+  function row(dl, key, label, value) { var d = el("div"); d.setAttribute("data-row", key); d.appendChild(el("dt", "", label)); var dd = el("dd"); if (typeof value === "string") dd.textContent = value; else dd.appendChild(value); d.appendChild(dd); dl.appendChild(d); }
+  // ChatGPT audit 6 item 23: the app's own age function (src/lib/burnticker/cardAge.mjs, written into the age-core region above)
+  function age(iso) { return window.btCardAge ? window.btCardAge(iso, Date.now()) : null; }
+  // ChatGPT audit 6 item 23: an empty field says what it means ("Not created yet", "No data yet"), from the API's labels (cardView.ts)
+  function emptyOf(v, key) { return (v.empty && v.empty[key]) || "Not read yet"; }
+  function initials(t) { return ((t || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2) || "?").toUpperCase(); }
+  function thumb(v) {
+    // a coin without an image gets a receipt-style identity: the wordmark, its initials and its $TICKER (never "NO IMAGE")
+    var n = el("div", "noimg"); n.setAttribute("aria-hidden", "true");
+    n.appendChild(el("span", "ni-top", "BURNTICKER")); n.appendChild(el("span", "ni-in", initials(v.ticker))); n.appendChild(el("span", "ni-tk", "$" + v.ticker));
+    return n;
+  }
+  function card(v) {
+    var a = el("article", "card" + (v.tags.some(function (t) { return t.tone === "featured"; }) ? " featured" : ""));
+    a.setAttribute("data-group", v.group);
+    var top = el("div", "top");
+    var img;
+    if (v.imageUrl) { img = el("img", "img"); img.src = v.imageUrl; img.alt = ""; img.width = 64; img.height = 64; img.loading = "lazy"; img.onerror = function () { var n = thumb(v); n.setAttribute("data-row", "image"); img.replaceWith(n); }; }
+    else img = thumb(v);
+    img.setAttribute("data-row", "image"); top.appendChild(img);
+    var who = el("div");
+    var h = el("h3"), name = el("span", "", v.name), tk = el("span", "tk", " $" + v.ticker);
+    name.setAttribute("data-row", "name"); tk.setAttribute("data-row", "ticker");
+    if (v.href) { var l = el("a"); l.href = v.href; l.appendChild(name); l.appendChild(tk); h.appendChild(l); } else { h.appendChild(name); h.appendChild(tk); }
+    who.appendChild(h);
+    var tg = el("div", "tags"); tg.setAttribute("data-row", "badge"); v.tags.forEach(function (t) { tg.appendChild(el("span", "tag " + t.tone, t.label)); }); who.appendChild(tg);
+    if (v.note) who.appendChild(el("p", "note", v.note));
+    top.appendChild(who); a.appendChild(top);
+    // coin card status (2026-10-18): what happens next in one sentence (the rule when the API sent none), then the one number in view
+    var st = el("p", "status", v.status || v.rule); st.setAttribute("data-status", ""); a.appendChild(st);
+    if (v.stat && v.stat.text) { var sp = el("p", "stat"); sp.setAttribute("data-card-stat", v.stat.key); sp.appendChild(el("span", "stat-l", v.stat.label)); sp.appendChild(document.createTextNode(" ")); sp.appendChild(el("span", "stat-v", v.stat.text)); a.appendChild(sp); }
+    var det = el("details", "details"); det.setAttribute("data-card-details", ""); det.appendChild(el("summary", "", "Details"));
+    var dl = el("dl", "rows");
+    // website-14: where the coin stands in six steps (src/lib/burnticker/progress.ts), the next unmet condition under it
+    var pg;
+    if (v.progress) {
+      pg = el("span"); var ol = el("ol", "prog"); ol.setAttribute("aria-label", v.progress.done + " of " + v.progress.steps.length + " steps are done");
+      v.progress.steps.forEach(function (s) { var li = el("li", s.state); li.title = s.label + (s.state === "na" ? ", not applicable" : ""); ol.appendChild(li); }); pg.appendChild(ol);
+      // website-15 item 6: the API's own heading ("Not created", "Next: graduation", "Burned"), never "Now:" on a step not reached
+      pg.appendChild(el("span", "prog-now", v.progress.now || ""));
+      pg.appendChild(el("span", "prog-next", v.progress.next));
+    } else pg = cellNode({ text: null, why: v.progressWhy }, emptyOf(v, "progress"));
+    row(dl, "progress", LABELS.progress, pg);
+    row(dl, "rule", LABELS.rule, v.rule);
+    row(dl, "nextSettle", LABELS.nextSettle, cellNode(v.nextSettle, emptyOf(v, "nextSettle")));
+    // the raise is the coin's own, read from its pool; when it was not read the row says "— raised" and never prints a typed raise
+    var c = el("span"), ct = el("span"), tail = v.curve.of === null ? " raised" : " / " + v.curve.of + " raised";
+    if (v.curve.na) ct.appendChild(window.btWhy("Not applicable", v.curve.why || "This coin never had a curve.", null, true));
+    else if (v.curve.raised === null && v.curve.why) ct.appendChild(window.btWhy(emptyOf(v, "curve"), v.curve.why, null, true));
+    else { ct.appendChild(document.createTextNode((v.curve.raised === null ? "\u2014" : v.curve.raised) + tail)); if (v.curve.of === null && v.curve.why) { ct.appendChild(document.createTextNode(" ")); ct.appendChild(window.btWhy("Raise not read", v.curve.why, null, true)); } }
+    c.appendChild(ct);
+    var bar = el("span", "bar"), fill = el("span", v.curve.done ? "done" : ""); fill.style.width = (v.curve.pct === null ? 0 : Math.max(0, Math.min(100, v.curve.pct))) + "%"; bar.appendChild(fill); c.appendChild(bar);
+    row(dl, "curve", LABELS.curve, c);
+    row(dl, "mcap", LABELS.mcap, cellNode(v.mcap, emptyOf(v, "mcap")));
+    row(dl, "holders", LABELS.holders, cellNode(v.holders, emptyOf(v, "holders")));
+    var ag = age(v.createdAt);
+    row(dl, "age", LABELS.age, cellNode({ text: ag, why: ag ? null : v.createdWhy }, emptyOf(v, "age")));
+    row(dl, "burned", LABELS.burned, cellNode(v.burned, emptyOf(v, "burned")));
+    det.appendChild(dl); a.appendChild(det);
+    // owner 2026-10-14: where to trade the coin, from the API's own links (src/lib/burnticker/tradeLinks.ts); nothing when there are none
+    if (v.trade && (v.trade.trade.length || v.trade.info.length)) {
+      var tr = el("p", "trade"); tr.setAttribute("data-card-trade", "");
+      v.trade.trade.concat(v.trade.info).forEach(function (x, i) {
+        var ln = el("a", i === 0 && v.trade.primary ? "btn" : "", x.label + (i === 0 && v.trade.primary ? " \u2197" : "")); ln.href = x.href || x.url; ln.rel = "noopener"; ln.target = "_blank";
+        if (i > 0) tr.appendChild(document.createTextNode(" "));
+        tr.appendChild(ln);
+      });
+      a.appendChild(tr);
+    }
+    var foot = el("div", "foot"); foot.setAttribute("data-row", "receipt");
+    if (v.receipt) { var r = el("a", "btn", "Check receipt"); r.href = v.receipt.href; foot.appendChild(r); }
+    else { var off = el("span", "btn off", "Check receipt"); off.setAttribute("aria-disabled", "true"); if (v.receiptWhy) off.title = v.receiptWhy; foot.appendChild(off); foot.appendChild(el("span", "", v.receiptWhy || "")); }
+    if ((v.group === "public" || v.id === "deficit") && v.watchKey) foot.appendChild(followButton(v.watchKey, v.ticker));
+    a.appendChild(foot);
+    if (v.mint) a.appendChild(el("p", "mint", v.mint.label + ": " + v.mint.address));
+    return a;
+  }
+  function followButton(k, t) {
+    var b = el("button", "follow"); b.type = "button"; b.setAttribute("data-watch-key", k);
+    function paint() { var on = window.btWatch.has("coins", k); b.textContent = on ? "Following" : "Follow"; b.setAttribute("aria-pressed", on ? "true" : "false"); b.setAttribute("aria-label", (on ? "Stop following $" : "Follow $") + t); }
+    b.title = "Kept in this browser only"; b.addEventListener("click", function () { window.btWatch.toggle("coins", k); paint(); }); paint();
+    return b;
+  }
+  function failed() { grid.textContent = ""; grid.appendChild(el("p", "dim", "The coins did not load just now. The full list is on the coins page.")); }
+  window.btHome.then(function (j) {
+    if (!j || !Array.isArray(j.featured)) return failed();
+    grid.textContent = "";
+    var fl = document.querySelector("[data-featured-line]"); if (fl) { fl.textContent = j.featuredLine || ""; fl.hidden = !j.featuredLine; }
+    j.featured.forEach(function (v) { grid.appendChild(card(v)); });
+  }).catch(failed);
+})();
+(function () {
+  // NEXT RESULTS and FOLLOWING (website-14): the next result each coin waits for (GET /api/burnticker/home → upcoming, the source's own
+  // schedule, never a promise) and the coins this browser follows. An empty list says so in one sentence; a failed read says so too.
+  if (typeof document === "undefined" || typeof document.querySelector !== "function" || !window.btHome) return;
+  var LABEL = { waiting: "Waiting for the source", published: "Published, not signed yet", attested: "Signed, waiting for its burn run", burned: "Burned", deferred: "On hold", unavailable: "Unavailable" };
+  // website-15 (code review 6 P2 2): the same sentences as upcoming.ts upcomingNotice; a failure is never "no coin is registered"
+  function tickers(o) { var t = o.map(function (x) { return "$" + x.ticker; }); return t.length <= 1 ? (t[0] || "a coin") : t.slice(0, -1).join(", ") + " and " + t[t.length - 1]; }
+  function notice(u) {
+    if (!u || !Array.isArray(u.rows)) return "The next results are unavailable, because this site could not read its list of coins just now.";
+    if (u.state === "unavailable") return u.registered === null ? "The next results are unavailable, because this site could not read its list of coins just now." : "The next results are unavailable, because this site could not read " + tickers(u.omitted || []) + " just now.";
+    if (u.state === "partial") return "Some next results are missing, because this site could not read " + tickers(u.omitted || []) + " just now.";
+    if (u.rows.length) return null;
+    return u.registered === 0 ? "No coin is registered on this site yet, so no result is being waited for. Each coin appears here once it is created and registered." : "No pending results. No coin registered on this site is active right now.";
+  }
+  function rowsOf(j) { return j && j.upcoming && Array.isArray(j.upcoming.rows) ? j.upcoming.rows : []; }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function item(r) {
+    var li = el("li"); var a = el("a", "st-h", r.name + " $" + r.ticker); a.href = r.href; li.appendChild(el("span", "st-tag", LABEL[r.status] || r.status)); li.appendChild(a);
+    li.appendChild(el("span", "st-x", r.event + ". " + r.statusText)); return li;
+  }
+  var box = document.querySelector("[data-next-results]"), fol = document.querySelector("[data-following]"), folList = document.querySelector("[data-following-list]");
+  window.btHome.then(function (j) {
+    if (box) {
+      box.textContent = "";
+      var u = j ? j.upcoming : null, say = j && "nextNotice" in j ? j.nextNotice : notice(u);
+      if (say) box.appendChild(el("li", "", say));
+      if (u && u.state !== "unavailable") rowsOf(j).slice(0, 4).forEach(function (r) { box.appendChild(item(r)); });
+    }
+    function paintFollowing() {
+      if (!fol || !folList || !window.btWatch) return;
+      // each follow is a coin key; a row matches by its network and mint, never by ticker (private review 8 F1)
+      var w = window.btWatch.read(); var ks = w.coins.concat(w.results.filter(function (k) { return w.coins.indexOf(k) < 0; }));
+      var old = w.legacy.coins.concat(w.legacy.results.filter(function (t) { return w.legacy.coins.indexOf(t) < 0; }));
+      function rowKey(u) { return (u.network === "devnet" ? "devnet" : "mainnet") + ":" + (u.mint || ""); }
+      var cards = j && Array.isArray(j.featured) ? j.featured : [];
+      fol.hidden = ks.length + old.length === 0; folList.textContent = "";
+      ks.forEach(function (k) {
+        var r = rowsOf(j).filter(function (u) { return rowKey(u) === k; })[0] || null;
+        if (r) { folList.appendChild(item(r)); return; }
+        var c = cards.filter(function (v) { return v.watchKey === k; })[0] || null, mint = k.slice(k.indexOf(":") + 1);
+        var li = el("li"); var a = el("a", "st-h", c ? c.name + " $" + c.ticker : "The coin at " + mint.slice(0, 4) + "\u2026" + mint.slice(-4)); a.href = c && c.href ? c.href : "/burnticker/t/" + encodeURIComponent(mint); li.appendChild(a); li.appendChild(el("span", "st-x", "This site has no next result listed for this coin.")); folList.appendChild(li);
+      });
+      old.forEach(function (t) { var li = el("li"); var a = el("a", "st-h", "$" + t); a.href = "/burnticker?q=" + encodeURIComponent(t); li.appendChild(a); li.appendChild(el("span", "st-x", "You followed this ticker before coins could share one. Open the coins page to pick the coin you mean.")); folList.appendChild(li); });
+    }
+    paintFollowing(); window.addEventListener("bt-watch", paintFollowing);
+  });
+})();
+(function () {
+  // THE PLATFORM STRIP and THE ONE-LINE STATUS (website-13): numbers and the status sentence from the same answer. "0" is a number; a
+  // failed read says so instead.
+  if (typeof document === "undefined" || typeof document.querySelector !== "function" || !window.btHome) return;
+  function group(s) { var n = Number(s); if (!isFinite(n)) return String(s); var p = (Math.round(n * 100) / 100).toFixed(2).split("."); var d = p[1].replace(/0+$/, ""); return p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (d ? "." + d : ""); }
+  function put(k, text, why) { var d = document.querySelector('[data-stat="' + k + '"]'); if (!d) return; d.textContent = ""; if (text === "\u2014" && why) { d.appendChild(window.btWhy("\u2014", why)); return; } d.textContent = text; if (why) d.title = why; }
+  var line = document.querySelector("[data-status-line]");
+  window.btHome.then(function (j) {
+    var s = j && j.stats;
+    // a number this page could not read is a dash with the reason on hover and for screen readers, never a zero
+    if (!s) { ["burned", "burns", "verified"].forEach(function (k) { put(k, "\u2014", "The coin registry did not load just now."); }); }
+    // website-15 item 15: until a mainnet coin burns, the first two figures are the devnet practice burns, marked "(devnet)"
+    else if (s.burns === 0 && s.devnet && s.devnet.burns > 0) { put("burned", group(s.devnet.burnedTokens) + " (devnet)"); put("burns", group(s.devnet.burns) + " (devnet)"); put("verified", s.receiptsVerified === null ? "\u2014" : group(s.receiptsVerified), s.receiptsWhy); }
+    else { put("burned", group(s.burnedTokens)); put("burns", group(s.burns)); put("verified", s.receiptsVerified === null ? "\u2014" : group(s.receiptsVerified), s.receiptsWhy); }
+    // private review 8: the note says which network the figures count, so a mainnet host's zeros never sit under "devnet burns are counted"
+    var note = document.querySelector("[data-stats-note]");
+    if (note && s) note.textContent = s.burns === 0 && s.devnet && s.devnet.burns > 0 ? "Until a coin burns on mainnet, the first two figures are practice burns on devnet, marked as such." : s.burns === 0 ? "These figures count burns on mainnet, and none has happened yet." : "These figures count burns on mainnet.";
+    if (line) {
+      line.textContent = "";
+      line.appendChild(document.createTextNode(j && j.statusLine ? j.statusLine + " " : "The current status did not load just now. "));
+      var a = document.createElement("a"); a.href = "/burnticker/trust"; a.textContent = "The Trust page has the full record."; line.appendChild(a);
+    }
+  });
+})();
+</script>
+<!-- site-shell:script:begin -->
+<script>
+(function () {
+  // ONE THEME PREFERENCE: the same "bt-theme" key and switch as the app header; dark unless the visitor picked light
+  var root = document.documentElement, b = document.querySelector("[data-theme-toggle]");
+  function cur() { return root.dataset.theme === "light" ? "light" : "dark"; }
+  function label() { if (!b) return; var d = cur() === "dark"; b.textContent = d ? "\u2600" : "\u263E"; b.setAttribute("aria-label", d ? "Switch to light theme" : "Switch to dark theme"); b.title = d ? "Light theme" : "Dark theme"; }
+  if (b) b.addEventListener("click", function () { var n = cur() === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem("bt-theme", n); } catch (e) { /* private window */ } label(); });
+  label();
+})();
+(function () {
+  // the phone menu: Enter or Space opens it, focus moves to its first link, Tab and Shift+Tab stay inside, Escape closes it
+  var m = document.getElementById("menu"); if (!m) return;
+  var sum = m.querySelector("summary");
+  function links() { return Array.prototype.slice.call(m.querySelectorAll(".sh-menu-links a[href]")); }
+  // prelaunch audit 2026-10-18 A-29: aria-expanded follows the menu's real state, on the toggle event and right after each press
+  function sync() { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); }
+  m.addEventListener("toggle", function () { sync(); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
+  sum.addEventListener("click", function () { setTimeout(sync, 0); });
+  sync();
+  document.addEventListener("keydown", function (e) {
+    if (!m.open) return;
+    if (e.key === "Escape") { e.preventDefault(); m.open = false; sum.focus(); return; }
+    if (e.key !== "Tab") return;
+    var ring = [sum].concat(links()), i = ring.indexOf(document.activeElement);
+    e.preventDefault();
+    ring[i === -1 ? 0 : (e.shiftKey ? (i - 1 + ring.length) % ring.length : (i + 1) % ring.length)].focus();
+  });
+  document.addEventListener("click", function (e) {
+    if (m.open && !m.contains(e.target)) m.open = false;
+    var l = document.querySelector(".sh-learn"); if (l && l.open && !l.contains(e.target)) l.open = false;
+  });
+})();
+(function () {
+  // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home → launch, website-12's SiteLaunchState) says
+  // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
+  var btns = Array.prototype.slice.call(document.querySelectorAll("[data-launch-button]")), dlg = document.getElementById("sh-launch-closed"), open = false;
+  var said = dlg && dlg.querySelector("[data-launch-sentence]");
+  window.btHome = window.btHome || fetch("/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open is unknown right now, so no launch controls are shown."; createPath(l || null); });
+  // audit 10 item 23: the home's create path, from the same record (siteNav.mjs createPathFor, written here as source)
+  function createPath(l) {
+    var TWO_PATHS = [{"id":"explore","label":"Explore coins","href":"/burnticker","text":"See every coin, its rule and its receipts, and follow coins in this browser without a wallet."},{"id":"create","label":"Launch a coin","href":"/burnticker/launch","text":"Pick a public result, lock one rule, then review every detail."}], CREATE_PREVIEW = {"label":"Preview a coin launch","text":"Walk through a launch and its review, with nothing signed."}, LAUNCH_CLOSED = {"unread":"Whether creator launches are open is unknown right now, so no launch controls are shown."};
+    var p = (function createPathFor(launch) {
+  const open = !!(launch && launch.canSign === true);
+  const create = TWO_PATHS[1];
+  const said = launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : null;
+  return { label: create.label, text: create.text, status: open ? said : (said || LAUNCH_CLOSED.unread) + " " + CREATE_PREVIEW.text, open: open };
+})(l), box = document.querySelector("[data-two-paths]"); if (!box) return;
+    var t = box.querySelector("[data-create-label]"), x = box.querySelector("[data-create-text]"), s = box.querySelector("[data-create-status]");
+    if (t) t.textContent = p.label; if (x) x.textContent = p.text; if (s) { s.textContent = p.status || ""; s.hidden = !p.status; }
+    box.setAttribute("data-create-open", p.open ? "true" : "false");
+  }
+  if (dlg && typeof dlg.showModal === "function") btns.forEach(function (btn) { btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); }); });
+  if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
+  if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
+})();
+(function () {
+  // THE ACTIVITY LINE (website-14): burns, signed readings, graduations and pool registrations from GET /api/burnticker/home, each
+  // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. When the strip is wider
+  // than the screen it scrolls sideways, and the edge that still has more fades (ChatGPT audit 6 item 24, the app's useScrollEdges).
+  var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
+  var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered","created":"Created","reserved":"Mint reserved"};
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function edge() { box.classList.toggle("more-start", box.scrollLeft > 4); box.classList.toggle("more-end", box.scrollLeft + box.clientWidth < box.scrollWidth - 4); }
+  box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
+  window.btHome.then(function (j) {
+    box.textContent = "";
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); return; }
+    if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); edge(); return; }
+    j.events.forEach(function (ev) { var a = el("a", ""); a.href = (/^https?:/.test(ev.href) ? "" : "") + ev.href; a.setAttribute("data-kind", ev.kind || "burn"); a.appendChild(el("span", "sh-kind", KIND[ev.kind] || KIND.burn)); if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
+    edge();
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); });
+})();
+</script>
+<!-- site-shell:script:end -->
+</body>
+</html>

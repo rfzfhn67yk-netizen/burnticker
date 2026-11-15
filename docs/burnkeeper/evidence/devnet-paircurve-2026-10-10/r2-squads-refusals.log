@@ -1,0 +1,15 @@
+# 1. buffer authority still the deployer
+refusing: buffer authority ED2FxCzefc1pi2M2JxAAgYNAce2LcNVh1QPQ3aJzCBGR ≠ the vault A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD
+exit 2
+# 2. --expect-file is the mainnet (default-feature) build, not the devnet build in the buffer
+refusing: buffer code sha256 9bf2f401880f416991287d8782447aaeb2bdd7a74a73cb3741dbb68bae178893 ≠ local build 567b1f85b882ee8a96cd43099835bd3c151e71349b55a2a839a26685ef06e482 (programs/burn-receipts/target/deploy/pair_curve.so)
+exit 2
+# 3. --expect-sha256 disagrees with the file
+refusing: --expect-file hashes to 1ab6b1c9405b5d5fbdc0548143dc2a0e30e29ef6bc1da1d1168347ff44a17fa0, not the --expect-sha256 567b1f85b882ee8a96cd43099835bd3c151e71349b55a2a839a26685ef06e482
+exit 2
+# 4. spill = the deployer (not a member, not the vault)
+refusing: spill ED2FxCzefc1pi2M2JxAAgYNAce2LcNVh1QPQ3aJzCBGR is neither the vault nor a multisig member
+exit 2
+# 5. --vault-index 256
+refusing: --vault-index 256 must be an integer 0–255
+exit 2
